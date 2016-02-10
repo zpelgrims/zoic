@@ -234,7 +234,7 @@ void bokehProbability(imageData *img){
 
             img->cdfRow[i] = img->cdfRow[i-1] + summedRowValueCopy[summedRowValueCopyIndices[i]];
             img->rowIndices[i] = summedRowValueCopyIndices[i];
-            std::cout << "CDF row [" << summedRowValueCopyIndices[i] << "]: " << img->cdfRow[i] << std::endl;
+            std::cout << "CDF row [" << img->rowIndices[i] << "]: " << img->cdfRow[i] << std::endl;
         }
         std::cout << "----------------------------------------------" << std::endl;
         std::cout << "----------------------------------------------" << std::endl;
@@ -297,28 +297,36 @@ void bokehProbability(imageData *img){
         std::cout << "----------------------------------------------" << std::endl;
 
 
-
         // For every column per row, add the sum of all previous columns (cumulative distribution function)
         img->cdfColumn = new float [img->x];
         img->columnIndices.reserve(img->x * img->y);
         int cdfCounter = 0;
 
+
+        // SOMETHING WRONG HERE, VALUE OF ROWINDICES CHANGES!! HOW DA FUCK? ONLY WITH LENA.JPG??
         for (int i = 0; i < img->x * img->y; ++i){
-            if(cdfCounter == img->x){
+            if (cdfCounter == img->x) {
                     img->cdfColumn[i] = summedColumnValueCopy[summedColumnValueCopyIndices[i]];
                     cdfCounter = 0;
             }
-            else{
+            else {
                 img->cdfColumn[i] = img->cdfColumn[i-1] + summedColumnValueCopy[summedColumnValueCopyIndices[i]];
             }
-            cdfCounter += 1;
-         }
 
-        for (int i = 0; i < img->x * img->y; ++i){
+            cdfCounter += 1;
+
             img->columnIndices[i] = summedColumnValueCopyIndices[i];
             std::cout << "CDF column [" <<  img->columnIndices[i] << "]: " << img->cdfColumn[i] << std::endl;
-        }
-        std::cout << "----------------------------------------------" << std::endl;
+
+            // debug print
+            //            for(int i = 0; i < img->x; ++i)
+            //                std::cout << img->rowIndices[i] << std::endl;
+            //                std::cout << " " << std::endl;
+
+         }
+
+      std::cout << "----------------------------------------------" << std::endl;
+
     }
 }
 
@@ -382,7 +390,7 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
 int main(){
 
     imageData *image = nullptr;
-    image = readImage("lena2.jpg");
+    image = readImage("vertical.ppm");
     // Check if image is valid (is the pointer null?)
     if(!image){
         std::cout << "Couldn't open image, shit\n";
