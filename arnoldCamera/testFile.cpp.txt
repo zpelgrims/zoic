@@ -1,0 +1,12 @@
+int main(){
+    PPMImage *image;
+    image = readPPM("lena2.ppm");
+
+    // random number
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> distribution (0.0, 1.0);
+
+    probability(image);
+    //sample(image, distribution(gen), distribution(gen));
+}

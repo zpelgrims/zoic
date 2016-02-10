@@ -1,0 +1,726 @@
+/* ARNOLD API CAMERA STUFF HELP
+
+ INPUTS
+
+ * sx, sy (screen-space coordinates - within the screen window)
+ * dsx, dsy (derivatives of the screen-space coordinates with respect to pixel coordinates)
+ * lensx, lensy (lens sampling coordinates in [0,1)^2
+ * relative_time (time relative to this camera (in [0,1))
+
+ OUTPUTS
+
+ * origin (ray origin in camera space (required))
+ * dir (ray direction in camera space (required))
+ * dOdx, dOdy (derivative of the ray origin with respect to the pixel coordinates (optional - defaults to 0))
+ * dDdx, dDdy (derivative of the ray direction with respect to the pixel coordinates (optional - defaults to 0))
+ * weight (weight of this ray (used for vignetting) (optional - defaults to 1))
+
+*/
+
+/*
+
+    Shutter speed should affect motion blur
+    Should read scene fps
+
+    24 fps
+    1/50th speed
+
+    ideal -> 0.5 frames before and 0.5 frames after
+
+    = FPS/reciprocal of shutter speed
+    = 24 / 50 = 0.48
+
+
+    // youtube equation
+    total amount of light = (pi/4) * (focalLength^2/aperture^2) * shutterSpeed^2
+
+
+*/
+
+/*
+    FILTER MAP:
+
+    From arnold website: "Weights the camera sample by a scalar amount defined by the shader linked to the filtermap.
+    This shader will use as an input the u,v coordinates in image-space coords [0,1) and x,y in pixel coordinates.
+    This allows you to darken certain regions of the image, perfect to simulate vignetting effects.
+    There is an optimization in place where if the filter returns pure black then the camera ray is not fired.
+    This can help in cases such as when rendering with the fisheye camera where, depending on its autocrop setting, parts of the frame trace no rays at all."
+
+*/
+
+/*
+    CUSTOM DOF KERNEL:
+
+    From Marc-Antoine Desjardins (obliqueFX):
+
+    "If you want to create an image-based bokeh, you need to find a way to transform your image into a distribution function.
+    This is not very complicated, because the whiter the pixel, the bigger probability of being selected.
+    Thinking in 2D, there is a way to calculate the probability of choosing a certain column and then a row of that column.
+    I don't have to time to verify, but this is how I remember it."
+
+    1//
+    OK. You need to normalize your image, meaning the sum of all pixels should = 1 and save that new image somewhere.
+
+    2//
+    OK. Calculate the sum of each row. EG: 0.1, 0.4, 0.3, 0.2
+    OK. Sort them from biggest to lowest. EG: 0.4, 0.3, 0.2, 0.1 (Probability density function)
+    OK. For every row, add the sum of all previous row. EG: 0.4, 0.7, 0.9, 1 (Cumulative distribution function).
+
+    OK. The idea is that if you choose a random number [0, 1[ , 0.6, for example,
+    OK. this means that row associated with probability 0.3 will be chosen because it is >= 0.4 and < 0.7.
+    OK. Obviously, you need to keep a pointer from these values to the original rows.
+
+    3//
+    OK. Doing something similar with the column values of each row,
+    OK. you have to first normalize each row separately to create the PDF and then create the CDF.
+
+    4//
+    So 2 random numbers [0, 1[ will map to a pixel in the image.
+    The offset is based on the size of the aperture.
+    Let say you have an odd bokeh image resolution like 31x31,
+    the offset of the pixel in the middle will be (0,0) of course,
+    and the leftmost pixel in the bottom row will correspond to a (-15*aperture_size, 15*aperture_size) offset.
+    Now simply refocus by redirecting that offsetting ray to the intersection of the focus plane (distance based)
+    and the original non-offset ray and you have your function (Obq_LensDistortion lines 595 to 605 ).
+    You need to do that because no matter how big your aperture is, if a point is in focus, your bokeh will be infinitely small.
+    Although you might need to flip/flop the image to get the exact shape because images are top->bottom and not bottom-> top like normal cartesian quadrant.
+
+    That's about all I can think of right now, but it's a good start.
+
+
+
+    // figured myself lol - probably wrong:
+    Rejection sample!
+    First do the concentric sample and then reject sample based on grayscale value
+
+ */
+
+/*
+
+    Physically based bloom: http://www.cs.utah.edu/~shirley/papers/spencer95.pdf
+
+    From Mitsuba: "This fast convolution method used to implement Spencer et al’s physically-based bloom filter in the mtsutil tonemap utility.
+    This can be useful when rendering images where pixels are clipped because they are so bright.
+    Take for instance the rendering below: there are many reflections of the sun, but they are quite hard to perceive due to the limited dynamic range.
+    After convolving the image with an empirical point spread function of the human eye, their brightness is much more apparent."
+
+*/
+
+#include <ai.h>
+#include <string.h>
+#include <iostream>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <functional>
+#include <random>
+#include <cstring>
+#include <OpenImageIO/imageio.h>
+#include <stdint.h>
+
+
+AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
+
+
+
+// modified PBRT v2 source code to sample unit in a more uniform way
+inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
+    float radius; // radius
+    float theta; // angle
+
+    // Map uniform random numbers to $[-1,1]^2$
+    float sx = 2.0f * u1 - 1.0f;
+    float sy = 2.0f * u2 - 1.0f;
+
+    // Map square to $(r,\theta)$
+    // Handle degeneracy at the origin
+    if (sx == 0.0f && sy == 0.0f){
+        *dx=0.0f;
+        *dy = 0.0f;
+    }
+    if (sx >= -sy) {
+        if (sx > sy) {
+            // Handle first region of disk
+            radius = sx;
+            if (sy > 0.0f) theta = sy/radius;
+            else          theta = 8.0f + sy/radius;
+        }
+        else {
+            // Handle second region of disk
+            radius = sy;
+            theta = 2.0f - sx/radius;
+        }
+    }
+    else {
+        if (sx <= sy) {
+            // Handle third region of disk
+            radius = -sx;
+            theta = 4.0f - sy/radius;
+        }
+        else {
+            // Handle fourth region of disk
+            radius = -sy;
+            theta = 6.0f + sx/radius;
+        }
+    }
+
+    theta *= AI_PI / 4.0f;
+    *dx = radius * std::cos(theta);
+    *dy = radius * std::sin(theta);
+}
+
+#define _sensorWidth  (params[0].FLT )
+#define _sensorHeight  (params[1].FLT )
+#define _focalLength  (params[2].FLT )
+#define _fStop  (params[3].FLT )
+#define _focalDistance  (params[4].FLT )
+#define _useDof  (params[5].BOOL )
+#define _opticalVignet  (params[6].FLT )
+#define _iso  (params[7].INT )
+#define _input_filterMap  (params[8].RGB )
+
+#define RGB_COMPONENT_COLOR 255
+
+struct imageData{
+     int x, y;
+     int nchannels;
+     std::vector<uint8_t> pixelData;
+     float* cdfRow;
+     float* cdfColumn;
+     float* summedRowValues;
+     float* normalizedValuesPerRow;
+     std::vector<int> rowIndices;
+     std::vector<int> columnIndices;
+};
+
+imageData *image = nullptr;
+
+// make sure to resize image to odd res before all operations
+imageData* readImage(char const *bokeh_kernel_filename){
+
+    imageData* img = new imageData;
+
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cerr << "Reading image <" << bokeh_kernel_filename << "> with OpenImageIO" << std::endl;
+
+    /* Search for an ImageIO plugin that is capable of reading the file ("foo.jpg"), first by
+    trying to deduce the correct plugin from the file extension, but if that fails, by opening
+    every ImageIO plugin it can find until one will open the file without error. When it finds
+    the right plugin, it creates a subclass instance of ImageInput that reads the right kind of
+    file format, and tries to fully open the file. */
+    OpenImageIO::ImageInput *in = OpenImageIO::ImageInput::open (bokeh_kernel_filename);
+    if (! in){
+        return nullptr; // Return a null pointer if we have issues
+    }
+
+    const OpenImageIO::ImageSpec &spec = in->spec();
+    img->x = spec.width;
+    img->y = spec.height;
+    img->nchannels = spec.nchannels;
+
+    img->pixelData.reserve(img->x * img->y * img->nchannels);
+    in->read_image (OpenImageIO::TypeDesc::UINT8, &img->pixelData[0]);
+    in->close ();
+    delete in;
+
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cerr << "Image Width: " << img->x << std::endl;
+    std::cerr << "Image Height: " << img->y << std::endl;
+    std::cerr << "Image Channels: " << img->nchannels << std::endl;
+    std::cout << "Total amount of pixels: " << img->x * img->y << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+
+    // print out raw pixel data
+    for (int i = 0; i < img->x * img->y * img->nchannels; i++){
+        int j = 0;
+        if(img->nchannels == 3){
+           if (j == 0){
+                std::cout << "Channel Value [R]: " << (int)img->pixelData[i] << std::endl;
+                j += 1;
+            }
+            if (j == 1){
+                std::cout << "Channel Value [G]: " << (int)img->pixelData[i] << std::endl;
+                j += 1;
+            }
+           if (j == 2){
+                std::cout << "Channel Value [B]: " << (int)img->pixelData[i] << std::endl;
+                j = 0;
+            }
+        }
+
+        else if(img->nchannels == 4){
+            if (j == 0){
+                std::cout << "Channel Value [R]: " << (int)img->pixelData[i] << std::endl;
+                j += 1;
+            }
+            if (j == 1){
+                std::cout << "Channel Value [G]: " << (int)img->pixelData[i] << std::endl;
+                j += 1;
+            }
+            if (j == 2){
+                std::cout << "Channel Value [B]: " << (int)img->pixelData[i] << std::endl;
+                j += 1;
+            }
+            if (j == 3){
+                std::cout << "Channel Value [A]: " << (int)img->pixelData[i] << std::endl;
+               j = 0;
+            }
+        }
+
+    }
+
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+
+    return img;
+}
+
+
+
+void bokehProbability(imageData *img){
+
+    if(img){
+
+        // initialize arrays
+        float pixelValues[img->x * img->y];
+        float normalizedPixelValues[img->x * img->y];
+
+        // for every pixel, stuff going wrong here
+        int tmpPixelCounter = 0;
+        for(int i=0; i < img->x * img->y; ++i){
+            // store pixel value in array
+            // calculate luminance [Y = 0.3 R + 0.59 G + 0.11 B]
+            pixelValues[i] = (img->pixelData[tmpPixelCounter] * 0.3) + (img->pixelData[tmpPixelCounter+1] * 0.59) + (img->pixelData[tmpPixelCounter+2] * 0.11f);
+
+            // print array
+            std::cout << "Pixel Luminance: " << i << " -> " << pixelValues[i] << std::endl;
+            if(img->nchannels == 3){
+                tmpPixelCounter += 3;
+            }
+            else if(img->nchannels == 4){
+                tmpPixelCounter += 4;
+            }
+        }
+
+
+        // calculate sum of all pixel values
+        float totalValue = 0.0f;
+        for(int i=0; i < img->x *  img->y; ++i){
+            totalValue += pixelValues[i];
+        }
+
+        std::cout << "----------------------------------------------" << std::endl;
+        std::cout << "DEBUG: Total Pixel Value: " << totalValue << std::endl;
+        std::cout << "----------------------------------------------" << std::endl;
+        std::cout << "----------------------------------------------" << std::endl;
+
+
+
+        // normalize pixel values so sum = 1
+        for(int i=0; i < img->x *  img->y; ++i){
+            normalizedPixelValues[i] = pixelValues[i] / totalValue;
+
+            // print array
+            std::cout << "Normalized Pixel Value: " << i << ": " << normalizedPixelValues[i] << std::endl;
+        }
+
+
+
+        // calculate sum of all normalized pixel values, to check
+        float totalNormalizedValue = 0.0f;
+        for(int i=0; i < img->x *  img->y; ++i){
+            totalNormalizedValue += normalizedPixelValues[i];
+        }
+        std::cout << "----------------------------------------------" << std::endl;
+        std::cout << "DEBUG: Total Normalized Pixel Value: " << totalNormalizedValue << std::endl;
+        std::cout << "----------------------------------------------" << std::endl;
+        std::cout << "----------------------------------------------" << std::endl;
+
+
+
+        // calculate sum for each row
+        img->summedRowValues = new float [img->y];
+        float summedHorizontalNormalizedValues;
+        int counterRow = 0;
+
+        for(int i=0; i < img->y; ++i){
+
+            summedHorizontalNormalizedValues = 0.0f;
+
+            for(int j=0; j < img->x; ++j){
+
+                summedHorizontalNormalizedValues += normalizedPixelValues[counterRow];
+                counterRow += 1;
+            }
+
+            img->summedRowValues[i] = summedHorizontalNormalizedValues;
+            std::cout << "Summed Values row [" << i << "]: " << img->summedRowValues[i] << std::endl;
+        }
+
+
+
+        // calculate sum of all row values, just to debug
+        float totalNormalizedRowValue = 0.0f;
+        for(int i=0; i < img->y; ++i){
+            totalNormalizedRowValue += img->summedRowValues[i];
+        }
+        std::cout << "----------------------------------------------" << std::endl;
+        std::cout << "Debug: Summed Row Value: " << totalNormalizedRowValue << std::endl;
+        std::cout << "----------------------------------------------" << std::endl;
+
+
+        // sort row values from highest to lowest (probability density function)
+        // needed to make a copy of array, can't use the one in struct for some reason?
+        float summedRowValueCopy[img->y];
+        for(int i = 0; i < img->y; i++){
+            summedRowValueCopy[i] = img->summedRowValues[i];
+        }
+
+        // make array of indices
+        size_t summedRowValueCopyIndices[img->y];
+        for(int i = 0; i < img->y; i++){
+            summedRowValueCopyIndices[i] = i;
+        }
+
+        std::sort(summedRowValueCopyIndices, summedRowValueCopyIndices + img->y, [&summedRowValueCopy]( size_t _lhs,  size_t _rhs){
+            return summedRowValueCopy[_lhs] > summedRowValueCopy[_rhs];
+        });
+
+        // print values
+        for(int i = 0; i < img->y; ++i){
+            std::cout << "PDF row [" <<  summedRowValueCopyIndices[i] << "]: " << summedRowValueCopy[summedRowValueCopyIndices[i]] << std::endl;
+        }
+
+        std::cout << "----------------------------------------------" << std::endl;
+        std::cout << "----------------------------------------------" << std::endl;
+
+
+        // For every row, add the sum of all previous row (cumulative distribution function)
+        img->cdfRow = new float [img->y];
+        img->rowIndices.reserve(img->y);
+
+        for (int i = 0; i < img->y; ++i){
+
+            img->cdfRow[i] = img->cdfRow[i-1] + summedRowValueCopy[summedRowValueCopyIndices[i]];
+            img->rowIndices[i] = summedRowValueCopyIndices[i];
+            std::cout << "CDF row [" << summedRowValueCopyIndices[i] << "]: " << img->cdfRow[i] << std::endl;
+        }
+        std::cout << "----------------------------------------------" << std::endl;
+        std::cout << "----------------------------------------------" << std::endl;
+
+
+
+        // divide pixel values of each pixel by the sum of the pixel values of that row (Normalize)
+        int rowCounter = 0;
+        int tmpCounter = 0;
+        img->normalizedValuesPerRow = new float [img->x * img->y];
+
+        for (int i = 0; i < img->x * img->y; ++i){
+
+            // avoid division by 0
+            if ((normalizedPixelValues[i] != 0) && (img->summedRowValues[rowCounter] != 0)){
+                img->normalizedValuesPerRow[i] = normalizedPixelValues[i] / img->summedRowValues[rowCounter];
+            }
+            else{
+                img->normalizedValuesPerRow[i] = 0;
+            }
+
+            tmpCounter += 1;
+
+            // silly counter, there must be faster ways to do this but i'm not exactly a genius
+            if (tmpCounter == img->x){
+                rowCounter += 1;
+                tmpCounter = 0;
+            }
+
+            std::cout << "Normalized Pixel value per row: " << i << ": " << img->normalizedValuesPerRow[i] << std::endl;
+        }
+        std::cout << "----------------------------------------------" << std::endl;
+        std::cout << "----------------------------------------------" << std::endl;
+
+
+
+        // sort column values from highest to lowest per row (probability density function)
+        // needed to make a copy of array, can't use the one in struct for some reason?
+        float summedColumnValueCopy[img->x * img->y];
+        for(int i = 0; i < img->x * img->y; ++i){
+            summedColumnValueCopy[i] = img->normalizedValuesPerRow[i];
+        }
+
+        // make array of indices
+        size_t summedColumnValueCopyIndices[img->x * img->y];
+        for(int i = 0; i < img->x * img->y; i++){
+            summedColumnValueCopyIndices[i] = i;
+        }
+        for (int i = 0; i < img->x * img->y; i+=img->x){
+            std::sort(summedColumnValueCopyIndices + i, summedColumnValueCopyIndices + i + img->x, [&summedColumnValueCopy]( size_t _lhs,  size_t _rhs){
+                return summedColumnValueCopy[_lhs] > summedColumnValueCopy[_rhs];
+            });
+        }
+
+        // print values
+        for(int i = 0; i < img->x * img->y; ++i){
+            std::cout << "PDF column [" << summedColumnValueCopyIndices[i] << "]: " << summedColumnValueCopy[summedColumnValueCopyIndices[i]] << std::endl;
+        }
+        std::cout << "----------------------------------------------" << std::endl;
+        std::cout << "----------------------------------------------" << std::endl;
+
+
+
+        // For every column per row, add the sum of all previous columns (cumulative distribution function)
+        img->cdfColumn = new float [img->x];
+        img->columnIndices.reserve(img->x * img->y);
+        int cdfCounter = 0;
+
+        for (int i = 0; i < img->x * img->y; ++i){
+            if(cdfCounter == img->x){
+                    img->cdfColumn[i] = summedColumnValueCopy[summedColumnValueCopyIndices[i]];
+                    cdfCounter = 0;
+            }
+            else{
+                img->cdfColumn[i] = img->cdfColumn[i-1] + summedColumnValueCopy[summedColumnValueCopyIndices[i]];
+            }
+            cdfCounter += 1;
+         }
+
+        for (int i = 0; i < img->x * img->y; ++i){
+            img->columnIndices[i] = summedColumnValueCopyIndices[i];
+            std::cout << "CDF column [" <<  img->columnIndices[i] << "]: " << img->cdfColumn[i] << std::endl;
+        }
+        std::cout << "----------------------------------------------" << std::endl;
+    }
+}
+
+
+
+void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
+
+    // print random number between 0 and 1
+    std::cout << "RANDOM NUMBER ROW: " << randomNumberRow << std::endl;
+
+    // find upper bound of random number in the array
+    float *pUpperBound = std::upper_bound(img->cdfRow, img->cdfRow + img->y, randomNumberRow);
+    std::cout << "UPPER BOUND: " << *pUpperBound << std::endl;
+
+    // find which element of the array the upper bound is
+    int x = std::distance(img->cdfRow, std::find(img->cdfRow, img->cdfRow + img->y, *pUpperBound));
+
+    // find actual pixel row
+    int actualPixelRow = img->rowIndices[x];
+
+    // recalculate pixel row so that the center pixel is (0,0) - might run into problems with images of dimensions like 2x2, 4x4, 6x6, etc
+    int recalulatedPixelRow = actualPixelRow - ((img->x - 1) / 2);
+
+    // print values
+    std::cout << "INDEX IN CDF ROW: " << x << std::endl;
+    std::cout << "ACTUAL PIXEL ROW: " << actualPixelRow << std::endl;
+    std::cout << "RECALCULATED PIXEL ROW: " << recalulatedPixelRow << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+
+
+    // print random number between 0 and 1
+    std::cout << "RANDOM NUMBER COLUMN: " << randomNumberColumn << std::endl;
+
+    int startPixel = actualPixelRow * img->x;
+    std::cout << "START PIXEL: " << startPixel << std::endl;
+
+
+    // find upper bound of random number in the array
+    float *pUpperBoundColumn = std::upper_bound(img->cdfColumn + startPixel, img->cdfColumn + startPixel + img->x, randomNumberRow);
+    std::cout << "UPPER BOUND: " << *pUpperBoundColumn << std::endl;
+
+    // find which element of the array the upper bound is
+    int y = std::distance(img->cdfColumn, std::find(img->cdfColumn + startPixel, img->cdfColumn + startPixel + img->x, *pUpperBoundColumn));
+
+    // find actual pixel column
+    int actualPixelColumn = img->columnIndices[y];
+    int relativePixelColumn = actualPixelColumn - startPixel;
+    int recalulatedPixelColumn = relativePixelColumn - ((img->y - 1) / 2);
+
+    // print values
+    std::cout << "INDEX IN CDF COLUMN: " << y << std::endl;
+    std::cout << "ACTUAL PIXEL COLUMN: " << actualPixelColumn << std::endl;
+    std::cout << "RELATIVE PIXEL COLUMN (starting from 0): " << relativePixelColumn << std::endl;
+    std::cout << "RECALCULATED PIXEL COLUMN: " << recalulatedPixelColumn << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+
+    // send value back
+    *dx = recalulatedPixelRow;
+
+    // send value back
+    *dy = recalulatedPixelColumn;
+
+}
+
+
+node_parameters {
+   AiParameterFLT("sensorWidth", 3.6f); // 35mm film
+   AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
+   AiParameterFLT("focalLength", 8.0f); // distance between sensor and lens
+   AiParameterFLT("fStop", 1.4f);
+   AiParameterFLT("focalDistance", 70.0f); // distance from lens to focal point
+   AiParameterBOOL("useDof", true);
+   AiParameterFLT("opticalVignet", 0.0f);
+   AiParameterINT("iso", 400);
+   AiParameterRGB("input_filterMap", 1.0f, 1.0f, 1.0f);
+}
+
+
+node_initialize {
+   AiCameraInitialize(node, NULL);
+   image = readImage("lena2.jpg");
+   // Check if image is valid (is the pointer null?)
+    //   if(!image){
+    //        std::cout << "Couldn't open image, shit\n";
+    //        exit(1);
+    //   }
+
+   bokehProbability(image);
+}
+
+node_update {
+   AiCameraUpdate(node, false);
+}
+
+node_finish {
+    // get values
+    const AtParamValue* params = AiNodeGetParams(node);
+
+    // send statements to output log
+    AiMsgWarning("-------DEPTH OF FIELD---------");
+    AiMsgWarning("useDof = %s", (_useDof?"True":"False"));
+    AiMsgWarning("focusDistance = %f", _focalDistance);
+    AiMsgWarning("fStop = %f", _fStop);
+    AiMsgWarning("------------------------------");
+
+    AiCameraDestroy(node);
+}
+
+
+camera_create_ray {
+
+    // get values
+    const AtParamValue* params = AiNodeGetParams(node);
+
+    // variables
+    float sensorWidth = _sensorWidth; // 35mm film
+    float sensorHeight = _sensorHeight; // 35 mm film
+    float focalLength = _focalLength; // distance between sensor and lens
+    float fStop = _fStop;
+    float focalDistance = _focalDistance; // distance from lens to focal point
+    bool useDof = _useDof;
+    float opticalVignet = _opticalVignet;
+    int iso = _iso;
+
+    //AtRGB filterMap = _input_filterMap;
+
+    // calculate diagonal length of sensor
+    float sensorDiagonal = sqrtf((sensorWidth * sensorWidth) + (sensorHeight * sensorHeight));
+
+    // calculate field of view (theta = 2arctan*(sensorSize/focalLength))
+    float fov = 2.0f * atan((sensorDiagonal / (2.0f * focalLength))); // in radians
+    fov = fov * AI_RTOD; // in degrees
+    float tan_fov = tanf((fov * AI_DTOR) / 2);
+
+    // calculate aperture radius (apertureRadius = focalLength / 2*fStop)
+    float apertureRadius = focalLength / (2*fStop);
+
+    AtPoint p;
+    p.x = input->sx * tan_fov;
+    p.y = input->sy * tan_fov;
+    p.z = 1;
+
+    output->dir = AiV3Normalize(p - output->origin);
+
+    // now looking down -Z
+    output->dir.z *= -1;
+
+    // depth of field
+    if (useDof == true) {
+        // Sample point on lens
+        float lensU = 0.0f;
+        float lensV = 0.0f;
+
+        // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
+        //ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
+
+        // will need to change lensU & lensV to the pixel coordinates for image based bokeh; input->lensx, input->lensy is a random value!
+        // bokehSample(image, input->lensx, input->lensy, &lensU, &lensV);
+
+        // this creates a square bokeh!
+        // lensU = input->lensx * apertureRadius;
+        // lensV = input->lensy * apertureRadius;
+
+        lensU = lensU * apertureRadius;
+        lensV = lensV * apertureRadius;
+
+        // Compute point on plane of focus
+        float intersection = std::abs(focalDistance / output->dir.z);
+        AtPoint focusPoint = output->dir * intersection;
+
+        // update arnold ray origin
+        output->origin.x = lensU;
+        output->origin.y = lensV;
+        output->origin.z = 0.0;
+
+        // update arnold ray direction
+        output->dir = AiV3Normalize(focusPoint - output->origin);
+    }
+
+
+
+    // ISO calculation, with 400 as the default "scene" value
+    output->weight = iso / 400;
+
+    // filter map -- not working yet
+    //output->weight *=  (float &)filterMap;
+    //AiShaderEvalParamRGB(filterMap); //(float &)
+    //printf ("COORDS: (%f, %f) \n", input->sx, input->sy);
+
+    // vignetting
+    //float dist2 = input->sx * input->sx + input->sy * input->sy;
+    //output->weight = 5.0 + dist2;
+
+
+    // not sure if needed, but can't hurt. Taken from solidangle website.
+    // ----------------------------------------------------------------------------------------------
+    // scale derivatives
+    float dsx = input->dsx * tan_fov;
+    float dsy = input->dsy * tan_fov;
+
+    AtVector d = p;  // direction vector == point on the image plane
+    double d_dot_d = AiV3Dot(d, d);
+    double temp = 1.0 / sqrt(d_dot_d * d_dot_d * d_dot_d);
+
+    // already initialized to 0's, only compute the non zero coordinates
+    output->dDdx.x = (d_dot_d * dsx - (d.x * dsx) * d.x) * temp;
+    output->dDdx.y = (              - (d.x * dsx) * d.y) * temp;
+    output->dDdx.z = (              - (d.x * dsx) * d.z) * temp;
+    output->dDdy.x = (              - (d.y * dsy) * d.x) * temp;
+    output->dDdy.y = (d_dot_d * dsy - (d.y * dsy) * d.y) * temp;
+    output->dDdy.z = (              - (d.y * dsy) * d.z) * temp;
+    // ----------------------------------------------------------------------------------------------
+
+}
+
+
+node_loader {
+   if (i > 0)
+      return false;
+   node->methods      = zenoCameraMethods;
+   node->output_type  = AI_TYPE_NONE;
+   node->name         = "zenoCamera";
+   node->node_type    = AI_NODE_CAMERA;
+   strcpy(node->version, AI_VERSION);
+   return true;
+}
+
+// http://www.scratchapixel.com/old/lessons/2d-image-processing/reading-and-writing-images-a-simple-image-class/reading-and-writing-images-a-simple-image-class/
+// http://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/monte-carlo-methods-mathematical-foundations/inverse-transform-sampling-method
+// http://noobody.org/is-report/simple.html
