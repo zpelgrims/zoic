@@ -124,7 +124,7 @@ AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
 
 
 
-// modified PBRT v2 source code to sample unit in a more uniform way
+// modified PBRT v2 source code to sample circle in a more uniform way
 inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
     float radius; // radius
     float theta; // angle
@@ -180,7 +180,6 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
 #define _iso  (params[7].INT )
 #define _input_filterMap  (params[8].RGB )
 
-#define RGB_COMPONENT_COLOR 255
 
 struct imageData{
      int x, y;
@@ -407,7 +406,7 @@ void bokehProbability(imageData *img){
 
             img->cdfRow[i] = img->cdfRow[i-1] + summedRowValueCopy[summedRowValueCopyIndices[i]];
             img->rowIndices[i] = summedRowValueCopyIndices[i];
-            std::cout << "CDF row [" << summedRowValueCopyIndices[i] << "]: " << img->cdfRow[i] << std::endl;
+            std::cout << "CDF row [" << img->rowIndices[i] << "]: " << img->cdfRow[i] << std::endl;
         }
         std::cout << "----------------------------------------------" << std::endl;
         std::cout << "----------------------------------------------" << std::endl;
@@ -470,28 +469,36 @@ void bokehProbability(imageData *img){
         std::cout << "----------------------------------------------" << std::endl;
 
 
-
         // For every column per row, add the sum of all previous columns (cumulative distribution function)
         img->cdfColumn = new float [img->x];
         img->columnIndices.reserve(img->x * img->y);
         int cdfCounter = 0;
 
+
+        // SOMETHING WRONG HERE, VALUE OF ROWINDICES CHANGES!! HOW DA FUCK? ONLY WITH LENA.JPG??
         for (int i = 0; i < img->x * img->y; ++i){
-            if(cdfCounter == img->x){
+            if (cdfCounter == img->x) {
                     img->cdfColumn[i] = summedColumnValueCopy[summedColumnValueCopyIndices[i]];
                     cdfCounter = 0;
             }
-            else{
+            else {
                 img->cdfColumn[i] = img->cdfColumn[i-1] + summedColumnValueCopy[summedColumnValueCopyIndices[i]];
             }
-            cdfCounter += 1;
-         }
 
-        for (int i = 0; i < img->x * img->y; ++i){
+            cdfCounter += 1;
+
             img->columnIndices[i] = summedColumnValueCopyIndices[i];
             std::cout << "CDF column [" <<  img->columnIndices[i] << "]: " << img->cdfColumn[i] << std::endl;
-        }
-        std::cout << "----------------------------------------------" << std::endl;
+
+            // debug print
+            //            for(int i = 0; i < img->x; ++i)
+            //                std::cout << img->rowIndices[i] << std::endl;
+            //                std::cout << " " << std::endl;
+
+         }
+
+      std::cout << "----------------------------------------------" << std::endl;
+
     }
 }
 
@@ -574,13 +581,13 @@ node_parameters {
 
 node_initialize {
    AiCameraInitialize(node, NULL);
-   image = readImage("lena2.jpg");
-   // Check if image is valid (is the pointer null?)
-    //   if(!image){
-    //        std::cout << "Couldn't open image, shit\n";
-    //        exit(1);
-    //   }
 
+   image = readImage("vertical.ppm");
+   // Check if image is valid (is the pointer null?)
+   if(!image){
+        std::cout << "Couldn't open image, shit\n";
+        exit(1);
+   }
    bokehProbability(image);
 }
 
@@ -651,7 +658,7 @@ camera_create_ray {
         //ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
 
         // will need to change lensU & lensV to the pixel coordinates for image based bokeh; input->lensx, input->lensy is a random value!
-        // bokehSample(image, input->lensx, input->lensy, &lensU, &lensV);
+        bokehSample(image, input->lensx, input->lensy, &lensU, &lensV);
 
         // this creates a square bokeh!
         // lensU = input->lensx * apertureRadius;
