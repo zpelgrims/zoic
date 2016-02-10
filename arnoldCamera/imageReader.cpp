@@ -170,7 +170,7 @@ void bokehProbability(imageData *img){
 
 
         // calculate sum for each row
-        img->summedRowValues = new float [img->y];
+        img->summedRowValues = new float [img->y]();
         float summedHorizontalNormalizedValues;
         int counterRow = 0;
 
@@ -227,7 +227,7 @@ void bokehProbability(imageData *img){
 
 
         // For every row, add the sum of all previous row (cumulative distribution function)
-        img->cdfRow = new float [img->y];
+        img->cdfRow = new float [img->y]();
         img->rowIndices.reserve(img->y);
 
         for (int i = 0; i < img->y; ++i){
@@ -244,7 +244,7 @@ void bokehProbability(imageData *img){
         // divide pixel values of each pixel by the sum of the pixel values of that row (Normalize)
         int rowCounter = 0;
         int tmpCounter = 0;
-        img->normalizedValuesPerRow = new float [img->x * img->y];
+        img->normalizedValuesPerRow = new float [img->x * img->y]();
 
         for (int i = 0; i < img->x * img->y; ++i){
 
@@ -298,7 +298,7 @@ void bokehProbability(imageData *img){
 
 
         // For every column per row, add the sum of all previous columns (cumulative distribution function)
-        img->cdfColumn = new float [img->x];
+        img->cdfColumn = new float [img->x * img->y]();
         img->columnIndices.reserve(img->x * img->y);
         int cdfCounter = 0;
 
@@ -390,7 +390,7 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
 int main(){
 
     imageData *image = nullptr;
-    image = readImage("vertical.ppm");
+    image = readImage("lena2.jpg");
     // Check if image is valid (is the pointer null?)
     if(!image){
         std::cout << "Couldn't open image, shit\n";
