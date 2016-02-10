@@ -618,8 +618,8 @@ node_parameters {
    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
    AiParameterFLT("focalLength", 8.0f); // distance between sensor and lens
-   AiParameterFLT("fStop", 1.4f);
-   AiParameterFLT("focalDistance", 70.0f); // distance from lens to focal point
+   AiParameterFLT("fStop", 20.f);
+   AiParameterFLT("focalDistance", 115.0f); // distance from lens to focal point
    AiParameterBOOL("useDof", true);
    AiParameterFLT("opticalVignet", 0.0f);
    AiParameterINT("iso", 400);
