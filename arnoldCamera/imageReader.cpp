@@ -438,8 +438,8 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
     }
 
     // plot the data
-    plotDataSamplesX.push_back(actualPixelRow);
-    plotDataSamplesY.push_back(relativePixelColumn);
+    plotDataSamplesX.push_back((float)actualPixelRow / (float)img->x);
+    plotDataSamplesY.push_back((float)relativePixelColumn / (float)img->x);
 
     //    plotDataRandomX.push_back(randomNumberRow);
     //    plotDataRandomY.push_back(randomNumberColumn);
@@ -451,7 +451,7 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
 int main(){
 
     imageData *image = nullptr;
-    image = readImage("imgs/circle.jpg");
+    image = readImage("imgs/shaderball.png");
     // Check if image is valid (is the pointer null?)
     if(!image){
         std::cout << "Couldn't open image, shit\n";
@@ -474,26 +474,26 @@ int main(){
     //    plotDataRandomX.reserve(1000);
     //    plotDataRandomY.reserve(1000);
 
-    for(int i =0; i < 450; i++){
+    for(int i =0; i < 750; i++){
         std::uniform_real_distribution<float> distribution (0.0, 1.0);
         bokehSample(image, distribution(gen), distribution(gen));
     }
 
 
-    for (int i=0; i<450; i++){
-        std::cout << plotDataSamplesX[i] << " ";
+    for (int i=0; i<750; i++){
+        std::cout << "[" << plotDataSamplesX[i] << ", " << plotDataSamplesY[i] << "], ";
     }
 
-    std::cout << std::endl;
-    std::cout << std::endl;
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cout << std::endl;
+    //    std::cout << std::endl;
+    //    std::cout << std::endl;
+    //    std::cout << "----------------------------------------------" << std::endl;
+    //    std::cout << std::endl;
 
-    for (int i=0; i<450; i++){
-        std::cout << plotDataSamplesY[i] << " ";
-    }
+    //    for (int i=0; i<750; i++){
+    //        std::cout << plotDataSamplesY[i] << ",";
+    //    }
 
-    std::cout << std::endl;
+    //    std::cout << std::endl;
 
     //    std::cout << std::endl;
     //    std::cout << "----------------------------------------------" << std::endl;
