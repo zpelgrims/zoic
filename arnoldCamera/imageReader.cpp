@@ -23,8 +23,10 @@ struct imageData{
      std::vector<int> columnIndices;
 };
 
-std::vector<float> plotDataX;
-std::vector<float> plotDataY;
+std::vector<float> plotDataSamplesX;
+std::vector<float> plotDataSamplesY;
+//std::vector<float> plotDataRandomX;
+//std::vector<float> plotDataRandomY;
 
 bool debug = false;
 
@@ -336,14 +338,10 @@ void bokehProbability(imageData *img){
 
         // For every column per row, add the sum of all previous columns (cumulative distribution function)
         img->cdfColumn = new float [img->x * img->y]();
-
-        for (int i = 0; i < img->x * img->y; ++i)
-            std:: cout << img->cdfColumn[i] << std::endl;
         img->columnIndices.reserve(img->x * img->y);
         int cdfCounter = 0;
 
 
-        // SOMETHING WRONG HERE, VALUE OF ROWINDICES CHANGES!! HOW DA FUCK? ONLY WITH LENA.JPG??
         for (int i = 0; i < img->x * img->y; ++i){
             if (cdfCounter == img->x) {
                     img->cdfColumn[i] = summedColumnValueCopy[summedColumnValueCopyIndices[i]];
@@ -411,9 +409,12 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
         std::cout << "START PIXEL: " << startPixel << std::endl;
     }
 
+    // DEBUG, this seems to be fine
+    //    for (int i = 0; i < img->x; i++){
+    //        std::cout << "img->cdfColumn[i + startPixel]: " << img->cdfColumn[i + startPixel] << std::endl;
+    //    }
 
-    // find upper bound of random number in the array
-    float *pUpperBoundColumn = std::upper_bound(img->cdfColumn + startPixel, img->cdfColumn + startPixel + img->x, randomNumberRow);
+    float *pUpperBoundColumn = std::upper_bound(img->cdfColumn + startPixel, img->cdfColumn + startPixel + img->x, randomNumberColumn);
     if (debug == true){
         std::cout << "UPPER BOUND: " << *pUpperBoundColumn << std::endl;
     }
@@ -437,8 +438,11 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
     }
 
     // plot the data
-    plotDataX.push_back(actualPixelRow);
-    plotDataY.push_back(relativePixelColumn);
+    plotDataSamplesX.push_back(actualPixelRow);
+    plotDataSamplesY.push_back(relativePixelColumn);
+
+    //    plotDataRandomX.push_back(randomNumberRow);
+    //    plotDataRandomY.push_back(randomNumberColumn);
 
 
 }
@@ -447,7 +451,7 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
 int main(){
 
     imageData *image = nullptr;
-    image = readImage("circle.jpg");
+    image = readImage("imgs/circle.jpg");
     // Check if image is valid (is the pointer null?)
     if(!image){
         std::cout << "Couldn't open image, shit\n";
@@ -460,26 +464,53 @@ int main(){
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    //std::uniform_real_distribution<float> distribution (0.0, 1.0);
-    //bokehSample(image, distribution(gen), distribution(gen));
+    std::uniform_real_distribution<float> distribution (0.0, 1.0);
+    //bokehSample(image, 0.395933, 0.70);
+    bokehSample(image, .3, 0.70);
 
     // stuff for scatter plotting
-    plotDataX.reserve(100);
-    plotDataY.reserve(100);
+    plotDataSamplesX.reserve(1000);
+    plotDataSamplesY.reserve(1000);
+    //    plotDataRandomX.reserve(1000);
+    //    plotDataRandomY.reserve(1000);
 
     for(int i =0; i < 450; i++){
         std::uniform_real_distribution<float> distribution (0.0, 1.0);
         bokehSample(image, distribution(gen), distribution(gen));
     }
 
+
     for (int i=0; i<450; i++){
-        std::cout << plotDataX[i] << " ";
+        std::cout << plotDataSamplesX[i] << " ";
+    }
+
+    std::cout << std::endl;
+    std::cout << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cout << std::endl;
+
+    for (int i=0; i<450; i++){
+        std::cout << plotDataSamplesY[i] << " ";
     }
 
     std::cout << std::endl;
 
-    for (int i=0; i<450; i++){
-        std::cout << plotDataY[i] << " ";
-    }
+    //    std::cout << std::endl;
+    //    std::cout << "----------------------------------------------" << std::endl;
+    //    std::cout << "----------------------------------------------" << std::endl;
+    //    std::cout << "----------------------------------------------" << std::endl;
+    //    std::cout << "----------------------------------------------" << std::endl;
+
+    //    std::cout << std::endl;
+
+    //    for (int i=0; i<450; i++){
+    //        std::cout << plotDataRandomX[i] << " ";
+    //    }
+
+    //    std::cout << "----------------------------------------------" << std::endl;
+
+    //    for (int i=0; i<450; i++){
+    //        std::cout << plotDataRandomY[i] << " ";
+    //    }
 
 }

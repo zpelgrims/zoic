@@ -504,9 +504,6 @@ void bokehProbability(imageData *img){
 
         // For every column per row, add the sum of all previous columns (cumulative distribution function)
         img->cdfColumn = new float [img->x * img->y]();
-
-        for (int i = 0; i < img->x * img->y; ++i)
-            std:: cout << img->cdfColumn[i] << std::endl;
         img->columnIndices.reserve(img->x * img->y);
         int cdfCounter = 0;
 
@@ -582,7 +579,7 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
 
 
     // find upper bound of random number in the array
-    float *pUpperBoundColumn = std::upper_bound(img->cdfColumn + startPixel, img->cdfColumn + startPixel + img->x, randomNumberRow);
+    float *pUpperBoundColumn = std::upper_bound(img->cdfColumn + startPixel, img->cdfColumn + startPixel + img->x, randomNumberColumn);
     if (debug == true){
         std::cout << "UPPER BOUND: " << *pUpperBoundColumn << std::endl;
     }
@@ -618,7 +615,7 @@ node_parameters {
    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
    AiParameterFLT("focalLength", 8.0f); // distance between sensor and lens
-   AiParameterFLT("fStop", 20.f);
+   AiParameterFLT("fStop", 60.f);
    AiParameterFLT("focalDistance", 115.0f); // distance from lens to focal point
    AiParameterBOOL("useDof", true);
    AiParameterFLT("opticalVignet", 0.0f);
@@ -630,7 +627,7 @@ node_parameters {
 node_initialize {
    AiCameraInitialize(node, NULL);
 
-   image = readImage("triangle.jpg");
+   image = readImage("imgs/z.jpg");
    // Check if image is valid (is the pointer null?)
    if(!image){
         std::cout << "Couldn't open image, shit\n";
