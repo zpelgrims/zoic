@@ -3,13 +3,15 @@
 #include <OpenImageIO/imagebufalgo.h>
 #include <stdint.h>
 
-void image_read(char const *bokeh_kernel_filename){
+void image_read(char const *bokeh_kernel_filename, char const *bokeh_kernel_filename_out){
 
     std::cerr << "READING IMAGE WITH OIIO" << std::endl;
     OpenImageIO::ImageInput *in = OpenImageIO::ImageInput::open (bokeh_kernel_filename);
     if (! in){
-        return;
+        std::cerr << "FAILED TO READ IMAGE" << std::endl;
+        return nullptr;
     }
+
     const OpenImageIO::ImageSpec &spec = in->spec();
     int xres = spec.width;
     int yres = spec.height;
@@ -30,48 +32,19 @@ void image_read(char const *bokeh_kernel_filename){
     }
 
 
-    // Resize the image to xres-1, yres-1, using the default filter
-    OpenImageIO::ImageBuf Src (bokeh_kernel_filename);
-    OpenImageIO::ImageBuf Dst;
-    int newXRes = xres - 1;
-    int newYRes = yres - 1;
-    OpenImageIO::ROI roi (0, newXRes, 0, newYRes, 0, 1, 0, Src.nchannels());
-    OpenImageIO::ImageBufAlgo::resize (Dst, Src, "", 0, roi);
+    float *buffer = spec.data();
+    OpenImageIO::ImageBuf buf(spec, buffer);
+    OpenImageIO::ImageBuf out;
+    OpenImageIO::ImageBufAlgo::flip(out, buf);
+    out.write(std::string(bokeh_kernel_filename_out));
 
 
 }
 
-bool resizeImage(const char* inFilename, const char* outFilename, int width)
-{
-    OpenImageIO::ImageBuf Src (inFilename);
-    bool ok = Src.read();
-    if (ok != true){
-        std::cerr << "resizeImage: Could not read image!" << std::endl;
-        return false;
-    }
-    std::cout << "read image" << std::endl;
-    OpenImageIO::ImageBuf Dst;
-    OpenImageIO::ROI roi (0, width, 0, width, 0, 1, /*chans:*/ 0, Src.nchannels());
-    ok = OpenImageIO::ImageBufAlgo::resize (Dst, Src, "", 0, roi, 1);
-    if (ok != true){
-        std::cerr << "resizeImage: Could not resize image!" << std::endl;
-        return false;
-    }
-    std::cout << "resized image" << std::endl;
-    ok = Dst.write(outFilename);
 
-    if (ok != true) {
-        std::cerr << "resizeImage: Could not write image." << std::endl;
-        return false;
-    }
-    return true;
-}
 
 int main(){
     //image_read("vertical.png");
-    resizeImage("vertical.png", "vertical_resized.png", 50);
+    image_read("imgs/vertical.png", "imgs/vertical_flipped.png");
 }
-
-
-
 

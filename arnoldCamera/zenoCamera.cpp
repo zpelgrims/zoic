@@ -59,6 +59,33 @@
 
 */
 
+/*
+
+    CAT EYE EFFECT:
+
+    https://graphics.ethz.ch/teaching/imsynth14/competition//2nd%20Place..%20Simon%20Kallweit/report.html
+    https://graphics.ethz.ch/teaching/imsynth14/competition//1st%20Place..%20Benedikt%20Bitterli/simple.html
+
+    "Real-life cameras also exhibit an effect known as "cat-eye".
+    It is caused by an imperfection in the lens system, where points on the sensor closer to the border do not see the entire aperture, but more of an "oval" shape.
+    This also causes the characteristic darkening of the image towards the borders, commonly known as vignette.
+    The thinlens camera models this effect by adding a second diaphragm between the primary aperture and the sensor.
+    The shape, size and distance of the secondary diaphragm can be controlled to maniplate the shape of the cateye effect."
+
+    "Also, I have experimented with a simple trick to render the "cat's eyes" effect,
+    by adding a virtual aperture between the the sensor and the front lens,
+    in order to reject samples towards the edge of the lens."
+
+*/
+
+/*
+
+    SAMPLING IDEA
+
+    Would be cool to have a function to reduce the diff/spec/etc samples in out of focus areas. Not sure how to tackle this though.
+
+*/
+
 #include <ai.h>
 #include <string.h>
 #include <iostream>
@@ -76,7 +103,6 @@
 AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
 
 bool debug = false;
-
 
 // modified PBRT v2 source code to sample circle in a more uniform way
 inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
@@ -233,8 +259,6 @@ imageData* readImage(char const *bokeh_kernel_filename){
 
     return img;
 }
-
-
 
 void bokehProbability(imageData *img){
 
@@ -488,8 +512,6 @@ void bokehProbability(imageData *img){
     }
 }
 
-
-
 void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
 
     if (debug == true){
@@ -608,7 +630,6 @@ node_finish {
     AiCameraDestroy(node);
 }
 
-
 camera_create_ray {
 
     // get values
@@ -623,8 +644,6 @@ camera_create_ray {
     bool useDof = _useDof;
     float opticalVignet = _opticalVignet;
     int iso = _iso;
-
-    //AtRGB filterMap = _input_filterMap;
 
     // calculate diagonal length of sensor
     float sensorDiagonal = sqrtf((sensorWidth * sensorWidth) + (sensorHeight * sensorHeight));
@@ -647,7 +666,7 @@ camera_create_ray {
     // now looking down -Z
     output->dir.z *= -1;
 
-    // depth of field
+    // DOF CALCULATIONS
     if (useDof == true) {
         // Sample point on lens
         float lensU = 0.0f;
@@ -656,7 +675,7 @@ camera_create_ray {
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
         //ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
 
-        // send samples in shape of image
+        // sample image
         bokehSample(image, input->lensx, input->lensy, &lensU, &lensV);
 
         // this creates a square bokeh!
@@ -684,14 +703,9 @@ camera_create_ray {
     // ISO calculation, with 400 as the default "scene" value
     output->weight = iso / 400;
 
-    // filter map -- not working yet
-    //output->weight *=  (float &)filterMap;
-    //AiShaderEvalParamRGB(filterMap); //(float &)
-    //printf ("COORDS: (%f, %f) \n", input->sx, input->sy);
-
     // vignetting
-    //float dist2 = input->sx * input->sx + input->sy * input->sy;
-    //output->weight = 5.0 + dist2;
+    // float dist2 = input->sx * input->sx + input->sy * input->sy;
+    // output->weight = 1.0f - .5*dist2;
 
 
     // not sure if needed, but can't hurt. Taken from solidangle website.

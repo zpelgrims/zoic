@@ -23,7 +23,8 @@ SOURCES += \
     zenoCamera.cpp \
     imageReader.cpp \
     #imageReader_backup.cpp \
-    testFile.cpp
+    testFile.cpp \
+    tungsten_cateye.cpp
 
 HEADERS += \
     arnoldcamera.h\
