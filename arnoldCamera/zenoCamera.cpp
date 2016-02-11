@@ -49,53 +49,6 @@
 */
 
 /*
-    CUSTOM DOF KERNEL:
-
-    From Marc-Antoine Desjardins (obliqueFX):
-
-    "If you want to create an image-based bokeh, you need to find a way to transform your image into a distribution function.
-    This is not very complicated, because the whiter the pixel, the bigger probability of being selected.
-    Thinking in 2D, there is a way to calculate the probability of choosing a certain column and then a row of that column.
-    I don't have to time to verify, but this is how I remember it."
-
-    1//
-    OK. You need to normalize your image, meaning the sum of all pixels should = 1 and save that new image somewhere.
-
-    2//
-    OK. Calculate the sum of each row. EG: 0.1, 0.4, 0.3, 0.2
-    OK. Sort them from biggest to lowest. EG: 0.4, 0.3, 0.2, 0.1 (Probability density function)
-    OK. For every row, add the sum of all previous row. EG: 0.4, 0.7, 0.9, 1 (Cumulative distribution function).
-
-    OK. The idea is that if you choose a random number [0, 1[ , 0.6, for example,
-    OK. this means that row associated with probability 0.3 will be chosen because it is >= 0.4 and < 0.7.
-    OK. Obviously, you need to keep a pointer from these values to the original rows.
-
-    3//
-    OK. Doing something similar with the column values of each row,
-    OK. you have to first normalize each row separately to create the PDF and then create the CDF.
-
-    4//
-    So 2 random numbers [0, 1[ will map to a pixel in the image.
-    The offset is based on the size of the aperture.
-    Let say you have an odd bokeh image resolution like 31x31,
-    the offset of the pixel in the middle will be (0,0) of course,
-    and the leftmost pixel in the bottom row will correspond to a (-15*aperture_size, 15*aperture_size) offset.
-    Now simply refocus by redirecting that offsetting ray to the intersection of the focus plane (distance based)
-    and the original non-offset ray and you have your function (Obq_LensDistortion lines 595 to 605 ).
-    You need to do that because no matter how big your aperture is, if a point is in focus, your bokeh will be infinitely small.
-    Although you might need to flip/flop the image to get the exact shape because images are top->bottom and not bottom-> top like normal cartesian quadrant.
-
-    That's about all I can think of right now, but it's a good start.
-
-
-
-    // figured myself lol - probably wrong:
-    Rejection sample!
-    First do the concentric sample and then reject sample based on grayscale value
-
- */
-
-/*
 
     Physically based bloom: http://www.cs.utah.edu/~shirley/papers/spencer95.pdf
 
@@ -603,10 +556,11 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
     }
 
     // send value back
-    *dx = recalulatedPixelRow;
+    *dx = (float)recalulatedPixelRow / (float)img->x;
+    //std::cout << "*dx: " << *dx << std::endl;
 
     // send value back
-    *dy = recalulatedPixelColumn;
+    *dy = (float)recalulatedPixelColumn / (float)img->y;
 
 }
 
@@ -615,7 +569,7 @@ node_parameters {
    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
    AiParameterFLT("focalLength", 8.0f); // distance between sensor and lens
-   AiParameterFLT("fStop", 60.f);
+   AiParameterFLT("fStop", 0.5f);
    AiParameterFLT("focalDistance", 115.0f); // distance from lens to focal point
    AiParameterBOOL("useDof", true);
    AiParameterFLT("opticalVignet", 0.0f);
@@ -702,7 +656,7 @@ camera_create_ray {
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
         //ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
 
-        // will need to change lensU & lensV to the pixel coordinates for image based bokeh; input->lensx, input->lensy is a random value!
+        // send samples in shape of image
         bokehSample(image, input->lensx, input->lensy, &lensU, &lensV);
 
         // this creates a square bokeh!
