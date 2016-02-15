@@ -77,6 +77,7 @@
 
 #include <ai.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <iostream>
 #include <math.h>
@@ -87,7 +88,6 @@
 #include <random>
 #include <cstring>
 #include <OpenImageIO/imageio.h>
-#include <stdint.h>
 
 
 AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
@@ -277,7 +277,6 @@ void bokehProbability(imageData *img){
                 tmpPixelCounter += 4;
             }
         }
-
 
         // calculate sum of all pixel values
         float totalValue = 0.0f;
@@ -574,17 +573,17 @@ node_parameters {
    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
    AiParameterFLT("focalLength", 8.0f); // distance between sensor and lens
-   AiParameterFLT("fStop", 0.8f);
-   AiParameterFLT("focalDistance", 115.0f); // distance from lens to focal point
+   AiParameterFLT("fStop", 0.4f);
+   AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
    AiParameterBOOL("useDof", true);
-   AiParameterFLT("opticalVignetting", 20.0f); //distance of the opticalVignetting virtual aperture
+   AiParameterFLT("opticalVignetting", 80.0f); //distance of the opticalVignetting virtual aperture
 }
 
 
 node_initialize {
    AiCameraInitialize(node, NULL);
 
-   image = readImage("/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/z.jpg");
+   image = readImage("/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/circle.jpg");
 
    // Check if image is valid (is the pointer null?)
    if(!image){
@@ -685,8 +684,9 @@ camera_create_ray {
         output->dir = AiV3Normalize(focusPoint - output->origin);
 
         // TODO: make a standard for this optical vignetting thing, not just random values
-        // TODO: send extra samples to edges of the image (based on gradient)
+        // TODO: send extra samples to edges of the image (based on gradient) // not sure if this possible since sx, sy are read only variables.
         // TODO: something wrong when I change focal length to high number, losing a lot of samples for some reason
+        //            even losing samples in the middle..
         // Optical Vignetting (CAT EYE EFFECT)
         if (opticalVignetting > 0.0f){
             float opticalVignetDistance = opticalVignetting;
@@ -701,8 +701,10 @@ camera_create_ray {
             // find hypotenuse of x, y points.
             float pointHypotenuse = sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
 
+            float opticalVignetApertureRadius = apertureRadius * 1.0f;
+
             // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
-            if (ABS(pointHypotenuse) > apertureRadius){
+            if (ABS(pointHypotenuse) > opticalVignetApertureRadius){
                 // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
                 output->weight = 0.0f;
             }
