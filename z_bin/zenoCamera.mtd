@@ -43,7 +43,7 @@
     [attr opticalVignet]
         maya.name           STRING  "aiOpticalVignet"
         min             FLOAT   0.0
-        max             FLOAT   1.0
+        max             FLOAT   100.0
         default             FLOAT   0
 
     [attr iso]

@@ -67,6 +67,14 @@
 
 */
 
+/*
+
+    SAMPLING IDEA
+
+    To get hard edged bokeh shapes with high aperture sizes, maybe do a prepass and then use that prepass in the same way as the bokeh sampling? More samples for the highlights makes sense.
+
+*/
+
 #include <ai.h>
 #include <string.h>
 #include <stdlib.h>
