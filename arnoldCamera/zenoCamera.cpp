@@ -61,25 +61,6 @@
 
 /*
 
-    CAT EYE EFFECT:
-
-    https://graphics.ethz.ch/teaching/imsynth14/competition//2nd%20Place..%20Simon%20Kallweit/report.html
-    https://graphics.ethz.ch/teaching/imsynth14/competition//1st%20Place..%20Benedikt%20Bitterli/simple.html
-
-    "Real-life cameras also exhibit an effect known as "cat-eye".
-    It is caused by an imperfection in the lens system, where points on the sensor closer to the border do not see the entire aperture, but more of an "oval" shape.
-    This also causes the characteristic darkening of the image towards the borders, commonly known as vignette.
-    The thinlens camera models this effect by adding a second diaphragm between the primary aperture and the sensor.
-    The shape, size and distance of the secondary diaphragm can be controlled to maniplate the shape of the cateye effect."
-
-    "Also, I have experimented with a simple trick to render the "cat's eyes" effect,
-    by adding a virtual aperture between the the sensor and the front lens,
-    in order to reject samples towards the edge of the lens."
-
-*/
-
-/*
-
     SAMPLING IDEA
 
     Would be cool to have a function to reduce the diff/spec/etc samples in out of focus areas. Not sure how to tackle this though.
@@ -88,6 +69,7 @@
 
 #include <ai.h>
 #include <string.h>
+#include <stdlib.h>
 #include <iostream>
 #include <math.h>
 #include <stdio.h>
@@ -103,6 +85,8 @@
 AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
 
 bool debug = false;
+std::string sampleMode = "disk";
+
 
 // modified PBRT v2 source code to sample circle in a more uniform way
 inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
@@ -156,9 +140,7 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
 #define _fStop  (params[3].FLT )
 #define _focalDistance  (params[4].FLT )
 #define _useDof  (params[5].BOOL )
-#define _opticalVignet  (params[6].FLT )
-#define _iso  (params[7].INT )
-#define _input_filterMap  (params[8].RGB )
+#define _opticalVignetting  (params[6].FLT )
 
 
 struct imageData{
@@ -484,8 +466,6 @@ void bokehProbability(imageData *img){
         img->columnIndices.reserve(img->x * img->y);
         int cdfCounter = 0;
 
-
-        // SOMETHING WRONG HERE, VALUE OF ROWINDICES CHANGES!! HOW DA FUCK? ONLY WITH LENA.JPG??
         for (int i = 0; i < img->x * img->y; ++i){
             if (cdfCounter == img->x) {
                     img->cdfColumn[i] = summedColumnValueCopy[summedColumnValueCopyIndices[i]];
@@ -502,13 +482,11 @@ void bokehProbability(imageData *img){
             if (debug == true){
                 std::cout << "CDF column [" <<  img->columnIndices[i] << "]: " << img->cdfColumn[i] << std::endl;
             }
-
          }
 
-    if (debug == true){
-        std::cout << "----------------------------------------------" << std::endl;
-    }
-
+        if (debug == true){
+            std::cout << "----------------------------------------------" << std::endl;
+        }
     }
 }
 
@@ -577,11 +555,8 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
         std::cout << "----------------------------------------------" << std::endl;
     }
 
-    // send value back
+    // send values back
     *dx = (float)recalulatedPixelRow / (float)img->x;
-    //std::cout << "*dx: " << *dx << std::endl;
-
-    // send value back
     *dy = (float)recalulatedPixelColumn / (float)img->y;
 
 }
@@ -591,24 +566,24 @@ node_parameters {
    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
    AiParameterFLT("focalLength", 8.0f); // distance between sensor and lens
-   AiParameterFLT("fStop", 0.5f);
+   AiParameterFLT("fStop", 0.8f);
    AiParameterFLT("focalDistance", 115.0f); // distance from lens to focal point
    AiParameterBOOL("useDof", true);
-   AiParameterFLT("opticalVignet", 0.0f);
-   AiParameterINT("iso", 400);
-   AiParameterRGB("input_filterMap", 1.0f, 1.0f, 1.0f);
+   AiParameterFLT("opticalVignetting", 20.0f); //distance of the opticalVignetting virtual aperture
 }
 
 
 node_initialize {
    AiCameraInitialize(node, NULL);
 
-   image = readImage("imgs/z.jpg");
+   image = readImage("/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/z.jpg");
+
    // Check if image is valid (is the pointer null?)
    if(!image){
-        std::cout << "Couldn't open image, shit\n";
+        std::cout << "Couldn't open image, please try again\n";
         exit(1);
    }
+
    bokehProbability(image);
 }
 
@@ -621,14 +596,15 @@ node_finish {
     const AtParamValue* params = AiNodeGetParams(node);
 
     // send statements to output log
-    AiMsgWarning("-------DEPTH OF FIELD---------");
-    AiMsgWarning("useDof = %s", (_useDof?"True":"False"));
-    AiMsgWarning("focusDistance = %f", _focalDistance);
-    AiMsgWarning("fStop = %f", _fStop);
-    AiMsgWarning("------------------------------");
+    //    AiMsgWarning("-------DEPTH OF FIELD---------");
+    //    AiMsgWarning("useDof = %s", (_useDof?"True":"False"));
+    //    AiMsgWarning("focusDistance = %f", _focalDistance);
+    //    AiMsgWarning("fStop = %f", _fStop);
+    //    AiMsgWarning("------------------------------");
 
     AiCameraDestroy(node);
 }
+
 
 camera_create_ray {
 
@@ -642,8 +618,7 @@ camera_create_ray {
     float fStop = _fStop;
     float focalDistance = _focalDistance; // distance from lens to focal point
     bool useDof = _useDof;
-    float opticalVignet = _opticalVignet;
-    int iso = _iso;
+    float opticalVignetting = _opticalVignetting; //distance of the opticalVignetting virtual aperture
 
     // calculate diagonal length of sensor
     float sensorDiagonal = sqrtf((sensorWidth * sensorWidth) + (sensorHeight * sensorHeight));
@@ -668,24 +643,28 @@ camera_create_ray {
 
     // DOF CALCULATIONS
     if (useDof == true) {
-        // Sample point on lens
+        // Initialize point on lens
         float lensU = 0.0f;
         float lensV = 0.0f;
 
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
-        //ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
-
-        // sample image
-        bokehSample(image, input->lensx, input->lensy, &lensU, &lensV);
+        if (sampleMode == "disk"){
+            ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
+        }
+        else if (sampleMode == "image"){
+            // sample bokeh image
+            bokehSample(image, input->lensx, input->lensy, &lensU, &lensV);
+        }
 
         // this creates a square bokeh!
         // lensU = input->lensx * apertureRadius;
         // lensV = input->lensy * apertureRadius;
 
+        // scale new lens coordinates by the aperture radius
         lensU = lensU * apertureRadius;
         lensV = lensV * apertureRadius;
 
-        // Compute point on plane of focus
+        // Compute point on plane of focus, intersection on z axis
         float intersection = std::abs(focalDistance / output->dir.z);
         AtPoint focusPoint = output->dir * intersection;
 
@@ -694,14 +673,34 @@ camera_create_ray {
         output->origin.y = lensV;
         output->origin.z = 0.0;
 
-        // update arnold ray direction
+        // update arnold ray direction, normalize
         output->dir = AiV3Normalize(focusPoint - output->origin);
+
+        // TODO: make a standard for this optical vignetting thing, not just random values
+        // TODO: send extra samples to edges of the image (based on gradient)
+        // TODO: something wrong when I change focal length to high number, losing a lot of samples for some reason
+        // Optical Vignetting (CAT EYE EFFECT)
+        if (opticalVignetting > 0.0f){
+            float opticalVignetDistance = opticalVignetting;
+
+            // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
+            AtPoint opticalVignetPoint;
+            opticalVignetPoint = output->dir * opticalVignetDistance;
+
+            // re-center point
+            opticalVignetPoint -= output->origin;
+
+            // find hypotenuse of x, y points.
+            float pointHypotenuse = sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
+
+            // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
+            if (ABS(pointHypotenuse) > apertureRadius){
+                // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
+                output->weight = 0.0f;
+            }
+        }
     }
 
-
-
-    // ISO calculation, with 400 as the default "scene" value
-    output->weight = iso / 400;
 
     // vignetting
     // float dist2 = input->sx * input->sx + input->sy * input->sy;

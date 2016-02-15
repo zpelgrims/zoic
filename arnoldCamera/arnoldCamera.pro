@@ -7,14 +7,14 @@ TEMPLATE = lib
 DEFINES += ARNOLDCAMERA_LIBRARY
 
 INCLUDEPATH += \
-    /run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/include \
+    /home/i7210038/Arnold-4.2.11.0-linux/include \
 
 LIBS += \
-    -L/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/bin \
+    -L/home/i7210038/Arnold-4.2.11.0-linux/bin \
     -L/usr/lib64
 
 LIBS += \
-    /run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/bin/libai.so \
+    /home/i7210038/Arnold-4.2.11.0-linux/bin/libai.so \
     /usr/lib64/libOpenImageIO.so
 
 
@@ -22,9 +22,7 @@ LIBS += \
 SOURCES += \
     zenoCamera.cpp \
     imageReader.cpp \
-    #imageReader_backup.cpp \
     testFile.cpp \
-    tungsten_cateye.cpp
 
 HEADERS += \
     arnoldcamera.h\

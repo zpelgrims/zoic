@@ -9,6 +9,8 @@
 #include <random>
 #include <cstring>
 #include <OpenImageIO/imageio.h>
+#include <OpenImageIO/imagebuf.h>
+#include <OpenImageIO/imagebufalgo.h>
 #include <stdint.h>
 
 struct imageData{
@@ -25,8 +27,6 @@ struct imageData{
 
 std::vector<float> plotDataSamplesX;
 std::vector<float> plotDataSamplesY;
-//std::vector<float> plotDataRandomX;
-//std::vector<float> plotDataRandomY;
 
 bool debug = false;
 
@@ -113,6 +113,15 @@ imageData* readImage(char const *bokeh_kernel_filename){
     }
 
     return img;
+}
+
+imageData* rotateImage(char const *bokeh_kernel_filename){
+    OpenImageIO::ImageBuf src (bokeh_kernel_filename);
+    OpenImageIO::ImageBuf dst; // will be the output image
+    bool ok = OpenImageIO::ImageBufAlgo::transpose (dst, src);
+    if (! ok) {
+        std::cout << "Error" << std::endl;
+    }
 }
 
 
@@ -441,10 +450,6 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
     plotDataSamplesX.push_back((float)actualPixelRow / (float)img->x);
     plotDataSamplesY.push_back((float)relativePixelColumn / (float)img->x);
 
-    //    plotDataRandomX.push_back(randomNumberRow);
-    //    plotDataRandomY.push_back(randomNumberColumn);
-
-
 }
 
 
@@ -465,8 +470,7 @@ int main(){
     std::mt19937 gen(rd());
 
     std::uniform_real_distribution<float> distribution (0.0, 1.0);
-    //bokehSample(image, 0.395933, 0.70);
-    bokehSample(image, .3, 0.70);
+    bokehSample(image, distribution(gen), distribution(gen));
 
     // stuff for scatter plotting
     plotDataSamplesX.reserve(1000);
@@ -483,34 +487,5 @@ int main(){
     for (int i=0; i<750; i++){
         std::cout << "[" << plotDataSamplesX[i] << ", " << plotDataSamplesY[i] << "], ";
     }
-
-    //    std::cout << std::endl;
-    //    std::cout << std::endl;
-    //    std::cout << "----------------------------------------------" << std::endl;
-    //    std::cout << std::endl;
-
-    //    for (int i=0; i<750; i++){
-    //        std::cout << plotDataSamplesY[i] << ",";
-    //    }
-
-    //    std::cout << std::endl;
-
-    //    std::cout << std::endl;
-    //    std::cout << "----------------------------------------------" << std::endl;
-    //    std::cout << "----------------------------------------------" << std::endl;
-    //    std::cout << "----------------------------------------------" << std::endl;
-    //    std::cout << "----------------------------------------------" << std::endl;
-
-    //    std::cout << std::endl;
-
-    //    for (int i=0; i<450; i++){
-    //        std::cout << plotDataRandomX[i] << " ";
-    //    }
-
-    //    std::cout << "----------------------------------------------" << std::endl;
-
-    //    for (int i=0; i<450; i++){
-    //        std::cout << plotDataRandomY[i] << " ";
-    //    }
 
 }
