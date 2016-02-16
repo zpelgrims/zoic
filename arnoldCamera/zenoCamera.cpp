@@ -71,7 +71,11 @@
 
     SAMPLING IDEA
 
-    To get hard edged bokeh shapes with high aperture sizes, maybe do a prepass and then use that prepass in the same way as the bokeh sampling? More samples for the highlights makes sense.
+    To get hard edged bokeh shapes with high aperture sizes, maybe do a prepass (render image with low sampling and no dof) and then use that prepass in the same way as the bokeh sampling?
+    More samples for the highlights makes sense if you're defocusing.
+    This should be done by picking ray directions that will hit highlight areas of the image more often.
+
+    I could also make the highlights brighter (and therefore the bokeh shapes more apparent) by adding to the weight of these rays.
 
 */
 
