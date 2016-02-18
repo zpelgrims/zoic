@@ -9,8 +9,8 @@
 #include <random>
 #include <cstring>
 #include <OpenImageIO/imageio.h>
-#include <OpenImageIO/imagebuf.h>
-#include <OpenImageIO/imagebufalgo.h>
+//#include <OpenImageIO/imagebuf.h>
+//#include <OpenImageIO/imagebufalgo.h>
 #include <stdint.h>
 
 struct imageData{
@@ -25,8 +25,11 @@ struct imageData{
      std::vector<int> columnIndices;
 };
 
+// for graphing
 std::vector<float> plotDataSamplesX;
 std::vector<float> plotDataSamplesY;
+std::vector<float> pdf;
+std::vector<float> cdf;
 
 bool debug = false;
 
@@ -115,14 +118,15 @@ imageData* readImage(char const *bokeh_kernel_filename){
     return img;
 }
 
-imageData* rotateImage(char const *bokeh_kernel_filename){
-    OpenImageIO::ImageBuf src (bokeh_kernel_filename);
-    OpenImageIO::ImageBuf dst; // will be the output image
-    bool ok = OpenImageIO::ImageBufAlgo::transpose (dst, src);
-    if (! ok) {
-        std::cout << "Error" << std::endl;
-    }
-}
+
+//imageData* rotateImage(char const *bokeh_kernel_filename){
+//    OpenImageIO::ImageBuf src (bokeh_kernel_filename);
+//    OpenImageIO::ImageBuf dst; // will be the output image
+//    bool ok = OpenImageIO::ImageBufAlgo::transpose (dst, src);
+//    if (! ok) {
+//        std::cout << "Error" << std::endl;
+//    }
+//}
 
 
 
@@ -260,6 +264,13 @@ void bokehProbability(imageData *img){
             std::cout << "----------------------------------------------" << std::endl;
         }
 
+        // for graph output
+        for(int i = 0; i < img->y; i++){
+            pdf.push_back(summedRowValueCopy[summedRowValueCopyIndices[i]]);
+        }
+
+
+
 
         // For every row, add the sum of all previous row (cumulative distribution function)
         img->cdfRow = new float [img->y]();
@@ -267,7 +278,13 @@ void bokehProbability(imageData *img){
 
         for (int i = 0; i < img->y; ++i){
 
-            img->cdfRow[i] = img->cdfRow[i-1] + summedRowValueCopy[summedRowValueCopyIndices[i]];
+            if(i == 0){
+               img->cdfRow[i] = img->cdfRow[i] + summedRowValueCopy[summedRowValueCopyIndices[i]];
+            }
+            else{
+               img->cdfRow[i] = img->cdfRow[i-1] + summedRowValueCopy[summedRowValueCopyIndices[i]];
+            }
+
             img->rowIndices[i] = summedRowValueCopyIndices[i];
 
             if (debug == true){
@@ -278,6 +295,11 @@ void bokehProbability(imageData *img){
         if (debug == true){
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
+        }
+
+        // for graph output
+        for(int i = 0; i < img->y; i++){
+            cdf.push_back(img->cdfRow[i]);
         }
 
 
@@ -456,7 +478,7 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
 int main(){
 
     imageData *image = nullptr;
-    image = readImage("imgs/shaderball.png");
+    image = readImage("/home/i7210038/Desktop/teapot.png");
     // Check if image is valid (is the pointer null?)
     if(!image){
         std::cout << "Couldn't open image, shit\n";
@@ -473,19 +495,25 @@ int main(){
     bokehSample(image, distribution(gen), distribution(gen));
 
     // stuff for scatter plotting
-    plotDataSamplesX.reserve(1000);
-    plotDataSamplesY.reserve(1000);
-    //    plotDataRandomX.reserve(1000);
-    //    plotDataRandomY.reserve(1000);
+    plotDataSamplesX.reserve(20000);
+    plotDataSamplesY.reserve(20000);
 
-    for(int i =0; i < 750; i++){
+    for(int i =0; i < 500; i++){
         std::uniform_real_distribution<float> distribution (0.0, 1.0);
         bokehSample(image, distribution(gen), distribution(gen));
     }
 
-
-    for (int i=0; i<750; i++){
-        std::cout << "[" << plotDataSamplesX[i] << ", " << plotDataSamplesY[i] << "], ";
+    for (int i=0; i<500; i++){
+        std::cout << "[" << plotDataSamplesY[i] << ", " << plotDataSamplesX[i] << "], ";
     }
 
+    //    pdf.reserve(20000);
+    //    for (int i = 0; i < image->y; i++){
+    //        std::cout << pdf[i] << ", ";
+    //    }
+
+    cdf.reserve(20000);
+    for (int i = 0; i < image->y; i++){
+        std::cout << cdf[i] << ", ";
+    }
 }

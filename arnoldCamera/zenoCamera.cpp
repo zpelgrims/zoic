@@ -97,7 +97,7 @@
 AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
 
 bool debug = false;
-std::string sampleMode = "disk";
+std::string sampleMode = "image";
 
 
 // modified PBRT v2 source code to sample circle in a more uniform way
@@ -213,34 +213,43 @@ imageData* readImage(char const *bokeh_kernel_filename){
             int j = 0;
             if(img->nchannels == 3){
                if (j == 0){
-                    std::cout << "Channel Value [R]: " << (int)img->pixelData[i] << std::endl;
+                   std::cout << "[";
+                    std::cout << (int)img->pixelData[i];
+                   std::cout << ", ";
                     j += 1;
                 }
                 if (j == 1){
-                    std::cout << "Channel Value [G]: " << (int)img->pixelData[i] << std::endl;
+                    std::cout << (int)img->pixelData[i];
+                    std::cout << ", ";
                     j += 1;
                 }
                if (j == 2){
-                    std::cout << "Channel Value [B]: " << (int)img->pixelData[i] << std::endl;
+                    std::cout << (int)img->pixelData[i];
+                    std::cout << "], ";
                     j = 0;
                 }
             }
 
             else if(img->nchannels == 4){
                 if (j == 0){
-                    std::cout << "Channel Value [R]: " << (int)img->pixelData[i] << std::endl;
+                    std::cout << "[";
+                    std::cout << (int)img->pixelData[i];
+                    std::cout << ", ";
                     j += 1;
                 }
                 if (j == 1){
-                    std::cout << "Channel Value [G]: " << (int)img->pixelData[i] << std::endl;
+                    std::cout << (int)img->pixelData[i];
+                    std::cout << ", ";
                     j += 1;
                 }
                 if (j == 2){
-                    std::cout << "Channel Value [B]: " << (int)img->pixelData[i] << std::endl;
+                    std::cout <<  (int)img->pixelData[i];
+                    std::cout << ", ";
                     j += 1;
                 }
                 if (j == 3){
-                    std::cout << "Channel Value [A]: " << (int)img->pixelData[i] << std::endl;
+                    std::cout << (int)img->pixelData[i];
+                    std::cout << "], ";
                    j = 0;
                 }
             }
@@ -394,7 +403,13 @@ void bokehProbability(imageData *img){
 
         for (int i = 0; i < img->y; ++i){
 
-            img->cdfRow[i] = img->cdfRow[i-1] + summedRowValueCopy[summedRowValueCopyIndices[i]];
+            if(i == 0){
+                img->cdfRow[i] = img->cdfRow[i] + summedRowValueCopy[summedRowValueCopyIndices[i]];
+            }
+            else{
+                img->cdfRow[i] = img->cdfRow[i-1] + summedRowValueCopy[summedRowValueCopyIndices[i]];
+            }
+
             img->rowIndices[i] = summedRowValueCopyIndices[i];
 
             if (debug == true){
@@ -566,9 +581,15 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
         std::cout << "----------------------------------------------" << std::endl;
     }
 
+    // to get the right image orientation, flip the x and y coordinates and then multiply the y values by -1 to flip the pixels vertically
+    float flippedRow = recalulatedPixelColumn * -1.0f;
+    float flippedColumn = recalulatedPixelRow;
+
+
+
     // send values back
-    *dx = (float)recalulatedPixelRow / (float)img->x;
-    *dy = (float)recalulatedPixelColumn / (float)img->y;
+    *dx = (float)flippedRow / (float)img->x;
+    *dy = (float)flippedColumn / (float)img->y;
 
 }
 
@@ -587,15 +608,18 @@ node_parameters {
 node_initialize {
    AiCameraInitialize(node, NULL);
 
-   image = readImage("/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/circle.jpg");
+   if (sampleMode == "image"){
+       image = readImage("/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/z.jpg");
 
-   // Check if image is valid (is the pointer null?)
-   if(!image){
-        std::cout << "Couldn't open image, please try again\n";
-        exit(1);
-   }
+       // Check if image is valid (is the pointer null?)
+       if(!image){
+            std::cout << "Couldn't open image, please try again\n";
+            exit(1);
+       }
 
-   bokehProbability(image);
+       bokehProbability(image);
+      }
+
 }
 
 node_update {
