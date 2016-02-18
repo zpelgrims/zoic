@@ -440,10 +440,6 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
         std::cout << "START PIXEL: " << startPixel << std::endl;
     }
 
-    // DEBUG, this seems to be fine
-    //    for (int i = 0; i < img->x; i++){
-    //        std::cout << "img->cdfColumn[i + startPixel]: " << img->cdfColumn[i + startPixel] << std::endl;
-    //    }
 
     float *pUpperBoundColumn = std::upper_bound(img->cdfColumn + startPixel, img->cdfColumn + startPixel + img->x, randomNumberColumn);
     if (debug == true){

@@ -1,4 +1,4 @@
-/* ARNOLD API CAMERA STUFF HELP
+/* ARNOLD API CAMERA STUFF
 
  INPUTS
 
@@ -19,21 +19,11 @@
 
 /*
 
-    Shutter speed should affect motion blur
-    Should read scene fps
+    Shutter speed should affect motion blur and should read scene fps
 
     24 fps
     1/50th speed
-
     ideal -> 0.5 frames before and 0.5 frames after
-
-    = FPS/reciprocal of shutter speed
-    = 24 / 50 = 0.48
-
-
-    // youtube equation
-    total amount of light = (pi/4) * (focalLength^2/aperture^2) * shutterSpeed^2
-
 
 */
 
@@ -57,13 +47,16 @@
     Take for instance the rendering below: there are many reflections of the sun, but they are quite hard to perceive due to the limited dynamic range.
     After convolving the image with an empirical point spread function of the human eye, their brightness is much more apparent."
 
+    Not sure if this is done as a post process or not. Figure out.
+
 */
 
 /*
 
     SAMPLING IDEA
 
-    Would be cool to have a function to reduce the diff/spec/etc samples in out of focus areas. Not sure how to tackle this though.
+    Would be cool to have a function to reduce the diff/spec/etc samples in out of focus areas.
+    Not sure how to tackle this and not sure if this is possible withing the range of a camera shader.
 
 */
 
@@ -93,11 +86,33 @@
 #include <cstring>
 #include <OpenImageIO/imageio.h>
 
-
 AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
 
 bool debug = false;
-std::string sampleMode = "image";
+
+#define _sensorWidth  (params[0].FLT)
+#define _sensorHeight  (params[1].FLT)
+#define _focalLength  (params[2].FLT)
+#define _useDof  (params[3].BOOL)
+#define _fStop  (params[4].FLT)
+#define _focalDistance  (params[5].FLT)
+#define _opticalVignetting  (params[6].FLT)
+#define _useImage  (params[7].BOOL)
+#define _bokehPath (params[8].STR)
+
+struct imageData{
+     int x, y;
+     int nchannels;
+     std::vector<uint8_t> pixelData;
+     float* cdfRow;
+     float* cdfColumn;
+     float* summedRowValues;
+     float* normalizedValuesPerRow;
+     std::vector<int> rowIndices;
+     std::vector<int> columnIndices;
+};
+
+imageData *image = nullptr;
 
 
 // modified PBRT v2 source code to sample circle in a more uniform way
@@ -146,30 +161,8 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
     *dy = radius * std::sin(theta);
 }
 
-#define _sensorWidth  (params[0].FLT )
-#define _sensorHeight  (params[1].FLT )
-#define _focalLength  (params[2].FLT )
-#define _fStop  (params[3].FLT )
-#define _focalDistance  (params[4].FLT )
-#define _useDof  (params[5].BOOL )
-#define _opticalVignetting  (params[6].FLT )
 
 
-struct imageData{
-     int x, y;
-     int nchannels;
-     std::vector<uint8_t> pixelData;
-     float* cdfRow;
-     float* cdfColumn;
-     float* summedRowValues;
-     float* normalizedValuesPerRow;
-     std::vector<int> rowIndices;
-     std::vector<int> columnIndices;
-};
-
-imageData *image = nullptr;
-
-// make sure to resize image to odd res before all operations
 imageData* readImage(char const *bokeh_kernel_filename){
 
     imageData* img = new imageData;
@@ -598,18 +591,31 @@ node_parameters {
    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
    AiParameterFLT("focalLength", 8.0f); // distance between sensor and lens
+   AiParameterBOOL("useDof", true);
    AiParameterFLT("fStop", 0.4f);
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
-   AiParameterBOOL("useDof", true);
-   AiParameterFLT("opticalVignetting", 80.0f); //distance of the opticalVignetting virtual aperture
+   AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
+   AiParameterBOOL("useImage", false);
+   AiParameterStr("bokehPath", ""); //bokeh shape image location
 }
 
 
 node_initialize {
    AiCameraInitialize(node, NULL);
 
-   if (sampleMode == "image"){
-       image = readImage("/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/z.jpg");
+}
+
+node_update {
+   AiCameraUpdate(node, false);
+
+   bool useImage = _useImage;
+   const char bokehPath = _bokehPath;
+
+   std::cout << bokehPath << std::endl;
+
+   if (useImage == true){
+  //make sure to change the string back to the variable!
+       image = readImage("bokehPath");
 
        // Check if image is valid (is the pointer null?)
        if(!image){
@@ -619,11 +625,6 @@ node_initialize {
 
        bokehProbability(image);
       }
-
-}
-
-node_update {
-   AiCameraUpdate(node, false);
 }
 
 node_finish {
@@ -654,6 +655,7 @@ camera_create_ray {
     float focalDistance = _focalDistance; // distance from lens to focal point
     bool useDof = _useDof;
     float opticalVignetting = _opticalVignetting; //distance of the opticalVignetting virtual aperture
+    bool useImage = _useImage;
 
     // calculate diagonal length of sensor
     float sensorDiagonal = sqrtf((sensorWidth * sensorWidth) + (sensorHeight * sensorHeight));
@@ -683,10 +685,10 @@ camera_create_ray {
         float lensV = 0.0f;
 
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
-        if (sampleMode == "disk"){
+        if (useImage == false){
             ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
         }
-        else if (sampleMode == "image"){
+        else{
             // sample bokeh image
             bokehSample(image, input->lensx, input->lensy, &lensU, &lensV);
         }

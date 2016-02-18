@@ -1,4 +1,4 @@
-### exported: Mon Feb  8 18:39:57 2016
+### exported: Thu Feb 18 15:41:38 2016
 ### from:     Arnold 4.2.11.0 linux clang-3.6.0 glibc-2.12 oiio-1.5.20 rlm-11.3.1 2015/10/27 15:51:25
 ### host app: MtoA 1.2.4.3  Maya 2016
 
@@ -14,10 +14,10 @@ options
  bucket_scanning "top"
  enable_fast_opacity on
  texture_per_file_stats on
- texture_searchpath "/home/i7210038/maya/projects/default/sourceimages"
+ texture_searchpath "/run/media/i7210038/ZENO_MAJOR/Dropbox/personal/zpelgrims/projects/still_life_commission/assets"
  texture_glossy_blur 0
- camera "renderCamShape"
- procedural_searchpath "/home/i7210038/maya/projects/default/"
+ camera "cameraShape"
+ procedural_searchpath "/run/media/i7210038/ZENO_MAJOR/Dropbox/personal/zpelgrims/projects/still_life_commission/"
  GI_reflection_depth 0
  GI_refraction_depth 0
  GI_total_depth 0
@@ -124,21 +124,20 @@ ortho_camera
 
 zenoCamera
 {
- name renderCamShape
+ name cameraShape
  sensorWidth 3.5999999
  sensorHeight 2.4000001
  focalLength 8
- fStop 1.39999998
- focalDistance 65
+ fStop 2.79999995
+ focalDistance 115
  useDof on
- opticalVignet 0
- iso 400
- input_filterMap 1 1 1
+ opticalVignetting 0
+ fps 25
  matrix
  1 0 0 0
  0 1 0 0
  0 0 1 0
- 0 5 93.327858 1
+ 0 5 93.3280029 1
  near_clip 0.100000001
  far_clip 10000
  shutter_start 0
@@ -221,7 +220,7 @@ gaussian_filter
 driver_exr
 {
  name defaultArnoldDriver@driver_exr.RGBA
- filename "/home/i7210038/maya/projects/default/images/testScene_lights.exr"
+ filename "/run/media/i7210038/ZENO_MAJOR/Dropbox/personal/zpelgrims/projects/still_life_commission/imgs/testScene_lights.exr"
  compression "zip"
  half_precision off
  tiled off
