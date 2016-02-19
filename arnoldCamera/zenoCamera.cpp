@@ -619,10 +619,10 @@ camera_create_ray {
     const AtParamValue* params = AiNodeGetParams(node);
 
     // calculate diagonal length of sensor
-    float sensorDiagonal = sqrtf((_sensorWidth * _sensorWidth) + (_sensorHeight * _sensorHeight));
+    //float sensorDiagonal = sqrtf((_sensorWidth * _sensorWidth) + (_sensorHeight * _sensorHeight));
 
     // calculate field of view (theta = 2arctan*(sensorSize/focalLength))
-    float fov = 2.0f * atan((sensorDiagonal / (2.0f * _focalLength))); // in radians
+    float fov = 2.0f * atan((_sensorWidth / (2.0f * _focalLength))); // in radians
     fov = fov * AI_RTOD; // in degrees
     float tan_fov = tanf((fov * AI_DTOR) / 2);
 
