@@ -1,21 +1,13 @@
-/* ARNOLD API CAMERA STUFF
+// Arnold camera shader with options for image based bokeh shapes and optical vignetting.
 
- INPUTS
+// Special thanks to Marc-Antoine Desjardins for the help on the image sampling
+// Special thanks to Benedikt Bitterli for the information on optical vignetting
+// Special thanks to Tom Minor for the help with C++ (it was needed!)
 
- * sx, sy (screen-space coordinates - within the screen window)
- * dsx, dsy (derivatives of the screen-space coordinates with respect to pixel coordinates)
- * lensx, lensy (lens sampling coordinates in [0,1)^2
- * relative_time (time relative to this camera (in [0,1))
+// (C) Zeno Pelgrims, www.zenopelgrims.com
 
- OUTPUTS
 
- * origin (ray origin in camera space (required))
- * dir (ray direction in camera space (required))
- * dOdx, dOdy (derivative of the ray origin with respect to the pixel coordinates (optional - defaults to 0))
- * dDdx, dDdy (derivative of the ray direction with respect to the pixel coordinates (optional - defaults to 0))
- * weight (weight of this ray (used for vignetting) (optional - defaults to 1))
-
-*/
+// IDEAS
 
 /* Shutter speed should affect motion blur and should read scene fps
 
@@ -80,14 +72,12 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <functional>
-#include <random>
 #include <cstring>
 #include <OpenImageIO/imageio.h>
 
 AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
 
 bool debug = false;
-//bool useImage = false;
 
 #define _sensorWidth  (params[0].FLT)
 #define _sensorHeight  (params[1].FLT)
@@ -115,7 +105,7 @@ struct imageData{
 imageData *image = nullptr;
 
 
-// modified PBRT v2 source code to sample circle in a more uniform way
+// PBRT v2 source code  - Concentric disk sampling (Sampling the disk in a more uniform way than with random sampling)
 inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
     float radius; // radius
     float theta; // angle
@@ -161,7 +151,7 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
     *dy = radius * std::sin(theta);
 }
 
-
+// Read bokeh image
 imageData* readImage(char const *bokeh_kernel_filename){
 
     imageData* img = new imageData;
@@ -249,9 +239,8 @@ imageData* readImage(char const *bokeh_kernel_filename){
     return img;
 }
 
-
+// Importance sampling
 void bokehProbability(imageData *img){
-
     if(img){
 
         // initialize arrays
@@ -503,7 +492,7 @@ void bokehProbability(imageData *img){
     }
 }
 
-
+// Sample image
 void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
 
     if (debug == true){
@@ -604,15 +593,9 @@ node_initialize {
 node_update {
    AiCameraUpdate(node, false);
 
-   // pick up variables
-   //bool useImage = _useImage;
-   //const char* bokehPath = _bokehPath;
-
    if (_useImage == true){
   //make sure to change the string back to the variable!
        image = readImage(_bokehPath);
-
-       // Check if image is valid (is the pointer null?)
        if(!image){
             AiMsgError("Couldn't open image, please check that it is RGB/RGBA.");
             exit(1);
@@ -635,27 +618,16 @@ camera_create_ray {
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
 
-     // variables
-    float sensorWidth = _sensorWidth; // 35mm film
-    float sensorHeight = _sensorHeight; // 35 mm film
-    float focalLength = _focalLength; // distance between sensor and lens
-    float fStop = _fStop;
-    float focalDistance = _focalDistance; // distance from lens to focal point
-    bool useDof = _useDof;
-    float opticalVignetting = _opticalVignetting; //distance of the opticalVignetting virtual aperture
-    bool useImage = _useImage;
-
-
     // calculate diagonal length of sensor
-    float sensorDiagonal = sqrtf((sensorWidth * sensorWidth) + (sensorHeight * sensorHeight));
+    float sensorDiagonal = sqrtf((_sensorWidth * _sensorWidth) + (_sensorHeight * _sensorHeight));
 
     // calculate field of view (theta = 2arctan*(sensorSize/focalLength))
-    float fov = 2.0f * atan((sensorDiagonal / (2.0f * focalLength))); // in radians
+    float fov = 2.0f * atan((sensorDiagonal / (2.0f * _focalLength))); // in radians
     fov = fov * AI_RTOD; // in degrees
     float tan_fov = tanf((fov * AI_DTOR) / 2);
 
     // calculate aperture radius (apertureRadius = focalLength / 2*fStop)
-    float apertureRadius = focalLength / (2*fStop);
+    float apertureRadius = _focalLength / (2*_fStop);
 
     AtPoint p;
     p.x = input->sx * tan_fov;
@@ -668,13 +640,13 @@ camera_create_ray {
     output->dir.z *= -1;
 
     // DOF CALCULATIONS
-    if (useDof == true) {
+    if (_useDof == true) {
         // Initialize point on lens
         float lensU = 0.0f;
         float lensV = 0.0f;
 
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
-        if (useImage == false){
+        if (_useImage == false){
             ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
         }
         else{
@@ -691,7 +663,7 @@ camera_create_ray {
         lensV = lensV * apertureRadius;
 
         // Compute point on plane of focus, intersection on z axis
-        float intersection = std::abs(focalDistance / output->dir.z);
+        float intersection = std::abs(_focalDistance / output->dir.z);
         AtPoint focusPoint = output->dir * intersection;
 
         // update arnold ray origin
@@ -707,12 +679,10 @@ camera_create_ray {
         // TODO: something wrong when I change focal length to high number, losing a lot of samples for some reason
         //            even losing samples in the middle..
         // Optical Vignetting (CAT EYE EFFECT)
-        if (opticalVignetting > 0.0f){
-            float opticalVignetDistance = opticalVignetting;
-
+        if (_opticalVignetting > 0.0f){
             // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
             AtPoint opticalVignetPoint;
-            opticalVignetPoint = output->dir * opticalVignetDistance;
+            opticalVignetPoint = output->dir * _opticalVignetting;
 
             // re-center point
             opticalVignetPoint -= output->origin;
@@ -776,7 +746,3 @@ node_loader {
    strcpy(node->version, AI_VERSION);
    return true;
 }
-
-// http://www.scratchapixel.com/old/lessons/2d-image-processing/reading-and-writing-images-a-simple-image-class/reading-and-writing-images-a-simple-image-class/
-// http://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/monte-carlo-methods-mathematical-foundations/inverse-transform-sampling-method
-// http://noobody.org/is-report/simple.html
