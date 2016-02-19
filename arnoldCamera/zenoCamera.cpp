@@ -17,9 +17,7 @@
 
 */
 
-/*
-
-    Shutter speed should affect motion blur and should read scene fps
+/* Shutter speed should affect motion blur and should read scene fps
 
     24 fps
     1/50th speed
@@ -27,8 +25,7 @@
 
 */
 
-/*
-    FILTER MAP:
+/* FILTER MAP:
 
     From arnold website: "Weights the camera sample by a scalar amount defined by the shader linked to the filtermap.
     This shader will use as an input the u,v coordinates in image-space coords [0,1) and x,y in pixel coordinates.
@@ -38,9 +35,7 @@
 
 */
 
-/*
-
-    Physically based bloom: http://www.cs.utah.edu/~shirley/papers/spencer95.pdf
+/* Physically based bloom: http://www.cs.utah.edu/~shirley/papers/spencer95.pdf
 
     From Mitsuba: "This fast convolution method used to implement Spencer et al’s physically-based bloom filter in the mtsutil tonemap utility.
     This can be useful when rendering images where pixels are clipped because they are so bright.
@@ -51,24 +46,27 @@
 
 */
 
-/*
-
-    SAMPLING IDEA
+/* SAMPLING IDEA
 
     Would be cool to have a function to reduce the diff/spec/etc samples in out of focus areas.
     Not sure how to tackle this and not sure if this is possible withing the range of a camera shader.
 
 */
 
-/*
-
-    SAMPLING IDEA
+/* SAMPLING IDEA
 
     To get hard edged bokeh shapes with high aperture sizes, maybe do a prepass (render image with low sampling and no dof) and then use that prepass in the same way as the bokeh sampling?
     More samples for the highlights makes sense if you're defocusing.
     This should be done by picking ray directions that will hit highlight areas of the image more often.
 
     I could also make the highlights brighter (and therefore the bokeh shapes more apparent) by adding to the weight of these rays.
+
+*/
+
+/* CATEYE IDEA
+
+    Cateye effect gives the inner edges of the spheres a brighter rim, so give more weight to the samples on the opposite corner of the screen.
+    I think I can easily do this by scaling the weight of the samples based on the relationship between the screen space coordinates.
 
 */
 
@@ -89,6 +87,7 @@
 AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
 
 bool debug = false;
+//bool useImage = false;
 
 #define _sensorWidth  (params[0].FLT)
 #define _sensorHeight  (params[1].FLT)
@@ -99,6 +98,7 @@ bool debug = false;
 #define _opticalVignetting  (params[6].FLT)
 #define _useImage  (params[7].BOOL)
 #define _bokehPath (params[8].STR)
+
 
 struct imageData{
      int x, y;
@@ -171,11 +171,11 @@ imageData* readImage(char const *bokeh_kernel_filename){
     std::cout << "----------------------------------------------" << std::endl;
     std::cerr << "Reading image <" << bokeh_kernel_filename << "> with OpenImageIO" << std::endl;
 
-    /* Search for an ImageIO plugin that is capable of reading the file ("foo.jpg"), first by
-    trying to deduce the correct plugin from the file extension, but if that fails, by opening
-    every ImageIO plugin it can find until one will open the file without error. When it finds
-    the right plugin, it creates a subclass instance of ImageInput that reads the right kind of
-    file format, and tries to fully open the file. */
+    //Search for an ImageIO plugin that is capable of reading the file ("foo.jpg"), first by
+    //trying to deduce the correct plugin from the file extension, but if that fails, by opening
+    //every ImageIO plugin it can find until one will open the file without error. When it finds
+    //the right plugin, it creates a subclass instance of ImageInput that reads the right kind of
+    //file format, and tries to fully open the file.
     OpenImageIO::ImageInput *in = OpenImageIO::ImageInput::open (bokeh_kernel_filename);
     if (! in){
         return nullptr; // Return a null pointer if we have issues
@@ -509,6 +509,7 @@ void bokehProbability(imageData *img){
     }
 }
 
+
 void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
 
     if (debug == true){
@@ -587,16 +588,17 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
 }
 
 
+
 node_parameters {
    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
    AiParameterFLT("focalLength", 8.0f); // distance between sensor and lens
    AiParameterBOOL("useDof", true);
-   AiParameterFLT("fStop", 0.4f);
+   AiParameterFLT("fStop", 1.4f);
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
    AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
    AiParameterBOOL("useImage", false);
-   AiParameterStr("bokehPath", ""); //bokeh shape image location
+   AiParameterStr("bokehPath", "/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/real_01.jpg"); //bokeh shape image location
 }
 
 
@@ -608,14 +610,13 @@ node_initialize {
 node_update {
    AiCameraUpdate(node, false);
 
-   bool useImage = _useImage;
-   const char bokehPath = _bokehPath;
+   // pick up variables
+   //bool useImage = _useImage;
+   //const char* bokehPath = _bokehPath;
 
-   std::cout << bokehPath << std::endl;
-
-   if (useImage == true){
+   if (_useImage == true){
   //make sure to change the string back to the variable!
-       image = readImage("bokehPath");
+       image = readImage(_bokehPath);
 
        // Check if image is valid (is the pointer null?)
        if(!image){
@@ -625,6 +626,7 @@ node_update {
 
        bokehProbability(image);
       }
+
 }
 
 node_finish {
@@ -647,7 +649,7 @@ camera_create_ray {
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
 
-    // variables
+     // variables
     float sensorWidth = _sensorWidth; // 35mm film
     float sensorHeight = _sensorHeight; // 35 mm film
     float focalLength = _focalLength; // distance between sensor and lens
@@ -656,6 +658,7 @@ camera_create_ray {
     bool useDof = _useDof;
     float opticalVignetting = _opticalVignetting; //distance of the opticalVignetting virtual aperture
     bool useImage = _useImage;
+
 
     // calculate diagonal length of sensor
     float sensorDiagonal = sqrtf((sensorWidth * sensorWidth) + (sensorHeight * sensorHeight));
@@ -738,6 +741,14 @@ camera_create_ray {
                 // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
                 output->weight = 0.0f;
             }
+
+            // testing cateye technique, adding weight to opposite edges to get nice rim on the highlights, this will need to be more complicated
+            //if (input->sy < 0){
+            //    output->weight *= 1 + (input->sx * output->origin.x + input->sy * output->origin.y) / 2;
+            //}
+            //else{
+            //    output->weight *= 1 + (input->sx * output->origin.x - input->sy * output->origin.y) / 2;
+            //}
         }
     }
 
