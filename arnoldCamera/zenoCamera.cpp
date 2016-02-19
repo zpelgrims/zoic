@@ -162,14 +162,11 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
 }
 
 
-
 imageData* readImage(char const *bokeh_kernel_filename){
 
     imageData* img = new imageData;
 
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cerr << "Reading image <" << bokeh_kernel_filename << "> with OpenImageIO" << std::endl;
+    AiMsgInfo("Reading image using OpenImageIO: %s", bokeh_kernel_filename);
 
     //Search for an ImageIO plugin that is capable of reading the file ("foo.jpg"), first by
     //trying to deduce the correct plugin from the file extension, but if that fails, by opening
@@ -191,14 +188,10 @@ imageData* readImage(char const *bokeh_kernel_filename){
     in->close ();
     delete in;
 
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cerr << "Image Width: " << img->x << std::endl;
-    std::cerr << "Image Height: " << img->y << std::endl;
-    std::cerr << "Image Channels: " << img->nchannels << std::endl;
-    std::cout << "Total amount of pixels: " << img->x * img->y << std::endl;
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cout << "----------------------------------------------" << std::endl;
+    AiMsgInfo("Image Width: %d", img->x);
+    AiMsgInfo("Image Height: %d", img->y);
+    AiMsgInfo("Image Channels: %d", img->nchannels);
+    AiMsgInfo("Total amount of pixels to process: %d", img->x * img->y);
 
     if (debug == true){
         // print out raw pixel data
@@ -255,6 +248,7 @@ imageData* readImage(char const *bokeh_kernel_filename){
 
     return img;
 }
+
 
 void bokehProbability(imageData *img){
 
@@ -597,7 +591,7 @@ node_parameters {
    AiParameterFLT("fStop", 1.4f);
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
    AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
-   AiParameterBOOL("useImage", false);
+   AiParameterBOOL("useImage", true);
    AiParameterStr("bokehPath", "/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/real_01.jpg"); //bokeh shape image location
 }
 
@@ -620,7 +614,7 @@ node_update {
 
        // Check if image is valid (is the pointer null?)
        if(!image){
-            std::cout << "Couldn't open image, please try again\n";
+            AiMsgError("Couldn't open image, please check that it is RGB/RGBA.");
             exit(1);
        }
 
@@ -632,14 +626,6 @@ node_update {
 node_finish {
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
-
-    // send statements to output log
-    //    AiMsgWarning("-------DEPTH OF FIELD---------");
-    //    AiMsgWarning("useDof = %s", (_useDof?"True":"False"));
-    //    AiMsgWarning("focusDistance = %f", _focalDistance);
-    //    AiMsgWarning("fStop = %f", _fStop);
-    //    AiMsgWarning("------------------------------");
-
     AiCameraDestroy(node);
 }
 
