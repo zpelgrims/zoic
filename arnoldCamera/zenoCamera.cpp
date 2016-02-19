@@ -62,6 +62,21 @@
 
 */
 
+/* TODO
+
+Image bokeh seems to be smaller than disk bokeh, test!
+
+Need to completely clean up after myself, otherwise I get seg faults when inputting new images etc
+
+Make a standard for this optical vignetting thing, not just random values
+
+Send extra samples to edges of the image (based on gradient) // not sure if this possible since sx, sy are read only variables.
+
+Something wrong when I change focal length to high number, losing a lot of samples for some reason
+even losing samples in the middle..
+
+*/
+
 #include <ai.h>
 #include <string.h>
 #include <stdint.h>
@@ -582,7 +597,7 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
 node_parameters {
    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
-   AiParameterFLT("focalLength", 6.5f); // distance between sensor and lens
+   AiParameterFLT("focalLength", 65.0f); // distance between sensor and lens
    AiParameterBOOL("useDof", true);
    AiParameterFLT("fStop", 1.4f);
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
@@ -601,11 +616,11 @@ node_update {
    AiCameraUpdate(node, false);
 
    // calculate field of view (theta = 2arctan*(sensorSize/focalLength))
-   camera.fov = 2.0f * atan((_sensorWidth / (2.0f * _focalLength))); // in radians
+   camera.fov = 2.0f * atan((_sensorWidth / (2.0f * (_focalLength/10)))); // in radians
    camera.tan_fov = tanf(camera.fov/ 2);
 
    // calculate aperture radius (apertureRadius = focalLength / 2*fStop)
-   camera.apertureRadius = _focalLength / (2*_fStop);
+   camera.apertureRadius = (_focalLength/10) / (2*_fStop);
 
    if (_useImage == true){
   //make sure to change the string back to the variable!
@@ -674,10 +689,6 @@ camera_create_ray {
         // update arnold ray direction, normalize
         output->dir = AiV3Normalize(focusPoint - output->origin);
 
-        // TODO: make a standard for this optical vignetting thing, not just random values
-        // TODO: send extra samples to edges of the image (based on gradient) // not sure if this possible since sx, sy are read only variables.
-        // TODO: something wrong when I change focal length to high number, losing a lot of samples for some reason
-        //            even losing samples in the middle..
         // Optical Vignetting (CAT EYE EFFECT)
         if (_opticalVignetting > 0.0f){
             // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
