@@ -581,8 +581,8 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
     }
 
     // to get the right image orientation, flip the x and y coordinates and then multiply the y values by -1 to flip the pixels vertically
-    float flippedRow = recalulatedPixelColumn * -1.0f;
-    float flippedColumn = recalulatedPixelRow;
+    float flippedRow = recalulatedPixelColumn;
+    float flippedColumn = recalulatedPixelRow * -1.0f;
 
 
 
@@ -622,8 +622,8 @@ node_update {
    // calculate aperture radius (apertureRadius = focalLength / 2*fStop)
    camera.apertureRadius = (_focalLength/10) / (2*_fStop);
 
+   // make probability functions of the bokeh image
    if (_useImage == true){
-  //make sure to change the string back to the variable!
        image = readImage(_bokehPath);
        if(!image){
             AiMsgError("Couldn't open image, please check that it is RGB/RGBA.");
