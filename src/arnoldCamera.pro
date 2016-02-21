@@ -20,15 +20,9 @@ LIBS += \
 
 
 SOURCES += \
-    zenoCamera.cpp \
-    imageReader.cpp \
-    testFile.cpp \
+    zoic.cpp
 
 HEADERS += \
-    arnoldcamera.h\
-    arnoldcamera_global.h \
-    oblique_lensdistortion.h \
-    imageReader.h
 
 unix {
     target.path = /usr/lib
@@ -36,5 +30,5 @@ unix {
 }
 
 DISTFILES += \
-    ../z_ae/aiZenoCameraTemplate.py \
-    ../z_bin/zenoCamera.mtd
+    ../ae/aiZoicTemplate.py \
+    ../bin/zoic.mtd

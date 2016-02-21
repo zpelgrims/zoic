@@ -3,7 +3,7 @@ import pymel.core as pm
 import maya.cmds as cmds
 import mtoa.ui.ae.utils as aeUtils
 
-class aiZenoCameraTemplate(templates.AttributeTemplate):
+class aiZoicTemplate(templates.AttributeTemplate):
 
     def filenameEdit(self, mData) :
             attr = self.nodeAttr('aiBokehPath')
@@ -41,4 +41,4 @@ class aiZenoCameraTemplate(templates.AttributeTemplate):
         self.addControl("aiUseImage", label="Enable Image based bokeh")
         self.addCustom('aiBokehPath', self.filenameNew, self.filenameReplace)
 
-templates.registerTranslatorUI(aiZenoCameraTemplate, "camera", "zenoCamera")
+templates.registerTranslatorUI(aiZoicTemplate, "camera", "zoic")

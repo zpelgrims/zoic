@@ -1,4 +1,4 @@
-// Arnold camera shader with options for image based bokeh shapes and optical vignetting.
+// ZOIC - Arnold camera shader with options for image based bokeh shapes and optical vignetting.
 
 // Special thanks to Marc-Antoine Desjardins for the help on the image sampling
 // Special thanks to Benedikt Bitterli for the information on optical vignetting
@@ -86,7 +86,8 @@ even losing samples in the middle..
 #include <cstring>
 #include <OpenImageIO/imageio.h>
 
-AI_CAMERA_NODE_EXPORT_METHODS(zenoCameraMethods)
+// Arnold thingy
+AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 
 bool debug = false;
 
@@ -591,7 +592,7 @@ node_parameters {
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
    AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
    AiParameterBOOL("useImage", true);
-   AiParameterStr("bokehPath", "/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/collected_real/bokeh_18_graded.jpg"); //bokeh shape image location
+   AiParameterStr("bokehPath", ""); //bokeh shape image location
 }
 
 
@@ -738,9 +739,9 @@ camera_create_ray {
 node_loader {
    if (i > 0)
       return false;
-   node->methods      = zenoCameraMethods;
+   node->methods      = zoicMethods;
    node->output_type  = AI_TYPE_NONE;
-   node->name         = "zenoCamera";
+   node->name         = "zoic";
    node->node_type    = AI_NODE_CAMERA;
    strcpy(node->version, AI_VERSION);
    return true;

@@ -1,9 +1,9 @@
-# zenoCamera                    0x00070007
-[node zenoCamera]
+# zoic                    0x00070007
+[node zoic]
     desc STRING "Extended camera shader with added options for mage based bokeh shapes and optical vignetting."
     maya.name               STRING  "camera"
     maya.id                     INT     0x00070007
-    maya.translator         STRING  "zenoCamera"
+    maya.translator         STRING  "zoic"
 
     [attr sensorWidth]
         maya.name           STRING  "aiSensorWidth"
