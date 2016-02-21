@@ -64,8 +64,6 @@
 
 /* TODO
 
-Image bokeh seems to be smaller than disk bokeh, tested.
-
 Need to completely clean up after myself, otherwise I get seg faults when inputting new images etc
 
 Make a standard for this optical vignetting thing, not just random values
@@ -195,7 +193,7 @@ imageData* readImage(char const *bokeh_kernel_filename){
     img->y = spec.height;
     img->nchannels = spec.nchannels;
 
-    //img->pixelData.clear();
+    img->pixelData.clear();
     img->pixelData.reserve(img->x * img->y * img->nchannels);
     in->read_image (OpenImageIO::TypeDesc::UINT8, &img->pixelData[0]);
     in->close ();
@@ -588,12 +586,9 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
     float flippedRow = recalulatedPixelColumn;
     float flippedColumn = recalulatedPixelRow * -1.0f;
 
-
-
     // send values back
-    *dx = (float)flippedRow / (float)img->x;
-    *dy = (float)flippedColumn / (float)img->y;
-
+    *dx = (float)flippedRow / (float)img->x * 2;
+    *dy = (float)flippedColumn / (float)img->y * 2;
 }
 
 
@@ -607,7 +602,7 @@ node_parameters {
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
    AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
    AiParameterBOOL("useImage", true);
-   AiParameterStr("bokehPath", ""); //bokeh shape image location
+   AiParameterStr("bokehPath", "/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/collected_real/bokeh_18_graded.jpg"); //bokeh shape image location
 }
 
 
