@@ -6,6 +6,10 @@
 
 // (C) Zeno Pelgrims, www.zenopelgrims.com
 
+// to build on my linux machine:
+// g++ -std=c++11 -o $ZENOCAMERA/src/zoic.os -c -fPIC -D_LINUX -I/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/include $ZENOCAMERA/src/zoic.cpp -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff
+// g++ -o $ZENOCAMERA/bin/zoic.so -shared $ZENOCAMERA/src/zoic.os -L/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/bin -lai -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff"
+
 
 // IDEAS
 
