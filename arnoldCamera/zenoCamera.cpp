@@ -107,10 +107,10 @@ struct imageData{
      int x, y;
      int nchannels;
      std::vector<uint8_t> pixelData;
-     float* cdfRow;
-     float* cdfColumn;
-     float* summedRowValues;
-     float* normalizedValuesPerRow;
+     std::vector<float> cdfRow;
+     std::vector<float> cdfColumn;
+     std::vector<float> summedRowValues;
+     std::vector<float> normalizedValuesPerRow;
      std::vector<int> rowIndices;
      std::vector<int> columnIndices;
 };
@@ -334,7 +334,7 @@ void bokehProbability(imageData *img){
 
 
         // calculate sum for each row
-        img->summedRowValues = new float [img->y]();
+        img->summedRowValues.reserve(img->y);
         float summedHorizontalNormalizedValues;
         int counterRow = 0;
 
@@ -398,7 +398,8 @@ void bokehProbability(imageData *img){
 
 
         // For every row, add the sum of all previous row (cumulative distribution function)
-        img->cdfRow = new float [img->y]();
+        // img->cdfRow = new float [img->y]();
+        img->cdfRow.reserve(img->y);
         img->rowIndices.reserve(img->y);
 
         for (int i = 0; i < img->y; ++i){
@@ -427,7 +428,7 @@ void bokehProbability(imageData *img){
         // divide pixel values of each pixel by the sum of the pixel values of that row (Normalize)
         int rowCounter = 0;
         int tmpCounter = 0;
-        img->normalizedValuesPerRow = new float [img->x * img->y]();
+        img->normalizedValuesPerRow.reserve(img->x * img->y);
 
         for (int i = 0; i < img->x * img->y; ++i){
 
@@ -488,7 +489,8 @@ void bokehProbability(imageData *img){
 
 
         // For every column per row, add the sum of all previous columns (cumulative distribution function)
-        img->cdfColumn = new float [img->x * img->y]();
+        // img->cdfColumn = new float [img->x * img->y]();
+        img->cdfColumn.reserve(img->x * img->y);
         img->columnIndices.reserve(img->x * img->y);
         int cdfCounter = 0;
 
@@ -525,13 +527,14 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
     }
 
     // find upper bound of random number in the array
-    float *pUpperBound = std::upper_bound(img->cdfRow, img->cdfRow + img->y, randomNumberRow);
+    float pUpperBound = 0.0;
+    pUpperBound = *std::upper_bound(img->cdfRow.begin(), img->cdfRow.begin() + img->y, randomNumberRow);
     if (debug == true){
-        std::cout << "UPPER BOUND: " << *pUpperBound << std::endl;
+        std::cout << "UPPER BOUND: " << pUpperBound << std::endl;
     }
 
     // find which element of the array the upper bound is
-    int x = std::distance(img->cdfRow, std::find(img->cdfRow, img->cdfRow + img->y, *pUpperBound));
+    int x = std::distance(img->cdfRow.begin(), std::find(img->cdfRow.begin(), img->cdfRow.begin() + img->y, pUpperBound));
 
     // find actual pixel row
     int actualPixelRow = img->rowIndices[x];
@@ -559,13 +562,14 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
 
 
     // find upper bound of random number in the array
-    float *pUpperBoundColumn = std::upper_bound(img->cdfColumn + startPixel, img->cdfColumn + startPixel + img->x, randomNumberColumn);
+    float pUpperBoundColumn = 0.0f;
+    pUpperBoundColumn = *std::upper_bound(img->cdfColumn.begin() + startPixel, img->cdfColumn.begin() + startPixel + img->x, randomNumberColumn);
     if (debug == true){
-        std::cout << "UPPER BOUND: " << *pUpperBoundColumn << std::endl;
+        std::cout << "UPPER BOUND: " << pUpperBoundColumn << std::endl;
     }
 
     // find which element of the array the upper bound is
-    int y = std::distance(img->cdfColumn, std::find(img->cdfColumn + startPixel, img->cdfColumn + startPixel + img->x, *pUpperBoundColumn));
+    int y = std::distance(img->cdfColumn.begin(), std::find(img->cdfColumn.begin() + startPixel, img->cdfColumn.begin() + startPixel + img->x, pUpperBoundColumn));
 
     // find actual pixel column
     int actualPixelColumn = img->columnIndices[y];
