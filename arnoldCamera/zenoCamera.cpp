@@ -107,8 +107,8 @@ struct imageData{
      int x, y;
      int nchannels;
      std::vector<uint8_t> pixelData;
-     //std::vector<float> cdfRow;
-     float* cdfRow;
+     std::vector<float> cdfRow;
+     // float* cdfRow;
      std::vector<float> cdfColumn;
      std::vector<float> summedRowValues;
      std::vector<float> normalizedValuesPerRow;
@@ -336,7 +336,7 @@ void bokehProbability(imageData *img){
 
         // calculate sum for each row
         img->summedRowValues.clear();
-        img->summedRowValues.reserve(img->y);
+        img->summedRowValues.resize(img->y);
         float summedHorizontalNormalizedValues = 0.0f;
         int counterRow = 0;
 
@@ -375,14 +375,14 @@ void bokehProbability(imageData *img){
         // BUG HERE!!!!! - why can't I use a vector??
 
         // make array of indices
-        //std::vector<int> summedRowValueCopyIndices(img->y, 0);
-        int summedRowValueCopyIndices[img->y];
+        std::vector<int> summedRowValueCopyIndices(img->y, 0);
+        //int summedRowValueCopyIndices[img->y];
         for(int i = 0; i < img->y; ++i){
             summedRowValueCopyIndices[i] = i;
         }
 
         // lambda
-        std::sort(summedRowValueCopyIndices, summedRowValueCopyIndices + img->y, [&img](int _lhs, int _rhs){
+        std::sort(summedRowValueCopyIndices.begin(), summedRowValueCopyIndices.begin() + img->y, [&img](int _lhs, int _rhs){
             return img->summedRowValues[_lhs] > img->summedRowValues[_rhs];
         });
 
@@ -398,14 +398,15 @@ void bokehProbability(imageData *img){
 
 
         // For every row, add the sum of all previous row (cumulative distribution function)
-        img->cdfRow = new float [img->y]();
+        img->cdfRow.clear();
+        img->cdfRow.resize(img->y * img->x);
         img->rowIndices.clear();
-        img->rowIndices.reserve(img->y);
+        img->rowIndices.resize(img->y * img->x);
 
         for (int i = 0; i < img->y; ++i){
 
             if(i == 0){
-                img->cdfRow[i] = img->cdfRow[i] + img->summedRowValues[summedRowValueCopyIndices[i]];
+                img->cdfRow[i] += img->summedRowValues[summedRowValueCopyIndices[i]];
             }
             else{
                 img->cdfRow[i] = img->cdfRow[i-1] + img->summedRowValues[summedRowValueCopyIndices[i]];
@@ -429,7 +430,7 @@ void bokehProbability(imageData *img){
         int rowCounter = 0;
         int tmpCounter = 0;
         img->normalizedValuesPerRow.clear();
-        img->normalizedValuesPerRow.reserve(img->x * img->y);
+        img->normalizedValuesPerRow.resize(img->x * img->y);
 
         for (int i = 0; i < img->x * img->y; ++i){
 
@@ -487,9 +488,9 @@ void bokehProbability(imageData *img){
 
         // For every column per row, add the sum of all previous columns (cumulative distribution function)
         img->cdfColumn.clear();
-        img->cdfColumn.reserve(img->x * img->y);
+        img->cdfColumn.resize(img->x * img->y + 1);
         img->columnIndices.clear();
-        img->columnIndices.reserve(img->x * img->y);
+        img->columnIndices.resize(img->x * img->y + 1);
         int cdfCounter = 0;
 
         for (int i = 0; i < img->x * img->y; ++i){
@@ -518,20 +519,20 @@ void bokehProbability(imageData *img){
 
 // Sample image
 void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
-
+    //bool debug = true;
     if (debug == true){
         // print random number between 0 and 1
         std::cout << "RANDOM NUMBER ROW: " << randomNumberRow << std::endl;
     }
 
     // find upper bound of random number in the array
-    float *pUpperBound = std::upper_bound(img->cdfRow, img->cdfRow + img->y, randomNumberRow);
+    float pUpperBound = *std::upper_bound(img->cdfRow.begin(), img->cdfRow.begin() + img->y, randomNumberRow);
     if (debug == true){
-        std::cout << "UPPER BOUND: " << *pUpperBound << std::endl;
+        std::cout << "UPPER BOUND: " << pUpperBound << std::endl;
     }
 
     // find which element of the array the upper bound is
-    int x = std::distance(img->cdfRow, std::find(img->cdfRow, img->cdfRow + img->y, *pUpperBound));
+    int x = std::distance(img->cdfRow.begin(), std::find(img->cdfRow.begin(), img->cdfRow.begin() + img->y, pUpperBound));
 
     // find actual pixel row
     int actualPixelRow = img->rowIndices[x];
