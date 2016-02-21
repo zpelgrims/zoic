@@ -64,7 +64,7 @@
 
 /* TODO
 
-Image bokeh seems to be smaller than disk bokeh, test!
+Image bokeh seems to be smaller than disk bokeh, tested.
 
 Need to completely clean up after myself, otherwise I get seg faults when inputting new images etc
 
@@ -195,6 +195,7 @@ imageData* readImage(char const *bokeh_kernel_filename){
     img->y = spec.height;
     img->nchannels = spec.nchannels;
 
+    //img->pixelData.clear();
     img->pixelData.reserve(img->x * img->y * img->nchannels);
     in->read_image (OpenImageIO::TypeDesc::UINT8, &img->pixelData[0]);
     in->close ();
@@ -286,6 +287,9 @@ void bokehProbability(imageData *img){
             }
             else if(img->nchannels == 4){
                 tmpPixelCounter += 4;
+            }
+            else if(img->nchannels == 1){
+                tmpPixelCounter += 1;
             }
         }
 
@@ -602,8 +606,8 @@ node_parameters {
    AiParameterFLT("fStop", 1.4f);
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
    AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
-   AiParameterBOOL("useImage", false);
-   AiParameterStr("bokehPath", "/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/real_01.jpg"); //bokeh shape image location
+   AiParameterBOOL("useImage", true);
+   AiParameterStr("bokehPath", ""); //bokeh shape image location
 }
 
 
