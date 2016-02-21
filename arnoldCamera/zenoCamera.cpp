@@ -372,14 +372,8 @@ void bokehProbability(imageData *img){
 
 
         // sort row values from highest to lowest (probability density function)
-        // needed to make a copy of array, can't use the one in struct for some reason?
         // BUG HERE!!!!!
         // why can't I use a vector??
-        float summedRowValueCopy[img->y];
-        //std::vector<float> summedRowValueCopy(img->y);
-        for(int i = 0; i < img->y; ++i){
-            summedRowValueCopy[i] = img->summedRowValues[i];
-        }
 
         // make array of indices
         //std::vector<int> summedRowValueCopyIndices(img->y, 0);
@@ -388,14 +382,15 @@ void bokehProbability(imageData *img){
             summedRowValueCopyIndices[i] = i;
         }
 
-        std::sort(summedRowValueCopyIndices, summedRowValueCopyIndices + img->y, [&summedRowValueCopy](int _lhs, int _rhs){
-            return summedRowValueCopy[_lhs] > summedRowValueCopy[_rhs];
+        // lambda
+        std::sort(summedRowValueCopyIndices, summedRowValueCopyIndices + img->y, [&img](int _lhs, int _rhs){
+            return img->summedRowValues[_lhs] > img->summedRowValues[_rhs];
         });
 
         if (debug == true){
             // print values
             for(int i = 0; i < img->y; ++i){
-                std::cout << "PDF row [" <<  summedRowValueCopyIndices[i] << "]: " << summedRowValueCopy[summedRowValueCopyIndices[i]] << std::endl;
+                std::cout << "PDF row [" <<  summedRowValueCopyIndices[i] << "]: " << img->summedRowValues[summedRowValueCopyIndices[i]] << std::endl;
             }
 
             std::cout << "----------------------------------------------" << std::endl;
@@ -411,10 +406,10 @@ void bokehProbability(imageData *img){
         for (int i = 0; i < img->y; ++i){
 
             if(i == 0){
-                img->cdfRow[i] = img->cdfRow[i] + summedRowValueCopy[summedRowValueCopyIndices[i]];
+                img->cdfRow[i] = img->cdfRow[i] + img->summedRowValues[summedRowValueCopyIndices[i]];
             }
             else{
-                img->cdfRow[i] = img->cdfRow[i-1] + summedRowValueCopy[summedRowValueCopyIndices[i]];
+                img->cdfRow[i] = img->cdfRow[i-1] + img->summedRowValues[summedRowValueCopyIndices[i]];
             }
 
             img->rowIndices[i] = summedRowValueCopyIndices[i];
@@ -434,7 +429,6 @@ void bokehProbability(imageData *img){
         // divide pixel values of each pixel by the sum of the pixel values of that row (Normalize)
         int rowCounter = 0;
         int tmpCounter = 0;
-        // img->normalizedValuesPerRow = new float [img->x * img->y]();
         img->normalizedValuesPerRow.clear();
         img->normalizedValuesPerRow.reserve(img->x * img->y);
 
@@ -469,27 +463,23 @@ void bokehProbability(imageData *img){
 
 
         // sort column values from highest to lowest per row (probability density function)
-        // needed to make a copy of array, can't use the one in struct for some reason?
-        float summedColumnValueCopy[img->x * img->y];
-        for(int i = 0; i < img->x * img->y; ++i){
-            summedColumnValueCopy[i] = img->normalizedValuesPerRow[i];
-        }
-
         // make array of indices
-        size_t summedColumnValueCopyIndices[img->x * img->y];
+        int summedColumnValueCopyIndices[img->x * img->y];
         for(int i = 0; i < img->x * img->y; i++){
             summedColumnValueCopyIndices[i] = i;
         }
+
+        // lamdba
         for (int i = 0; i < img->x * img->y; i+=img->x){
-            std::sort(summedColumnValueCopyIndices + i, summedColumnValueCopyIndices + i + img->x, [&summedColumnValueCopy]( size_t _lhs,  size_t _rhs){
-                return summedColumnValueCopy[_lhs] > summedColumnValueCopy[_rhs];
+            std::sort(summedColumnValueCopyIndices + i, summedColumnValueCopyIndices + i + img->x, [&img]( int _lhs,  int _rhs){
+                return img->normalizedValuesPerRow[_lhs] > img->normalizedValuesPerRow[_rhs];
             });
         }
 
         if (debug == true){
             // print values
             for(int i = 0; i < img->x * img->y; ++i){
-                std::cout << "PDF column [" << summedColumnValueCopyIndices[i] << "]: " << summedColumnValueCopy[summedColumnValueCopyIndices[i]] << std::endl;
+                std::cout << "PDF column [" << summedColumnValueCopyIndices[i] << "]: " << img->normalizedValuesPerRow[summedColumnValueCopyIndices[i]] << std::endl;
             }
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
@@ -504,11 +494,11 @@ void bokehProbability(imageData *img){
 
         for (int i = 0; i < img->x * img->y; ++i){
             if (cdfCounter == img->x) {
-                    img->cdfColumn[i] = summedColumnValueCopy[summedColumnValueCopyIndices[i]];
+                    img->cdfColumn[i] = img->normalizedValuesPerRow[summedColumnValueCopyIndices[i]];
                     cdfCounter = 0;
             }
             else {
-                img->cdfColumn[i] = img->cdfColumn[i-1] + summedColumnValueCopy[summedColumnValueCopyIndices[i]];
+                img->cdfColumn[i] = img->cdfColumn[i-1] + img->normalizedValuesPerRow[summedColumnValueCopyIndices[i]];
             }
 
             cdfCounter += 1;
