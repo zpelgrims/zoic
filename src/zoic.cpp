@@ -31,17 +31,6 @@
 
 */
 
-/* Physically based bloom: http://www.cs.utah.edu/~shirley/papers/spencer95.pdf
-
-    From Mitsuba: "This fast convolution method used to implement Spencer et al’s physically-based bloom filter in the mtsutil tonemap utility.
-    This can be useful when rendering images where pixels are clipped because they are so bright.
-    Take for instance the rendering below: there are many reflections of the sun, but they are quite hard to perceive due to the limited dynamic range.
-    After convolving the image with an empirical point spread function of the human eye, their brightness is much more apparent."
-
-    Not sure if this is done as a post process or not. Figure out.
-
-*/
-
 /* SAMPLING IDEA
 
     Would be cool to have a function to reduce the diff/spec/etc samples in out of focus areas.
@@ -61,12 +50,12 @@
 
 /* TODO
 
-Make a standard for this optical vignetting thing, not just random values
+    Make a standard for this optical vignetting thing, not just random values
 
-Send extra samples to edges of the image (based on gradient) // not sure if this possible since sx, sy are read only variables.
+    Send extra samples to edges of the image (based on gradient) // not sure if this possible since sx, sy are read only variables.
 
-Something wrong when I change focal length to high number, losing a lot of samples for some reason
-even losing samples in the middle..
+    Something wrong when I change focal length to high number, losing a lot of samples for some reason
+    even losing samples in the middle..
 
 */
 
