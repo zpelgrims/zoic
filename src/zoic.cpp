@@ -59,13 +59,6 @@
 
 */
 
-/* CATEYE IDEA
-
-    Cateye effect gives the inner edges of the spheres a brighter rim, so give more weight to the samples on the opposite corner of the screen.
-    I think I can easily do this by scaling the weight of the samples based on the relationship between the screen space coordinates.
-
-*/
-
 /* TODO
 
 Make a standard for this optical vignetting thing, not just random values
@@ -102,8 +95,11 @@ bool debug = false;
 #define _fStop  (params[4].FLT)
 #define _focalDistance  (params[5].FLT)
 #define _opticalVignetting  (params[6].FLT)
-#define _useImage  (params[7].BOOL)
-#define _bokehPath (params[8].STR)
+#define _highlightWidth  (params[7].FLT)
+#define _highlightStrength  (params[8].FLT)
+#define _useImage  (params[9].BOOL)
+#define _bokehPath (params[10].STR)
+#define _exposureControl (params[11].FLT)
 
 
 struct imageData{
@@ -594,9 +590,12 @@ node_parameters {
    AiParameterBOOL("useDof", true);
    AiParameterFLT("fStop", 1.4f);
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
-   AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
-   AiParameterBOOL("useImage", true);
+   AiParameterFLT("opticalVignetting", 20.0f); //distance of the opticalVignetting virtual aperture
+   AiParameterFLT("highlightWidth", 0.2f);
+   AiParameterFLT("highlightStrength", 10.0f);
+   AiParameterBOOL("useImage", false);
    AiParameterStr("bokehPath", ""); //bokeh shape image location
+   AiParameterFLT("exposureControl", 0.0f);
 }
 
 
@@ -694,29 +693,28 @@ camera_create_ray {
             // find hypotenuse of x, y points.
             float pointHypotenuse = sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
 
-            float opticalVignetApertureRadius = camera.apertureRadius * 1.0f;
 
             // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
-            if (ABS(pointHypotenuse) > opticalVignetApertureRadius){
+            if (ABS(pointHypotenuse) > camera.apertureRadius){
                 // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
                 output->weight = 0.0f;
             }
 
-            // testing cateye technique, adding weight to opposite edges to get nice rim on the highlights, this will need to be more complicated
-            //if (input->sy < 0){
-            //    output->weight *= 1 + (input->sx * output->origin.x + input->sy * output->origin.y) / 2;
-            //}
-            //else{
-            //    output->weight *= 1 + (input->sx * output->origin.x - input->sy * output->origin.y) / 2;
-            //}
+            // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
+            // adding weight to opposite edges to get nice rim on the highlights
+            else if (ABS(pointHypotenuse) < camera.apertureRadius && ABS(pointHypotenuse) > (camera.apertureRadius - _highlightWidth)){
+                output->weight *= _highlightStrength * (1 - (camera.apertureRadius - ABS(pointHypotenuse))) * sqrt(input->sx * input->sx + input->sy * input->sy);
+            }
         }
     }
 
-
-    // vignetting
-    // float dist2 = input->sx * input->sx + input->sy * input->sy;
-    // output->weight = 1.0f - .5*dist2;
-
+    // control to go light stops up and down
+    if (_exposureControl > 0){
+        output->weight *= 1.0 + (_exposureControl * _exposureControl);
+    }
+    else if (_exposureControl < 0){
+        output->weight *= 1.0 / (1.0 + (-_exposureControl * -_exposureControl));
+    }
 
     // not sure if needed, but can't hurt. Taken from solidangle website.
     // ----------------------------------------------------------------------------------------------

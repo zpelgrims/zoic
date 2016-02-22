@@ -60,6 +60,22 @@
         default                  FLOAT   0
         desc                     STRING "Sometimes referred to as the cat-eye effect, this is a lens imperfection that is not caused by the glass but by the outer edge of the lens, also known as the exit aperture. When the main aperture is fully open, light coming into the camera from steep angles will be blocked partially by the edge of the lens. This creates cat-eye like bokeh shapes near the edges of an image. It should be noted that this lens effect is purely mechanical and can not be confused with lens distortion."
 
+    [attr highlightWidth]
+        maya.name                STRING     "aiHighlightWidth"
+        min                      FLOAT      0.0
+        softmax                  FLOAT      0.2
+        max                      FLOAT      1.0
+        default                  FLOAT      0.0
+        desc                     STRING     "Width of the highlight on the inner side of the bokeh in relationship to the origin in image space. This is a percentage of the lens radius."
+
+    [attr highlightStrength]
+        maya.name                STRING     "aiHighlightStrength"
+        min                      FLOAT      0.0
+        softmax                  FLOAT      20.0
+        max                      FLOAT      100.0
+        default                  FLOAT      0.0
+        desc                     STRING     "Strength of the highlight on the inner side of the bokeh in relationship to the origin in image space. This is a multiplier on the weight of the rays."
+
     [attr useImage]
         maya.name           STRING  "aiUseImage"
         default                  BOOL   false
@@ -69,3 +85,14 @@
         maya.name           STRING  "aiBokehPath"
         default                  STRING   ""
         desc                     STRING "Path to bokeh image. No need to convert to .tx"
+
+
+    [attr exposureControl]
+        maya.name                STRING     "aiExposureControl"
+        min                      FLOAT      -100.0
+        softmin                  FLOAT      -5.0
+        softmax                  FLOAT      5.0
+        max                      FLOAT      100.0
+        default                  FLOAT      0.0
+        desc                     STRING     "Multiplier on the ray weight."
+

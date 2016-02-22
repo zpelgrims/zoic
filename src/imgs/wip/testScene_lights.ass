@@ -1,4 +1,4 @@
-### exported: Sun Feb 21 14:14:25 2016
+### exported: Mon Feb 22 13:20:38 2016
 ### from:     Arnold 4.2.11.0 linux clang-3.6.0 glibc-2.12 oiio-1.5.20 rlm-11.3.1 2015/10/27 15:51:25
 ### host app: MtoA 1.2.4.3  Maya 2016
 
@@ -6,7 +6,7 @@
 
 options
 {
- AA_samples 20
+ AA_samples 10
  outputs "RGBA RGBA defaultArnoldFilter@gaussian_filter defaultArnoldDriver@driver_exr.RGBA"
  xres 960
  yres 350
@@ -33,7 +33,7 @@ options
  fps 24
 }
 
-zenoCamera
+zoic
 {
  name perspShape
  sensorWidth 3.5999999
@@ -42,9 +42,9 @@ zenoCamera
  useDof on
  fStop 1.39999998
  focalDistance 115
- opticalVignetting 3.80952382
- useImage on
- bokehPath "/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/collected_real/bokeh_31.jpg"
+ opticalVignetting 8
+ useImage off
+ bokehPath "/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/collected_real/bokeh_18.jpg"
  matrix
  0.312334925 0 -0.949972034 0
  0.153605282 -0.986840844 0.0505028479 0
