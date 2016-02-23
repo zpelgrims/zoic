@@ -444,14 +444,14 @@ void bokehProbability(imageData *img){
 
 
         // sort column values from highest to lowest per row (probability density function)
-        int summedColumnValueCopyIndices[img->x * img->y];
+        std::vector<int> summedColumnValueCopyIndices(img->x * img->y, 0);
         for(int i = 0; i < img->x * img->y; i++){
             summedColumnValueCopyIndices[i] = i;
         }
 
         // lamdba
         for (int i = 0; i < img->x * img->y; i+=img->x){
-            std::sort(summedColumnValueCopyIndices + i, summedColumnValueCopyIndices + i + img->x, [&img]( int _lhs,  int _rhs){
+            std::sort(summedColumnValueCopyIndices.begin() + i, summedColumnValueCopyIndices.begin() + i + img->x, [&img]( int _lhs,  int _rhs){
                 return img->normalizedValuesPerRow[_lhs] > img->normalizedValuesPerRow[_rhs];
             });
         }
