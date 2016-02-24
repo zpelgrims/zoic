@@ -70,7 +70,32 @@
 #include <algorithm>
 #include <functional>
 #include <cstring>
-#include <OpenImageIO/imageio.h>
+#include <vector>
+
+#ifdef NO_OIIO
+// AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
+// Figure out the right one to call at compile time
+#  if AI_VERSION_ARCH_NUM > 4
+#   define AITEXTURELOAD_PROTO2
+#  else
+#    if AI_VERSION_ARCH_NUM == 4
+#      if AI_VERSION_MAJOR_NUM > 2
+#        define AITEXTURELOAD_PROTO2
+#      else
+#        if AI_VERSION_MAJOR_NUM == 2
+#          if AI_VERSION_MINOR_NUM >= 10
+#            define AITEXTURELOAD_PROTO2
+#          endif
+#          if AI_VERSION_MINOR_NUM == 9
+#            define AITEXTURELOAD_PROTO1
+#          endif
+#        endif
+#      endif
+#    endif
+#  endif
+#else
+#  include <OpenImageIO/imageio.h>
+#endif
 
 // Arnold thingy
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
@@ -162,7 +187,41 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
 // Read bokeh image
 imageData* readImage(char const *bokeh_kernel_filename){
 
+#ifdef NO_OIIO
+
+    AiMsgInfo("Reading image using Arnold API: %s", bokeh_kernel_filename);
+
+    AtString path(bokeh_kernel_filename);
+
+    unsigned int iw, ih, nc;
+    if (!AiTextureGetResolution(path, &iw, &ih) ||
+        !AiTextureGetNumChannels(path, &nc)){
+        return nullptr;
+    }
+
     imageData* img = new imageData;
+
+    img->x = int(iw);
+    img->y = int(ih);
+    img->nchannels = int(nc);
+
+    img->pixelData.clear();
+    img->pixelData.reserve(img->x * img->y * img->nchannels);
+#ifdef AITEXTURELOAD_PROTO2
+    if (!AiTextureLoad(path, false, 0, &img->pixelData[0])){
+#else
+#ifdef AITEXTURELOAD_PROTO1
+    if (!AiTextureLoad(path, false, &img->pixelData[0])){
+#else
+    {
+        AiMsgError("Current arnold version doesn't have texture loading API");
+#endif
+#endif
+        delete img;
+        return nullptr;
+    }
+
+#else
 
     AiMsgInfo("Reading image using OpenImageIO: %s", bokeh_kernel_filename);
 
@@ -176,6 +235,8 @@ imageData* readImage(char const *bokeh_kernel_filename){
         return nullptr; // Return a null pointer if we have issues
     }
 
+    imageData* img = new imageData;
+
     const OpenImageIO::ImageSpec &spec = in->spec();
     img->x = spec.width;
     img->y = spec.height;
@@ -186,6 +247,8 @@ imageData* readImage(char const *bokeh_kernel_filename){
     in->read_image (OpenImageIO::TypeDesc::UINT8, &img->pixelData[0]);
     in->close ();
     delete in;
+
+#endif
 
     AiMsgInfo("Image Width: %d", img->x);
     AiMsgInfo("Image Height: %d", img->y);
