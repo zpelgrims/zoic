@@ -71,8 +71,30 @@
 #include <functional>
 #include <cstring>
 #include <vector>
-#ifndef NO_OIIO
-#   include <OpenImageIO/imageio.h>
+
+#ifdef NO_OIIO
+// AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
+// Figure out the right one to call at compile time
+#  if AI_VERSION_ARCH_NUM > 4
+#   define AITEXTURELOAD_PROTO2
+#  else
+#    if AI_VERSION_ARCH_NUM == 4
+#      if AI_VERSION_MAJOR_NUM > 2
+#        define AITEXTURELOAD_PROTO2
+#      else
+#        if AI_VERSION_MAJOR_NUM == 2
+#          if AI_VERSION_MINOR_NUM >= 10
+#            define AITEXTURELOAD_PROTO2
+#          endif
+#          if AI_VERSION_MINOR_NUM == 9
+#            define AITEXTURELOAD_PROTO1
+#          endif
+#        endif
+#      endif
+#    endif
+#  endif
+#else
+#  include <OpenImageIO/imageio.h>
 #endif
 
 // Arnold thingy
@@ -185,7 +207,16 @@ imageData* readImage(char const *bokeh_kernel_filename){
 
     img->pixelData.clear();
     img->pixelData.reserve(img->x * img->y * img->nchannels);
+#ifdef AITEXTURELOAD_PROTO2
+    if (!AiTextureLoad(path, false, 0, &img->pixelData[0])){
+#else
+#ifdef AITEXTURELOAD_PROTO1
     if (!AiTextureLoad(path, false, &img->pixelData[0])){
+#else
+    {
+        AiMsgError("Current arnold version doesn't have texture loading API");
+#endif
+#endif
         delete img;
         return nullptr;
     }
