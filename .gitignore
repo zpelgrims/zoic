@@ -1,2 +1,7 @@
 university/*
 src/imgs/*
+excons.cache
+*.dblite
+release/
+debug/
+.build/
