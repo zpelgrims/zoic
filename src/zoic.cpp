@@ -7,8 +7,8 @@
 // (C) Zeno Pelgrims, www.zenopelgrims.com
 
 // to build on my linux machine:
-// g++ -std=c++11 -o $ZENOCAMERA/src/zoic.os -c -fPIC -D_LINUX -I/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/include $ZENOCAMERA/src/zoic.cpp -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff
-// g++ -o $ZENOCAMERA/bin/zoic.so -shared $ZENOCAMERA/src/zoic.os -L/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/bin -lai -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff"
+// g++ -std=c++11 -o $ZENOCAMERA/src/zoic.os -c -fPIC -DNO_OIIO -D_LINUX -I/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/include $ZENOCAMERA/src/zoic.cpp -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff;
+// g++ -o $ZENOCAMERA/bin/zoic.so -shared $ZENOCAMERA/src/zoic.os -DNO_OIIO -L/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/bin -lai -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff
 
 
 // IDEAS
@@ -70,7 +70,32 @@
 #include <algorithm>
 #include <functional>
 #include <cstring>
-#include <OpenImageIO/imageio.h>
+#include <vector>
+
+#ifdef NO_OIIO
+// AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
+// Figure out the right one to call at compile time
+#  if AI_VERSION_ARCH_NUM > 4
+#   define AITEXTURELOAD_PROTO2
+#  else
+#    if AI_VERSION_ARCH_NUM == 4
+#      if AI_VERSION_MAJOR_NUM > 2
+#        define AITEXTURELOAD_PROTO2
+#      else
+#        if AI_VERSION_MAJOR_NUM == 2
+#          if AI_VERSION_MINOR_NUM >= 10
+#            define AITEXTURELOAD_PROTO2
+#          endif
+#          if AI_VERSION_MINOR_NUM == 9
+#            define AITEXTURELOAD_PROTO1
+#          endif
+#        endif
+#      endif
+#    endif
+#  endif
+#else
+#  include <OpenImageIO/imageio.h>
+#endif
 
 // Arnold thingy
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
@@ -107,10 +132,8 @@ struct cameraData{
     float fov;
     float tan_fov;
     float apertureRadius;
+    imageData *image;
 };
-
-imageData *image = nullptr;
-cameraData camera;
 
 
 // PBRT v2 source code  - Concentric disk sampling (Sampling the disk in a more uniform way than with random sampling)
@@ -162,7 +185,41 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
 // Read bokeh image
 imageData* readImage(char const *bokeh_kernel_filename){
 
+#ifdef NO_OIIO
+
+    AiMsgInfo("Reading image using Arnold API: %s", bokeh_kernel_filename);
+
+    AtString path(bokeh_kernel_filename);
+
+    unsigned int iw, ih, nc;
+    if (!AiTextureGetResolution(path, &iw, &ih) ||
+        !AiTextureGetNumChannels(path, &nc)){
+        return nullptr;
+    }
+
     imageData* img = new imageData;
+
+    img->x = int(iw);
+    img->y = int(ih);
+    img->nchannels = int(nc);
+
+    img->pixelData.clear();
+    img->pixelData.reserve(img->x * img->y * img->nchannels);
+#ifdef AITEXTURELOAD_PROTO2
+    if (!AiTextureLoad(path, false, 0, &img->pixelData[0])){
+#else
+#ifdef AITEXTURELOAD_PROTO1
+    if (!AiTextureLoad(path, false, &img->pixelData[0])){
+#else
+    {
+        AiMsgError("Current arnold version doesn't have texture loading API");
+#endif
+#endif
+        delete img;
+        return nullptr;
+    }
+
+#else
 
     AiMsgInfo("Reading image using OpenImageIO: %s", bokeh_kernel_filename);
 
@@ -176,6 +233,8 @@ imageData* readImage(char const *bokeh_kernel_filename){
         return nullptr; // Return a null pointer if we have issues
     }
 
+    imageData* img = new imageData;
+
     const OpenImageIO::ImageSpec &spec = in->spec();
     img->x = spec.width;
     img->y = spec.height;
@@ -186,6 +245,8 @@ imageData* readImage(char const *bokeh_kernel_filename){
     in->read_image (OpenImageIO::TypeDesc::UINT8, &img->pixelData[0]);
     in->close ();
     delete in;
+
+#endif
 
     AiMsgInfo("Image Width: %d", img->x);
     AiMsgInfo("Image Height: %d", img->y);
@@ -579,7 +640,7 @@ node_parameters {
    AiParameterBOOL("useDof", true);
    AiParameterFLT("fStop", 1.4f);
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
-   AiParameterFLT("opticalVignetting", 20.0f); //distance of the opticalVignetting virtual aperture
+   AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
    AiParameterFLT("highlightWidth", 0.2f);
    AiParameterFLT("highlightStrength", 10.0f);
    AiParameterBOOL("useImage", false);
@@ -589,34 +650,51 @@ node_parameters {
 
 
 node_initialize {
-   AiCameraInitialize(node, NULL);
+   cameraData *camera = new cameraData;
+   camera->image = nullptr;
+   AiCameraInitialize(node, (void*)camera);
 
 }
 
 node_update {
    AiCameraUpdate(node, false);
 
+   cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
+   
    // calculate field of view (theta = 2arctan*(sensorSize/focalLength))
-   camera.fov = 2.0f * atan((_sensorWidth / (2.0f * (_focalLength/10)))); // in radians
-   camera.tan_fov = tanf(camera.fov/ 2);
+   camera->fov = 2.0f * atan((_sensorWidth / (2.0f * (_focalLength/10)))); // in radians
+   camera->tan_fov = tanf(camera->fov/ 2);
 
    // calculate aperture radius (apertureRadius = focalLength / 2*fStop)
-   camera.apertureRadius = (_focalLength/10) / (2*_fStop);
+   camera->apertureRadius = (_focalLength/10) / (2*_fStop);
+
+   if (camera->image){
+       delete camera->image;
+       camera->image = nullptr;
+   }
 
    // make probability functions of the bokeh image
    if (_useImage == true){
-       image = readImage(_bokehPath);
-       if(!image){
-            AiMsgError("Couldn't open image, please check that it is RGB/RGBA.");
-            exit(1);
+       camera->image = readImage(_bokehPath);
+       if(!camera->image){
+            AiMsgError("Couldn't open image!");
+            AiRenderAbort();
        }
 
-       bokehProbability(image);
+       bokehProbability(camera->image);
       }
 
 }
 
 node_finish {
+    cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
+
+    if (camera->image){
+        delete camera->image;
+    }
+
+    delete camera;
+
     AiCameraDestroy(node);
 }
 
@@ -625,9 +703,11 @@ camera_create_ray {
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
 
+    cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
+
     AtPoint p;
-    p.x = input->sx * camera.tan_fov;
-    p.y = input->sy * camera.tan_fov;
+    p.x = input->sx * camera->tan_fov;
+    p.y = input->sy * camera->tan_fov;
     p.z = 1;
 
     output->dir = AiV3Normalize(p - output->origin);
@@ -645,9 +725,9 @@ camera_create_ray {
         if (_useImage == false){
             ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
         }
-        else{
+        else if (camera->image != nullptr){
             // sample bokeh image
-            bokehSample(image, input->lensx, input->lensy, &lensU, &lensV);
+            bokehSample(camera->image, input->lensx, input->lensy, &lensU, &lensV);
         }
 
         // this creates a square bokeh!
@@ -655,8 +735,8 @@ camera_create_ray {
         // lensV = input->lensy * apertureRadius;
 
         // scale new lens coordinates by the aperture radius
-        lensU = lensU * camera.apertureRadius;
-        lensV = lensV * camera.apertureRadius;
+        lensU = lensU * camera->apertureRadius;
+        lensV = lensV * camera->apertureRadius;
 
         // Compute point on plane of focus, intersection on z axis
         float intersection = std::abs(_focalDistance / output->dir.z);
@@ -684,15 +764,15 @@ camera_create_ray {
 
 
             // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
-            if (ABS(pointHypotenuse) > camera.apertureRadius){
+            if (ABS(pointHypotenuse) > camera->apertureRadius){
                 // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
                 output->weight = 0.0f;
             }
 
             // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
             // adding weight to opposite edges to get nice rim on the highlights
-            else if (ABS(pointHypotenuse) < camera.apertureRadius && ABS(pointHypotenuse) > (camera.apertureRadius - _highlightWidth)){
-                output->weight *= _highlightStrength * (1 - (camera.apertureRadius - ABS(pointHypotenuse))) * sqrt(input->sx * input->sx + input->sy * input->sy);
+            else if (ABS(pointHypotenuse) < camera->apertureRadius && ABS(pointHypotenuse) > (camera->apertureRadius - _highlightWidth)){
+                output->weight *= _highlightStrength * (1 - (camera->apertureRadius - ABS(pointHypotenuse))) * sqrt(input->sx * input->sx + input->sy * input->sy);
             }
         }
     }
@@ -708,8 +788,8 @@ camera_create_ray {
     // not sure if needed, but can't hurt. Taken from solidangle website.
     // ----------------------------------------------------------------------------------------------
     // scale derivatives
-    float dsx = input->dsx * camera.tan_fov;
-    float dsy = input->dsy * camera.tan_fov;
+    float dsx = input->dsx * camera->tan_fov;
+    float dsy = input->dsy * camera->tan_fov;
 
     AtVector d = p;  // direction vector == point on the image plane
     double d_dot_d = AiV3Dot(d, d);
