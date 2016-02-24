@@ -70,7 +70,10 @@
 #include <algorithm>
 #include <functional>
 #include <cstring>
-#include <OpenImageIO/imageio.h>
+#include <vector>
+#ifndef NO_OIIO
+#   include <OpenImageIO/imageio.h>
+#endif
 
 // Arnold thingy
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
@@ -162,7 +165,32 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
 // Read bokeh image
 imageData* readImage(char const *bokeh_kernel_filename){
 
+#ifdef NO_OIIO
+
+    AiMsgInfo("Reading image using Arnold API: %s", bokeh_kernel_filename);
+
+    AtString path(bokeh_kernel_filename);
+
+    unsigned int iw, ih, nc;
+    if (!AiTextureGetResolution(path, &iw, &ih) ||
+        !AiTextureGetNumChannels(path, &nc)){
+        return nullptr;
+    }
+
     imageData* img = new imageData;
+
+    img->x = int(iw);
+    img->y = int(ih);
+    img->nchannels = int(nc);
+
+    img->pixelData.clear();
+    img->pixelData.reserve(img->x * img->y * img->nchannels);
+    if (!AiTextureLoad(path, false, &img->pixelData[0])){
+        delete img;
+        return nullptr;
+    }
+
+#else
 
     AiMsgInfo("Reading image using OpenImageIO: %s", bokeh_kernel_filename);
 
@@ -176,6 +204,8 @@ imageData* readImage(char const *bokeh_kernel_filename){
         return nullptr; // Return a null pointer if we have issues
     }
 
+    imageData* img = new imageData;
+
     const OpenImageIO::ImageSpec &spec = in->spec();
     img->x = spec.width;
     img->y = spec.height;
@@ -186,6 +216,8 @@ imageData* readImage(char const *bokeh_kernel_filename){
     in->read_image (OpenImageIO::TypeDesc::UINT8, &img->pixelData[0]);
     in->close ();
     delete in;
+
+#endif
 
     AiMsgInfo("Image Width: %d", img->x);
     AiMsgInfo("Image Height: %d", img->y);
