@@ -7,8 +7,8 @@
 // (C) Zeno Pelgrims, www.zenopelgrims.com
 
 // to build on my linux machine:
-// g++ -std=c++11 -o $ZENOCAMERA/src/zoic.os -c -fPIC -D_LINUX -I/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/include $ZENOCAMERA/src/zoic.cpp -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff
-// g++ -o $ZENOCAMERA/bin/zoic.so -shared $ZENOCAMERA/src/zoic.os -L/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/bin -lai -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff"
+// g++ -std=c++11 -o $ZENOCAMERA/src/zoic.os -c -fPIC -DNO_OIIO -D_LINUX -I/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/include $ZENOCAMERA/src/zoic.cpp -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff;
+// g++ -o $ZENOCAMERA/bin/zoic.so -shared $ZENOCAMERA/src/zoic.os -DNO_OIIO -L/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/bin -lai -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff
 
 
 // IDEAS
@@ -640,7 +640,7 @@ node_parameters {
    AiParameterBOOL("useDof", true);
    AiParameterFLT("fStop", 1.4f);
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
-   AiParameterFLT("opticalVignetting", 20.0f); //distance of the opticalVignetting virtual aperture
+   AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
    AiParameterFLT("highlightWidth", 0.2f);
    AiParameterFLT("highlightStrength", 10.0f);
    AiParameterBOOL("useImage", false);
@@ -677,7 +677,7 @@ node_update {
    if (_useImage == true){
        camera->image = readImage(_bokehPath);
        if(!camera->image){
-            AiMsgError("Couldn't open image, please check that it is RGB/RGBA.");
+            AiMsgError("Couldn't open image!");
             AiRenderAbort();
        }
 
