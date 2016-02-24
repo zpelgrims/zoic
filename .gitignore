@@ -2,6 +2,7 @@ university/*
 src/imgs/*
 excons.cache
 *.dblite
+*.exr
 release/
 debug/
 .build/

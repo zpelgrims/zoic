@@ -97,10 +97,14 @@
 #  include <OpenImageIO/imageio.h>
 #endif
 
+#ifdef _DEBUG
+#  define DEBUG_ONLY(block) block
+#else
+#  define DEBUG_ONLY(block)
+#endif
+
 // Arnold thingy
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
-
-bool debug = false;
 
 #define _sensorWidth  (params[0].FLT)
 #define _sensorHeight  (params[1].FLT)
@@ -122,8 +126,6 @@ struct imageData{
      std::vector<uint8_t> pixelData;
      std::vector<float> cdfRow;
      std::vector<float> cdfColumn;
-     std::vector<float> summedRowValues;
-     std::vector<float> normalizedValuesPerRow;
      std::vector<int> rowIndices;
      std::vector<int> columnIndices;
 };
@@ -135,6 +137,13 @@ struct cameraData{
     imageData *image;
 };
 
+struct arrayCompare{
+    const std::vector<float> &values;
+    inline arrayCompare(const std::vector<float> &_values) :values(_values) {}
+    inline bool operator()(int _lhs, int _rhs) const{
+        return values[_lhs] > values[_rhs];
+    }
+};
 
 // PBRT v2 source code  - Concentric disk sampling (Sampling the disk in a more uniform way than with random sampling)
 inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
@@ -194,7 +203,7 @@ imageData* readImage(char const *bokeh_kernel_filename){
     unsigned int iw, ih, nc;
     if (!AiTextureGetResolution(path, &iw, &ih) ||
         !AiTextureGetNumChannels(path, &nc)){
-        return nullptr;
+        return 0;
     }
 
     imageData* img = new imageData;
@@ -216,7 +225,7 @@ imageData* readImage(char const *bokeh_kernel_filename){
 #endif
 #endif
         delete img;
-        return nullptr;
+        return 0;
     }
 
 #else
@@ -230,7 +239,7 @@ imageData* readImage(char const *bokeh_kernel_filename){
     //file format, and tries to fully open the file.
     OpenImageIO::ImageInput *in = OpenImageIO::ImageInput::open (bokeh_kernel_filename);
     if (! in){
-        return nullptr; // Return a null pointer if we have issues
+        return 0; // Return a null pointer if we have issues
     }
 
     imageData* img = new imageData;
@@ -253,58 +262,25 @@ imageData* readImage(char const *bokeh_kernel_filename){
     AiMsgInfo("Image Channels: %d", img->nchannels);
     AiMsgInfo("Total amount of pixels to process: %d", img->x * img->y);
 
-    if (debug == true){
+    DEBUG_ONLY({
         // print out raw pixel data
-        for (int i = 0; i < img->x * img->y * img->nchannels; i++){
-            int j = 0;
-            if(img->nchannels == 3){
-               if (j == 0){
-                   std::cout << "[";
-                    std::cout << (int)img->pixelData[i];
-                   std::cout << ", ";
-                    j += 1;
-                }
-                if (j == 1){
-                    std::cout << (int)img->pixelData[i];
+        for (int i = 0, j = 0; i < img->x * img->y; i++){
+            std::cout << "[";
+            for (int k = 0; k < img->nchannels; ++j, ++k){
+                std::cout << img->pixelData[j+k];
+                if (k + 1 < img->nchannels){
                     std::cout << ", ";
-                    j += 1;
-                }
-               if (j == 2){
-                    std::cout << (int)img->pixelData[i];
-                    std::cout << "], ";
-                    j = 0;
                 }
             }
-
-            else if(img->nchannels == 4){
-                if (j == 0){
-                    std::cout << "[";
-                    std::cout << (int)img->pixelData[i];
-                    std::cout << ", ";
-                    j += 1;
-                }
-                if (j == 1){
-                    std::cout << (int)img->pixelData[i];
-                    std::cout << ", ";
-                    j += 1;
-                }
-                if (j == 2){
-                    std::cout <<  (int)img->pixelData[i];
-                    std::cout << ", ";
-                    j += 1;
-                }
-                if (j == 3){
-                    std::cout << (int)img->pixelData[i];
-                    std::cout << "], ";
-                   j = 0;
-                }
+            std::cout << "]";
+            if (i + 1 < npixels){
+                std::cout << ", ";
             }
-
         }
 
         std::cout << "----------------------------------------------" << std::endl;
         std::cout << "----------------------------------------------" << std::endl;
-    }
+    })
 
     return img;
 }
@@ -313,266 +289,210 @@ imageData* readImage(char const *bokeh_kernel_filename){
 void bokehProbability(imageData *img){
     if(img){
         // initialize arrays
-        std::vector<float> pixelValues(img->x * img->y, 0.0f);
-        std::vector<float> normalizedPixelValues(img->x * img->y, 0.0f);
-
-        // for every pixel, stuff going wrong here
-        int tmpPixelCounter = 0;
-        for(int i=0; i < img->x * img->y; ++i){
+        int npixels = img->x * img->y;
+        
+        std::vector<float> pixelValues(npixels, 0.0f);
+        std::vector<float> normalizedPixelValues(npixels, 0.0f);
+        std::vector<float> summedRowValues(img->y, 0.0f);
+        std::vector<float> normalizedValuesPerRow(npixels, 0.0f);
+        
+        float totalValue = 0.0f;
+        
+        // compute luminance for every pixel
+        // setup channel offsets
+        //   1 channel -> R = G = B
+        //   2 channels -> R, G = B
+        //   >= 3 channels -> only first 3 channels used
+        int o1 = (img->nchannels >= 2 ? 1 : 0);
+        int o2 = (img->nchannels >= 3 ? 2 : o1);
+        
+        for(int i=0, j=0; i < npixels; ++i, j += img->nchannels){
             // store pixel value in array
             // calculate luminance [Y = 0.3 R + 0.59 G + 0.11 B]
-            pixelValues[i] = (img->pixelData[tmpPixelCounter] * 0.3) + (img->pixelData[tmpPixelCounter+1] * 0.59) + (img->pixelData[tmpPixelCounter+2] * 0.11f);
-
-            if (debug == true){
-                // print array
-                std::cout << "Pixel Luminance: " << i << " -> " << pixelValues[i] << std::endl;
-            }
-
-            if(img->nchannels == 3){
-                tmpPixelCounter += 3;
-            }
-            else if(img->nchannels == 4){
-                tmpPixelCounter += 4;
-            }
-            else if(img->nchannels == 1){
-                tmpPixelCounter += 1;
-            }
-        }
-
-        // calculate sum of all pixel values
-        float totalValue = 0.0f;
-        for(int i=0; i < img->x *  img->y; ++i){
+            pixelValues[i] = (img->pixelData[j] * 0.3) + (img->pixelData[j+o1] * 0.59) + (img->pixelData[j+o2] * 0.11f);
             totalValue += pixelValues[i];
+            
+            DEBUG_ONLY(std::cout << "Pixel Luminance: " << i << " -> " << pixelValues[i] << std::endl);
         }
 
-        if (debug == true){
+        DEBUG_ONLY({
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "DEBUG: Total Pixel Value: " << totalValue << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
-        }
+        })
 
 
 
         // normalize pixel values so sum = 1
-        for(int i=0; i < img->x *  img->y; ++i){
+        for(int i=0; i < npixels; ++i){
             normalizedPixelValues[i] = pixelValues[i] / totalValue;
 
-            if (debug == true){
-                // print array
-                std::cout << "Normalized Pixel Value: " << i << ": " << normalizedPixelValues[i] << std::endl;
+            DEBUG_ONLY(std::cout << "Normalized Pixel Value: " << i << ": " << normalizedPixelValues[i] << std::endl);
+        }
+
+        DEBUG_ONLY({
+            // calculate sum of all normalized pixel values, to check
+            float totalNormalizedValue = 0.0f;
+            for(int i=0; i < img->x *  img->y; ++i){
+                totalNormalizedValue += normalizedPixelValues[i];
             }
-        }
-
-
-
-        // calculate sum of all normalized pixel values, to check
-        float totalNormalizedValue = 0.0f;
-        for(int i=0; i < img->x *  img->y; ++i){
-            totalNormalizedValue += normalizedPixelValues[i];
-        }
-
-        if (debug == true){
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "DEBUG: Total Normalized Pixel Value: " << totalNormalizedValue << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
-        }
+        })
 
 
 
         // calculate sum for each row
-        img->summedRowValues.clear();
-        img->summedRowValues.resize(img->y);
-        float summedHorizontalNormalizedValues = 0.0f;
-        int counterRow = 0;
+        for(int i=0, k=0; i < img->y; ++i){
 
-        for(int i=0; i < img->y; ++i){
+            summedRowValues[i] = 0.0f;
 
-            summedHorizontalNormalizedValues = 0.0f;
+            for(int j=0; j < img->x; ++j, ++k){
 
-            for(int j=0; j < img->x; ++j){
-
-                summedHorizontalNormalizedValues += normalizedPixelValues[counterRow];
-                counterRow += 1;
+                summedRowValues[i] += normalizedPixelValues[k];
             }
-
-            img->summedRowValues[i] = summedHorizontalNormalizedValues;
-            if (debug == true){
-                std::cout << "Summed Values row [" << i << "]: " << img->summedRowValues[i] << std::endl;
-            }
+            
+            DEBUG_ONLY(std::cout << "Summed Values row [" << i << "]: " << summedRowValues[i] << std::endl);
         }
 
 
 
-        // calculate sum of all row values, just to debug
-        float totalNormalizedRowValue = 0.0f;
-        for(int i=0; i < img->y; ++i){
-            totalNormalizedRowValue += img->summedRowValues[i];
-        }
-
-        if (debug == true){
+        DEBUG_ONLY({
+            // calculate sum of all row values, just to debug
+            float totalNormalizedRowValue = 0.0f;
+            for(int i=0; i < img->y; ++i){
+                totalNormalizedRowValue += summedRowValues[i];
+            }
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "Debug: Summed Row Value: " << totalNormalizedRowValue << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
-        }
+        })
 
 
         // make array of indices
-        std::vector<int> summedRowValueCopyIndices(img->y, 0);
+        img->rowIndices.resize(img->y);
+        
         for(int i = 0; i < img->y; ++i){
-            summedRowValueCopyIndices[i] = i;
+            img->rowIndices[i] = i;
         }
 
-        // lambda
-        std::sort(summedRowValueCopyIndices.begin(), summedRowValueCopyIndices.begin() + img->y, [&img](int _lhs, int _rhs){
-            return img->summedRowValues[_lhs] > img->summedRowValues[_rhs];
-        });
+        std::sort(img->rowIndices.begin(), img->rowIndices.begin() + img->y, arrayCompare(summedRowValues));
 
-        if (debug == true){
+        DEBUG_ONLY({
             // print values
             for(int i = 0; i < img->y; ++i){
-                std::cout << "PDF row [" <<  summedRowValueCopyIndices[i] << "]: " << img->summedRowValues[summedRowValueCopyIndices[i]] << std::endl;
+                std::cout << "PDF row [" <<  img->rowIndices[i] << "]: " << summedRowValues[img->rowIndices[i]] << std::endl;
             }
 
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
-        }
+        })
 
 
         // For every row, add the sum of all previous row (cumulative distribution function)
-        img->cdfRow.clear();
-        img->cdfRow.resize(img->y * img->x);
-        img->rowIndices.clear();
-        img->rowIndices.resize(img->y * img->x);
+        float prevVal = 0.0f;
+        
+        img->cdfRow.resize(img->y);
 
         for (int i = 0; i < img->y; ++i){
-            if(i == 0){
-                img->cdfRow[i] += img->summedRowValues[summedRowValueCopyIndices[i]];
-            }
-            else{
-                img->cdfRow[i] = img->cdfRow[i-1] + img->summedRowValues[summedRowValueCopyIndices[i]];
-            }
+            img->cdfRow[i] = prevVal + summedRowValues[img->rowIndices[i]];
+            prevVal = img->cdfRow[i];
 
-            img->rowIndices[i] = summedRowValueCopyIndices[i];
-
-            if (debug == true){
-                std::cout << "CDF row [" << img->rowIndices[i] << "]: " << img->cdfRow[i] << std::endl;
-            }
+            DEBUG_ONLY(std::cout << "CDF row [" << img->rowIndices[i] << "]: " << img->cdfRow[i] << std::endl);
         }
 
-        if (debug == true){
+        DEBUG_ONLY({
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
-        }
+        })
 
 
 
         // divide pixel values of each pixel by the sum of the pixel values of that row (Normalize)
-        int rowCounter = 0;
-        int tmpCounter = 0;
-        img->normalizedValuesPerRow.clear();
-        img->normalizedValuesPerRow.resize(img->x * img->y);
+        for (int r = 0, i = 0; r < img->y; ++r){
+            for (int c = 0; c < img->x; ++c, ++i){
 
-        for (int i = 0; i < img->x * img->y; ++i){
+                // avoid division by 0
+                if ((normalizedPixelValues[i] != 0) && (summedRowValues[r] != 0)){
+                    normalizedValuesPerRow[i] = normalizedPixelValues[i] / summedRowValues[r];
+                }
+                else{
+                    normalizedValuesPerRow[i] = 0;
+                }
 
-            // avoid division by 0
-            if ((normalizedPixelValues[i] != 0) && (img->summedRowValues[rowCounter] != 0)){
-                img->normalizedValuesPerRow[i] = normalizedPixelValues[i] / img->summedRowValues[rowCounter];
-            }
-            else{
-                img->normalizedValuesPerRow[i] = 0;
-            }
-
-            tmpCounter += 1;
-
-            // silly counter, there must be faster ways to do this but i'm not exactly a genius
-            if (tmpCounter == img->x){
-                rowCounter += 1;
-                tmpCounter = 0;
-            }
-
-            if (debug == true){
-                std::cout << "Normalized Pixel value per row: " << i << ": " << img->normalizedValuesPerRow[i] << std::endl;
+                DEBUG_ONLY(std::cout << "Normalized Pixel value per row: " << i << ": " << normalizedValuesPerRow[i] << std::endl);
             }
         }
 
-        if (debug == true){
+        DEBUG_ONLY({
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
-        }
+        })
 
 
 
         // sort column values from highest to lowest per row (probability density function)
-        std::vector<int> summedColumnValueCopyIndices(img->x * img->y, 0);
-        for(int i = 0; i < img->x * img->y; i++){
-            summedColumnValueCopyIndices[i] = i;
+        img->columnIndices.resize(npixels);
+        for(int i = 0; i < npixels; i++){
+            img->columnIndices[i] = i;
         }
 
-        // lamdba
-        for (int i = 0; i < img->x * img->y; i+=img->x){
-            std::sort(summedColumnValueCopyIndices.begin() + i, summedColumnValueCopyIndices.begin() + i + img->x, [&img]( int _lhs,  int _rhs){
-                return img->normalizedValuesPerRow[_lhs] > img->normalizedValuesPerRow[_rhs];
-            });
+        for (int i = 0; i < npixels; i+=img->x){
+            std::sort(img->columnIndices.begin() + i, img->columnIndices.begin() + i + img->x, arrayCompare(normalizedValuesPerRow));
         }
 
-        if (debug == true){
+        DEBUG_ONLY({
             // print values
             for(int i = 0; i < img->x * img->y; ++i){
-                std::cout << "PDF column [" << summedColumnValueCopyIndices[i] << "]: " << img->normalizedValuesPerRow[summedColumnValueCopyIndices[i]] << std::endl;
+                std::cout << "PDF column [" << img->columnIndices[i] << "]: " << normalizedValuesPerRow[img->columnIndices[i]] << std::endl;
             }
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
-        }
+        })
 
 
         // For every column per row, add the sum of all previous columns (cumulative distribution function)
-        img->cdfColumn.clear();
-        img->cdfColumn.resize(img->x * img->y + 1);
-        img->columnIndices.clear();
-        img->columnIndices.resize(img->x * img->y + 1);
-        int cdfCounter = 0;
+        img->cdfColumn.resize(npixels);
+        img->columnIndices.resize(npixels);
 
-        for (int i = 0; i < img->x * img->y; ++i){
-            if (cdfCounter == img->x) {
-                    img->cdfColumn[i] = img->normalizedValuesPerRow[summedColumnValueCopyIndices[i]];
-                    cdfCounter = 0;
-            }
-            else {
-                img->cdfColumn[i] = img->cdfColumn[i-1] + img->normalizedValuesPerRow[summedColumnValueCopyIndices[i]];
-            }
+        for (int r = 0, i = 0; r < img->y; ++r){
+            prevVal = 0.0f;
+            for (int c = 0; c < img->x; ++c, ++i){
+                img->cdfColumn[i] = prevVal + normalizedValuesPerRow[img->columnIndices[i]];
+                prevVal = img->cdfColumn[i];
 
-            cdfCounter += 1;
-
-            img->columnIndices[i] = summedColumnValueCopyIndices[i];
-
-            if (debug == true){
-                std::cout << "CDF column [" <<  img->columnIndices[i] << "]: " << img->cdfColumn[i] << std::endl;
+                DEBUG_ONLY(std::cout << "CDF column [" <<  img->columnIndices[i] << "]: " << img->cdfColumn[i] << std::endl);
             }
          }
 
-        if (debug == true){
-            std::cout << "----------------------------------------------" << std::endl;
-        }
+        DEBUG_ONLY(std::cout << "----------------------------------------------" << std::endl);
     }
 }
 
 // Sample image
 void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
-    if (debug == true){
-        // print random number between 0 and 1
-        std::cout << "RANDOM NUMBER ROW: " << randomNumberRow << std::endl;
-    }
 
+    DEBUG_ONLY(std::cout << "RANDOM NUMBER ROW: " << randomNumberRow << std::endl);
+
+    int x, y;
+    
+    std::vector<float>::iterator it, begin, end;
     // find upper bound of random number in the array
-    float pUpperBound = *std::upper_bound(img->cdfRow.begin(), img->cdfRow.begin() + img->y, randomNumberRow);
-    if (debug == true){
-        std::cout << "UPPER BOUND: " << pUpperBound << std::endl;
+    begin = img->cdfRow.begin();
+    end = img->cdfRow.end();
+    
+    it = std::upper_bound(begin, end, randomNumberRow);
+    
+    if (it == end){
+        x = img->y - 1;
+        
+    } else{
+        x = it - begin;
+        DEBUG_ONLY(std::cout << "UPPER BOUND: " << *it << std::endl);
     }
-
-    // find which element of the array the upper bound is
-    int x = std::distance(img->cdfRow.begin(), std::find(img->cdfRow.begin(), img->cdfRow.begin() + img->y, pUpperBound));
 
     // find actual pixel row
     int actualPixelRow = img->rowIndices[x];
@@ -580,39 +500,42 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
     // recalculate pixel row so that the center pixel is (0,0) - might run into problems with images of dimensions like 2x2, 4x4, 6x6, etc
     int recalulatedPixelRow = actualPixelRow - ((img->x - 1) / 2);
 
-    if (debug == true){
+    DEBUG_ONLY({
         // print values
         std::cout << "INDEX IN CDF ROW: " << x << std::endl;
         std::cout << "ACTUAL PIXEL ROW: " << actualPixelRow << std::endl;
         std::cout << "RECALCULATED PIXEL ROW: " << recalulatedPixelRow << std::endl;
         std::cout << "----------------------------------------------" << std::endl;
         std::cout << "----------------------------------------------" << std::endl;
-
         // print random number between 0 and 1
         std::cout << "RANDOM NUMBER COLUMN: " << randomNumberColumn << std::endl;
-    }
+    })
 
     int startPixel = actualPixelRow * img->x;
-    if (debug == true){
-        std::cout << "START PIXEL: " << startPixel << std::endl;
-    }
 
+    DEBUG_ONLY(std::cout << "START PIXEL: " << startPixel << std::endl);
 
     // find upper bound of random number in the array
-    float pUpperBoundColumn = *std::upper_bound(img->cdfColumn.begin() + startPixel, img->cdfColumn.begin() + startPixel + img->x, randomNumberColumn);
-    if (debug == true){
-        std::cout << "UPPER BOUND: " << pUpperBoundColumn << std::endl;
-    }
+    begin = img->cdfColumn.begin() + startPixel;
+    end = begin + img->x;
+    
+    it = std::upper_bound(begin, end, randomNumberColumn);
+    
+    if (it == end){
+        y = startPixel + img->x - 1;
+    
+    } else{
+        y = startPixel + (it - begin);
 
-    // find which element of the array the upper bound is
-    int y = std::distance(img->cdfColumn.begin(), std::find(img->cdfColumn.begin() + startPixel, img->cdfColumn.begin() + startPixel + img->x, pUpperBoundColumn));
+        DEBUG_ONLY(std::cout << "UPPER BOUND: " << *it << std::endl);
+    }
 
     // find actual pixel column
     int actualPixelColumn = img->columnIndices[y];
     int relativePixelColumn = actualPixelColumn - startPixel;
     int recalulatedPixelColumn = relativePixelColumn - ((img->y - 1) / 2);
 
-    if (debug == true){
+    DEBUG_ONLY({
         // print values
         std::cout << "INDEX IN CDF COLUMN: " << y << std::endl;
         std::cout << "ACTUAL PIXEL COLUMN: " << actualPixelColumn << std::endl;
@@ -620,7 +543,7 @@ void bokehSample(imageData *img, float randomNumberRow, float randomNumberColumn
         std::cout << "RECALCULATED PIXEL COLUMN: " << recalulatedPixelColumn << std::endl;
         std::cout << "----------------------------------------------" << std::endl;
         std::cout << "----------------------------------------------" << std::endl;
-    }
+    })
 
     // to get the right image orientation, flip the x and y coordinates and then multiply the y values by -1 to flip the pixels vertically
     float flippedRow = recalulatedPixelColumn;
@@ -651,7 +574,7 @@ node_parameters {
 
 node_initialize {
    cameraData *camera = new cameraData;
-   camera->image = nullptr;
+   camera->image = 0;
    AiCameraInitialize(node, (void*)camera);
 
 }
@@ -670,7 +593,7 @@ node_update {
 
    if (camera->image){
        delete camera->image;
-       camera->image = nullptr;
+       camera->image = 0;
    }
 
    // make probability functions of the bokeh image
@@ -725,7 +648,7 @@ camera_create_ray {
         if (_useImage == false){
             ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
         }
-        else if (camera->image != nullptr){
+        else if (camera->image != 0){
             // sample bokeh image
             bokehSample(camera->image, input->lensx, input->lensy, &lensU, &lensV);
         }
