@@ -74,3 +74,5 @@ Special thanks to Benedikt Bitterli for the information on optical vignetting.
 Special thanks to Tom Minor for the major help with C++ (it was needed!)
 
 Special thanks to Brian Scherbinski for the windows compile.
+
+Special thanks to Gaetan Guidet for the C++ cleanup and improvements.
