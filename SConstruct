@@ -2,7 +2,6 @@ import sys
 import excons
 from excons.tools import arnold
 
-excons.SetArgument("use-c++11", 1)
 excons.SetArgument("no-arch", 1)
 
 env = excons.MakeBaseEnv()
