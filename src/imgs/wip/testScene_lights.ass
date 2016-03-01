@@ -12,19 +12,15 @@ options
  yres 350
  enable_fast_opacity on
  texture_per_file_stats on
- texture_searchpath "/run/media/i7210038/ZENO_MAJOR/Dropbox/personal/zpelgrims/projects/still_life_commission/assets"
  texture_glossy_blur 0
  camera "perspShape"
  background "aiSky"
- procedural_searchpath "/run/media/i7210038/ZENO_MAJOR/Dropbox/personal/zpelgrims/projects/still_life_commission/"
  GI_reflection_depth 0
  GI_refraction_depth 0
  GI_total_depth 0
  GI_diffuse_samples 0
  GI_glossy_samples 0
  GI_refraction_samples 0
- GI_sss_samples 0
- GI_volume_samples 0
  declare frame constant FLOAT
  frame 1
  declare render_layer constant STRING
@@ -44,7 +40,7 @@ zoic
  focalDistance 115
  opticalVignetting 8
  useImage off
- bokehPath "/home/i7210038/qt_arnoldCamera/arnoldCamera/imgs/collected_real/bokeh_18.jpg"
+ bokehPath "shapes_library/bokeh_18.jpg"
  matrix
  0.312334925 0 -0.949972034 0
  0.153605282 -0.986840844 0.0505028479 0
@@ -148,7 +144,7 @@ gaussian_filter
 driver_exr
 {
  name defaultArnoldDriver@driver_exr.RGBA
- filename "/run/media/i7210038/ZENO_MAJOR/Dropbox/personal/zpelgrims/projects/still_life_commission/imgs/testScene_hdr_nightscape.exr"
+ filename "hdr_nightscape.exr"
  compression "zip"
  half_precision off
  tiled off
@@ -160,7 +156,7 @@ driver_exr
 image
 {
  name aiImage1
- filename "/home/i7210038/Downloads/night2.pfm"
+ filename "wip/night2.pfm"
  filter "smart_bicubic"
  mipmap_bias 0
  single_channel off
