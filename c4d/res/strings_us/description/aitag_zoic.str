@@ -2,63 +2,62 @@ STRINGTABLE aitag_zoic
 {
    aitag_zoic         "Arnold zoic node";
 
-   C4DAI_ZOIC_MAIN_GRP                                "ZOIC";
+   C4DAI_ZOIC_MAIN_GRP                          "ZOIC";
 
-   C4DAI_ZOIC_MAIN_ATTRIBUTES_GRP		"Main Attributes";
+   C4DAI_ZOIC_MAIN_ATTRIBUTES_GRP               "Main Attributes";
    
-   C4DAIP_ZOIC_SENSORWIDTH		     	"Sensor Width";
+   C4DAIP_ZOIC_SENSORWIDTH                      "Sensor Width";
 
-   C4DAIP_ZOIC_SENSORHEIGHT			"Sensor Height";
+   C4DAIP_ZOIC_SENSORHEIGHT                     "Sensor Height";
  
-   C4DAIP_ZOIC_FOCALLENGTH			"Focal Length";
+   C4DAIP_ZOIC_FOCALLENGTH                      "Focal Length";
 
-   C4DAIP_ZOIC_USEDOF				"Use DOF";
+   C4DAIP_ZOIC_USEDOF                           "Use DOF";
 
-   C4DAIP_ZOIC_FSTOP				"F-Stop";
+   C4DAIP_ZOIC_FSTOP                            "F-Stop";
 
-   C4DAIP_ZOIC_FOCALDISTANCE			"Focal Distance";
+   C4DAIP_ZOIC_FOCALDISTANCE                    "Focal Distance";
 
-   C4DAIP_ZOIC_OPTICALVIGNETTING		"Optical Vignetting";
+   C4DAIP_ZOIC_OPTICALVIGNETTING                "Optical Vignetting";
 
-   C4DAIP_ZOIC_HIGHLIGHTWIDTH			"Highlight Width";
+   C4DAIP_ZOIC_HIGHLIGHTWIDTH                   "Highlight Width";
 
-   C4DAIP_ZOIC_HIGHLIGHTSTRENGTH		"Highlight Strength";
+   C4DAIP_ZOIC_HIGHLIGHTSTRENGTH                "Highlight Strength";
 
-   C4DAIP_ZOIC_USEIMAGE				"Use Image";
+   C4DAIP_ZOIC_USEIMAGE                         "Use Image";
 
-   C4DAIP_ZOIC_BOKEHPATH			"Bokeh Path";
+   C4DAIP_ZOIC_BOKEHPATH                        "Bokeh Path";
 
-   C4DAI_ZOIC_ADVANCED_GRP			"Advanced";
+   C4DAI_ZOIC_ADVANCED_GRP                      "Advanced";
 
-   C4DAIP_ZOIC_EXPOSURECONTROL			"Exposure Control";
+   C4DAIP_ZOIC_EXPOSURECONTROL                  "Exposure Control";
 
-   C4DAIP_ZOIC_NEAR_CLIP			"Near Clip";
+   C4DAIP_ZOIC_NEAR_CLIP                        "Near Clip";
 
-   C4DAIP_ZOIC_FAR_CLIP				"Far Clip";
+   C4DAIP_ZOIC_FAR_CLIP                         "Far Clip";
 
-   C4DAIP_ZOIC_SHUTTER_START			"Shutter Start";
+   C4DAIP_ZOIC_SHUTTER_START                    "Shutter Start";
 
-   C4DAIP_ZOIC_SHUTTER_END			"Shutter End";
+   C4DAIP_ZOIC_SHUTTER_END                      "Shutter End";
 
-   C4DAIP_ZOIC_SHUTTER_TYPE			"Shutter Type";
+   C4DAIP_ZOIC_SHUTTER_TYPE                     "Shutter Type";
 
-   C4DAIP_ZOIC_SHUTTER_CURVE			"Shutter Curve";
+   C4DAIP_ZOIC_SHUTTER_CURVE                    "Shutter Curve";
 
-   C4DAIP_ZOIC_ROLLING_SHUTTER			"Rolling Shutter";
+   C4DAIP_ZOIC_ROLLING_SHUTTER                  "Rolling Shutter";
 
-   C4DAIP_ZOIC_ROLLING_SHUTTER_DURATION		"Rolling Shutter Duration";
+   C4DAIP_ZOIC_ROLLING_SHUTTER_DURATION         "Rolling Shutter Duration";
 
-   C4DAIP_ZOIC_FILTERMAP			"Filtermap";
+   C4DAIP_ZOIC_FILTERMAP                        "Filtermap";
 
-   C4DAIP_ZOIC_HANDEDNESS			"Handedness";
+   C4DAIP_ZOIC_HANDEDNESS                       "Handedness";
 
-   C4DAIP_ZOIC_TIME_SAMPLES			"Time Samples";
+   C4DAIP_ZOIC_TIME_SAMPLES                     "Time Samples";
 
-   C4DAIP_ZOIC_SCREEN_WINDOW_MIN		"Screen Window Min";
+   C4DAIP_ZOIC_SCREEN_WINDOW_MIN                "Screen Window Min";
 
-   C4DAIP_ZOIC_SCREEN_WINDOW_MAX		"Screen Window Max";	
+   C4DAIP_ZOIC_SCREEN_WINDOW_MAX                "Screen Window Max";	
 
-   C4DAIP_ZOIC_EXPOSURE				"Exposure";	
-
+   C4DAIP_ZOIC_EXPOSURE                         "Exposure";
 }
 

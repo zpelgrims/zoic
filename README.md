@@ -43,6 +43,15 @@ scons [other options] mscver=12.0
 
 **The flags passed to scons command are cached in a file name 'excons.cache' so that you don't need to reset them for subsequent builds. The missing flags will be fetched from the cache and the provided ones will replace the cache content.**
 
+## Packaging
+
+```
+scons [other options] package=1 (package-type=zip|tgz)
+```
+
+- The package name will be 'zoic-[version]_[platform].[type]'
+- The package type defaults to zip on windows, tgz otherwise
+
 ## Install
 
 Set the following environment variables, replacing "$PATH_TO_ZOIC" with the actual path on your machine. 
@@ -50,8 +59,9 @@ Set the following environment variables, replacing "$PATH_TO_ZOIC" with the actu
 ### Linux/OSX
 
 ```
-export ARNOLD_PLUGIN_PATH=$ARNOLD_PLUGIN_PATH:$PATH_TO_ZOIC/bin
-export MTOA_TEMPLATES_PATH=$MTOA_TEMPLATES_PATH:$PATH_TO_ZOIC/ae
+export ARNOLD_PLUGIN_PATH=$ARNOLD_PLUGIN_PATH:$PATH_TO_ZOIC/shaders
+export MTOA_TEMPLATES_PATH=$MTOA_TEMPLATES_PATH:$PATH_TO_ZOIC/maya/ae
+export MAYA_SCRIPT_PATH=$MAYA_SCRIPT_PATH:$PATH_TO_ZOIC/maya/scripts
 ```
 
 ### Windows
@@ -59,12 +69,13 @@ export MTOA_TEMPLATES_PATH=$MTOA_TEMPLATES_PATH:$PATH_TO_ZOIC/ae
 ```
 set ARNOLD_PLUGIN_PATH=%ARNOLD_PLUGIN_PATH%;$PATH_TO_ZOIC/bin
 set MTOA_TEMPLATES_PATH=%MTOA_TEMPLATES_PATH%;$PATH_TO_ZOIC/ae
+set MAYA_SCRIPT_PATH=%MAYA_SCRIPT_PATH%;$PATH_TO_ZOIC/maya/scripts
 ```
 
 It’s also possible to copy the files into your MtoA install, but I personally prefer the first option. Just copy the files like this:
 
-- Files in the 'bin' folder go to [$MTOA_LOCATION]/shaders
-- Files in the 'ae' folde go to [$MTOA_LOCATION]/scripts/mtoa/ui/ae 
+- Files in the 'shaders' folder go to [$MTOA_LOCATION]/shaders
+- Files in the 'maya/ae' folder go to [$MTOA_LOCATION]/scripts/mtoa/ui/ae 
 
 ## Credits
 Special thanks to Marc-Antoine Desjardins for the help with the image sampling. I owe this guy quite a few beers by now.

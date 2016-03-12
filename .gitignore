@@ -1,5 +1,6 @@
 university/*
 tests/*.exr
+/src/imgs
 /*.exr
 /*.png
 /*.ass
