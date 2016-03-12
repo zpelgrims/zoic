@@ -1,0 +1,134 @@
+### exported: Mon Feb 22 13:20:38 2016
+### from:     Arnold 4.2.11.0 linux clang-3.6.0 glibc-2.12 oiio-1.5.20 rlm-11.3.1 2015/10/27 15:51:25
+### host app: MtoA 1.2.4.3  Maya 2016
+
+
+
+options
+{
+ AA_samples 10
+ outputs "RGBA RGBA defaultArnoldFilter@gaussian_filter defaultArnoldDriver@driver_exr.RGBA"
+ xres 960
+ yres 350
+ enable_fast_opacity on
+ camera "perspShape"
+ background "aiSky"
+ declare frame constant FLOAT
+ frame 1
+ declare render_layer constant STRING
+ render_layer "defaultRenderLayer"
+ declare fps constant FLOAT
+ fps 24
+}
+
+persp_camera
+{
+ name stdCam
+ fov 39.59
+ matrix
+ 0.312334925 0 -0.949972034 0
+ 0.153605282 -0.986840844 0.0505028479 0
+ -0.937471211 -0.161694527 -0.308224857 0
+ -151.949905 -125.252197 -62.9163322 1
+ near_clip 0.100000001
+ far_clip 10000
+ shutter_start 0
+ shutter_end 1
+ shutter_type "box"
+ rolling_shutter "off"
+ rolling_shutter_duration 0
+ handedness "right"
+ screen_window_min -1 -1
+ screen_window_max 1 1
+ exposure 0
+}
+
+zoic
+{
+ name perspShape
+ sensorWidth 3.5999999
+ sensorHeight 2.4000001
+ focalLength 50
+ useDof on
+ fStop 1.39999998
+ focalDistance 115
+ opticalVignetting 8
+ useImage off
+ bokehPath "tests/images/shapes/bokeh_18.jpg"
+ matrix
+ 0.312334925 0 -0.949972034 0
+ 0.153605282 -0.986840844 0.0505028479 0
+ -0.937471211 -0.161694527 -0.308224857 0
+ -151.949905 -125.252197 -62.9163322 1
+ near_clip 0.100000001
+ far_clip 10000
+ shutter_start 0
+ shutter_end 1
+ shutter_type "box"
+ rolling_shutter "off"
+ rolling_shutter_duration 0
+ handedness "right"
+ screen_window_min -1 -1
+ screen_window_max 1 1
+ exposure 0
+}
+
+sky
+{
+ name aiSky
+ color aiImage1
+ intensity 10
+ visibility 243
+ opaque_alpha on
+ format "latlong"
+ X_angle -0
+ Y_angle -0
+ Z_angle -0
+ X 1 0 0
+ Y 0 1 0
+ Z 0 0 1
+}
+
+gaussian_filter
+{
+ name defaultArnoldFilter@gaussian_filter
+ width 2
+}
+
+driver_exr
+{
+ name defaultArnoldDriver@driver_exr.RGBA
+ filename "hdr_nightscape.exr"
+ compression "zip"
+ half_precision off
+ tiled off
+ preserve_layer_name off
+ autocrop off
+ append off
+}
+
+image
+{
+ name aiImage1
+ filename "tests/images/night2.pfm"
+ filter "smart_bicubic"
+ mipmap_bias 0
+ single_channel off
+ start_channel 0
+ swrap "periodic"
+ twrap "periodic"
+ sscale 2
+ tscale 2
+ sflip off
+ tflip off
+ soffset 0
+ toffset 0
+ swap_st off
+ uvcoords 0 0
+ uvset ""
+ multiply 1 1 1
+ offset 0 0 0
+ ignore_missing_tiles off
+ missing_tile_color 0 0 0 0
+}
+

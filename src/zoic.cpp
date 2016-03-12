@@ -60,16 +60,13 @@
 */
 
 #include <ai.h>
-#include <string.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstring>
+#include <cstdlib>
 #include <iostream>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cmath>
+#include <cstdio>
 #include <algorithm>
 #include <functional>
-#include <cstring>
 
 #ifdef NO_OIIO
 // AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
@@ -94,12 +91,12 @@
 #  endif
 #  ifdef AITEXTURELOAD_PROTO2
 inline bool LoadTexture(const AtString path, void *pixelData){
-    return AiTextureLoad(path, false, 0, pixelData);
+    return AiTextureLoad(path, true, 0, pixelData);
 }
 #  else
 #    ifdef AITEXTURELOAD_PROTO1
 inline bool LoadTexture(const AtString path, void *pixelData){
-    return AiTextureLoad(path, false,  pixelData);
+    return AiTextureLoad(path, true,  pixelData);
 }
 #    else
 inline bool LoadTexture(const AtString path, void *pixelData){
@@ -147,7 +144,7 @@ class imageData{
 private:
     int x, y;
     int nchannels;
-    uint8_t *pixelData;
+    float *pixelData;
     float *cdfRow;
     float *cdfColumn;
     int *rowIndices;
@@ -170,9 +167,9 @@ public:
      
     void invalidate(){
         if (pixelData){
-            AiAddMemUsage(-x * y * nchannels * sizeof(uint8_t), "zoic");
-             AiFree(pixelData);
-             pixelData = 0;
+            AiAddMemUsage(-x * y * nchannels * sizeof(float), "zoic");
+            AiFree(pixelData);
+            pixelData = 0;
         }
         if (cdfRow){
             AiAddMemUsage(-y * sizeof(float), "zoic");
@@ -219,9 +216,9 @@ public:
         y = int(ih);
         nchannels = int(nc);
         
-        nbytes = x * y * nchannels * sizeof(uint8_t);
+        nbytes = x * y * nchannels * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
-        pixelData = (uint8_t*) AiMalloc(nbytes);
+        pixelData = (float*) AiMalloc(nbytes);
 
         if (!LoadTexture(path, pixelData)){
             invalidate();
@@ -248,11 +245,11 @@ public:
         y = spec.height;
         nchannels = spec.nchannels;
 
-        nbytes = x * y * nchannels * sizeof(uint8_t);
+        nbytes = x * y * nchannels * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
-        pixelData = (uint8_t*) AiMalloc(nbytes);
+        pixelData = (float*) AiMalloc(nbytes);
 
-        in->read_image(OpenImageIO::TypeDesc::UINT8, pixelData);
+        in->read_image(OpenImageIO::TypeDesc::FLOAT, pixelData);
         in->close();
         delete in;
 
@@ -269,7 +266,7 @@ public:
             for (int i = 0, j = 0; i < npixels; i++){
                 std::cout << "[";
                 for (int k = 0; k < nchannels; k++, j++){
-                    std::cout << (int) pixelData[j];
+                    std::cout << pixelData[j];
                     if (k + 1 < nchannels){
                         std::cout << ", ";
                     }
@@ -315,7 +312,7 @@ public:
         for (int i=0, j=0; i < npixels; ++i, j+=nchannels){
             // store pixel value in array
             // calculate luminance [Y = 0.3 R + 0.59 G + 0.11 B]
-            pixelValues[i] = (pixelData[j] * 0.3) + (pixelData[j+o1] * 0.59) + (pixelData[j+o2] * 0.11f);
+            pixelValues[i] = pixelData[j] * 0.3f + pixelData[j+o1] * 0.59f + pixelData[j+o2] * 0.11f;
             
             totalValue += pixelValues[i];
             
@@ -572,7 +569,7 @@ public:
         })
 
         // to get the right image orientation, flip the x and y coordinates and then multiply the y values by -1 to flip the pixels vertically
-        float flippedRow = recalulatedPixelColumn;
+        float flippedRow = float(recalulatedPixelColumn);
         float flippedColumn = recalulatedPixelRow * -1.0f;
 
         // send values back
@@ -776,11 +773,12 @@ camera_create_ray {
     }
 
     // control to go light stops up and down
+    float e2 = _exposureControl * _exposureControl;
     if (_exposureControl > 0){
-        output->weight *= 1.0 + (_exposureControl * _exposureControl);
+        output->weight *= 1.0f + e2;
     }
     else if (_exposureControl < 0){
-        output->weight *= 1.0 / (1.0 + (-_exposureControl * -_exposureControl));
+        output->weight *= 1.0f / (1.0f + e2);
     }
 
     // not sure if needed, but can't hurt. Taken from solidangle website.
@@ -790,8 +788,8 @@ camera_create_ray {
     float dsy = input->dsy * camera->tan_fov;
 
     AtVector d = p;  // direction vector == point on the image plane
-    double d_dot_d = AiV3Dot(d, d);
-    double temp = 1.0 / sqrt(d_dot_d * d_dot_d * d_dot_d);
+    float d_dot_d = AiV3Dot(d, d);
+    float temp = 1.0f / sqrtf(d_dot_d * d_dot_d * d_dot_d);
 
     // already initialized to 0's, only compute the non zero coordinates
     output->dDdx.x = (d_dot_d * dsx - (d.x * dsx) * d.x) * temp;

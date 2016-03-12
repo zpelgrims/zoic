@@ -1,0 +1,41 @@
+
+global proc makeZoicCamera()
+{
+   string $sel[] = `ls -sl`;
+   string $cameras[] = `ls -type camera $sel`;
+   
+   if (size($cameras) == 0)
+   {
+      select -hi $sel;
+      $cameras = `ls -sl -type camera`;
+      select -r $sel;
+      
+      if (size($cameras) == 0)
+      {
+         warning "No camera in selection.";
+         return;
+      }
+   }
+   
+   float $inchToCm = 2.54;
+   
+   for ($camera in $cameras)
+   {
+      setAttr -type "string" ($camera+".ai_translator") "zoic";
+      connectAttr ($camera+".focalLength") ($camera+".aiFocalLength");
+
+      string $n0 = `createNode -ss unitConversion`;
+      setAttr ($n0+".conversionFactor") $inchToCm;
+      connectAttr ($camera+".horizontalFilmAperture") ($n0+".input");
+      connectAttr ($n0+".output") ($camera+".aiSensorWidth");
+
+      string $n1 = `createNode -ss unitConversion`;
+      setAttr ($n1+".conversionFactor") $inchToCm;
+      connectAttr ($camera+".verticalFilmAperture") ($n1+".input");
+      connectAttr ($n1+".output") ($camera+".aiSensorHeight");
+
+      connectAttr ($camera+".depthOfField") ($camera+".aiUseDof");
+      connectAttr ($camera+".focusDistance") ($camera+".aiFocalDistance");
+      connectAttr ($camera+".fStop") ($camera+".aiFStop");
+   }
+}

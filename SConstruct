@@ -1,4 +1,5 @@
 import sys
+import glob
 import excons
 from excons.tools import arnold
 
@@ -25,7 +26,13 @@ if arniver[0] < 4 or (arniver[0] == 4 and (arniver[1] < 2 or (arniver[1] == 2 an
     libdirs.append(oiio_lib)
     libs.append("OpenImageIO")
 else:
-    defs.append("NO_OIIO")
+    oiio_inc, oiio_lib = excons.GetDirs("oiio", noexc=True, silent=True)
+    if oiio_inc or oiio_lib:
+        incdirs.append(oiio_inc)
+        libdirs.append(oiio_lib)
+        libs.append("OpenImageIO")
+    else:
+        defs.append("NO_OIIO")
 
 zoic = {"name": "zoic",
         "type": "dynamicmodule",
@@ -36,8 +43,9 @@ zoic = {"name": "zoic",
         "incdirs": incdirs,
         "libdirs": libdirs,
         "libs": libs,
-        "install": {"bin": ["bin/zoic.mtd"],
-                    "ae": ["ae/aiZoicTemplate.py"]},
+        "install": {"bin": ["src/zoic.mtd"],
+                    "scripts": glob.glob("maya/scripts/*.mel"),
+                    "ae": ["maya/ae/aiZoicTemplate.py"]},
         "custom": [arnold.Require]}
 
 excons.DeclareTargets(env, [zoic])
