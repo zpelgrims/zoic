@@ -1,8 +1,13 @@
 university/*
-src/imgs/*
+tests/*.exr
+/*.exr
+/*.png
+/*.ass
 excons.cache
 *.dblite
-*.exr
+*.pyc
 release/
 debug/
 .build/
+src/Makefile
+
