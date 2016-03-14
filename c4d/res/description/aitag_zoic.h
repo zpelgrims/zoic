@@ -4,8 +4,8 @@
 enum
 {
    C4DAI_ZOIC_MAIN_GRP                                = 2001,
-   C4DAI_ZOIC_MAIN_ATTRIBUTES_GRP		      = 3001,
-   C4DAI_ZOIC_ADVANCED_GRP			      = 4001,
+   C4DAI_ZOIC_MAIN_ATTRIBUTES_GRP                     = 3001,
+   C4DAI_ZOIC_ADVANCED_GRP                            = 4001,
 
    C4DAIP_ZOIC_SENSORWIDTH                            = 1184180162,
    C4DAIP_ZOIC_SENSORHEIGHT                           = 168369253,
