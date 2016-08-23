@@ -7,27 +7,19 @@ TEMPLATE = lib
 DEFINES += ARNOLDCAMERA_LIBRARY
 
 INCLUDEPATH += \
-    /home/i7210038/Arnold-4.2.11.0-linux/include \
+    /Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/include \
 
 LIBS += \
-    -L/home/i7210038/Arnold-4.2.11.0-linux/bin \
-    -L/usr/lib64
+    -L/Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/bin \
 
 LIBS += \
-    /home/i7210038/Arnold-4.2.11.0-linux/bin/libai.so \
-    /usr/lib64/libOpenImageIO.so
-
-
+    /Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/bin/libai.dylib \
 
 SOURCES += \
-    zoic.cpp
+    zoic.cpp \
+    camera_sandbox.cpp
 
 HEADERS += \
-
-unix {
-    target.path = /usr/lib
-    INSTALLS += target
-}
 
 DISTFILES += \
     ../ae/aiZoicTemplate.py \

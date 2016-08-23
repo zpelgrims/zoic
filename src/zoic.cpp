@@ -124,12 +124,13 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 #define _useDof  (params[3].BOOL)
 #define _fStop  (params[4].FLT)
 #define _focalDistance  (params[5].FLT)
-#define _opticalVignetting  (params[6].FLT)
-#define _highlightWidth  (params[7].FLT)
-#define _highlightStrength  (params[8].FLT)
-#define _useImage  (params[9].BOOL)
-#define _bokehPath (params[10].STR)
-#define _exposureControl (params[11].FLT)
+#define _opticalVignettingDistance  (params[6].FLT)
+#define _opticalVignettingRadius  (params[7].FLT)
+#define _highlightWidth  (params[8].FLT)
+#define _highlightStrength  (params[9].FLT)
+#define _useImage  (params[10].BOOL)
+#define _bokehPath (params[11].STR)
+#define _exposureControl (params[12].FLT)
 
 
 struct arrayCompare{
@@ -149,22 +150,22 @@ private:
     float *cdfColumn;
     int *rowIndices;
     int *columnIndices;
-    
+
 public:
     imageData()
         : x(0), y(0), nchannels(0)
         , pixelData(0), cdfRow(0), cdfColumn(0)
         , rowIndices(0), columnIndices(0) {
     }
-     
+
     ~imageData(){
         invalidate();
     }
-     
+
     bool isValid() const{
         return (x * y * nchannels > 0 && nchannels >= 3);
     }
-     
+
     void invalidate(){
         if (pixelData){
             AiAddMemUsage(-x * y * nchannels * sizeof(float), "zoic");
@@ -193,13 +194,13 @@ public:
         }
         x = y = nchannels = 0;
     }
-    
+
     bool read(const char *bokeh_kernel_filename){
-        
+
         invalidate();
-        
+
         AtInt64 nbytes = 0;
-        
+
 #ifdef NO_OIIO
 
         AiMsgInfo("Reading image using Arnold API: %s", bokeh_kernel_filename);
@@ -215,7 +216,7 @@ public:
         x = int(iw);
         y = int(ih);
         nchannels = int(nc);
-        
+
         nbytes = x * y * nchannels * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
         pixelData = (float*) AiMalloc(nbytes);
@@ -240,7 +241,7 @@ public:
         }
 
         const OpenImageIO::ImageSpec &spec = in->spec();
-        
+
         x = spec.width;
         y = spec.height;
         nchannels = spec.nchannels;
@@ -279,46 +280,46 @@ public:
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
-        
+
         bokehProbability();
-        
+
         return true;
     }
-    
+
     // Importance sampling
     void bokehProbability(){
         if (!isValid()){
             return;
         }
-        
+
         // initialize arrays
         AtInt64 nbytes = x * y * sizeof(float);
         AtInt64 totalTempBytes = 0;
-        
-        AiAddMemUsage(nbytes, "zoic");    
+
+        AiAddMemUsage(nbytes, "zoic");
         float *pixelValues = (float*) AiMalloc(nbytes);
         totalTempBytes += nbytes;
-        
+
         AiAddMemUsage(nbytes, "zoic");
         float *normalizedPixelValues = (float*) AiMalloc(nbytes);
         totalTempBytes += nbytes;
-        
+
         int npixels = x * y;
         int o1 = (nchannels >= 2 ? 1 : 0);
         int o2 = (nchannels >= 3 ? 2 : o1);
         float totalValue = 0.0f;
-        
+
         // for every pixel, stuff going wrong here
         for (int i=0, j=0; i < npixels; ++i, j+=nchannels){
             // store pixel value in array
             // calculate luminance [Y = 0.3 R + 0.59 G + 0.11 B]
             pixelValues[i] = pixelData[j] * 0.3f + pixelData[j+o1] * 0.59f + pixelData[j+o2] * 0.11f;
-            
+
             totalValue += pixelValues[i];
-            
+
             DEBUG_ONLY(std::cout << "Pixel Luminance: " << i << " -> " << pixelValues[i] << std::endl);
         }
-        
+
         DEBUG_ONLY({
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "DEBUG: Total Pixel Value: " << totalValue << std::endl;
@@ -329,12 +330,12 @@ public:
         // normalize pixel values so sum = 1
         float invTotalValue = 1.0f / totalValue;
         float totalNormalizedValue = 0.0f;
-        
+
         for(int i=0; i < npixels; ++i){
             normalizedPixelValues[i] = pixelValues[i] * invTotalValue;
-            
+
             totalNormalizedValue += normalizedPixelValues[i];
-            
+
             DEBUG_ONLY(std::cout << "Normalized Pixel Value: " << i << ": " << normalizedPixelValues[i] << std::endl);
         }
 
@@ -359,7 +360,7 @@ public:
 
                 summedRowValues[i] += normalizedPixelValues[k];
             }
-            
+
             DEBUG_ONLY(std::cout << "Summed Values row [" << i << "]: " << summedRowValues[i] << std::endl);
         }
 
@@ -416,12 +417,12 @@ public:
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
-        
+
         nbytes = npixels * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
         float *normalizedValuesPerRow = (float*) AiMalloc(nbytes);
         totalTempBytes += nbytes;
-        
+
         // divide pixel values of each pixel by the sum of the pixel values of that row (Normalize)
         for (int r = 0, i = 0; r < y; ++r){
             for (int c = 0; c < x; ++c, ++i){
@@ -446,7 +447,7 @@ public:
         nbytes = npixels * sizeof(int);
         AiAddMemUsage(nbytes, "zoic");
         columnIndices = (int*) AiMalloc(nbytes);
-        
+
         for(int i = 0; i < npixels; i++){
             columnIndices[i] = i;
         }
@@ -468,10 +469,10 @@ public:
         nbytes = npixels * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
         cdfColumn = (float*) AiMalloc(nbytes);
-        
+
         for (int r = 0, i = 0; r < y; ++r){
             prevVal = 0.0f;
-            
+
             for (int c = 0; c < x; ++c, ++i){
                 cdfColumn[i] = prevVal + normalizedValuesPerRow[columnIndices[i]];
                 prevVal = cdfColumn[i];
@@ -481,42 +482,42 @@ public:
         }
 
         DEBUG_ONLY(std::cout << "----------------------------------------------" << std::endl);
-            
+
         // Release and untrack memory
         AiAddMemUsage(-totalTempBytes, "zoic");
-        
+
         AiFree(pixelValues);
         AiFree(normalizedPixelValues);
         AiFree(summedRowValues);
         AiFree(normalizedValuesPerRow);
     }
-    
+
     // Sample image
     void bokehSample(float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
-        
+
         if (!isValid()){
             AiMsgWarning("Invalid bokeh image data.");
             *dx = 0.0f;
             *dy = 0.0f;
             return;
         }
-        
+
         // print random number between 0 and 1
         DEBUG_ONLY(std::cout << "RANDOM NUMBER ROW: " << randomNumberRow << std::endl);
 
         // find upper bound of random number in the array
         float *pUpperBound = std::upper_bound(cdfRow, cdfRow + y, randomNumberRow);
         int r = 0;
-        
+
         if (pUpperBound >= cdfRow + y){
             //AiMsgWarning("[zoic] %f larger than last biggest cdfRow[%d] = %f", randomNumberRow, y-1, cdfRow[y-1]);
             r = y - 1;
-        
+
         } else{
             DEBUG_ONLY(std::cout << "UPPER BOUND: " << *pUpperBound << std::endl);
             r = int(pUpperBound - cdfRow);
         }
-        
+
 
         // find actual pixel row
         int actualPixelRow = rowIndices[r];
@@ -583,11 +584,11 @@ struct cameraData{
     float tan_fov;
     float apertureRadius;
     imageData image;
-    
+
     cameraData()
         : fov(0.0f), tan_fov(0.0f), apertureRadius(0.0f){
     }
-    
+
     ~cameraData(){
     }
 };
@@ -648,7 +649,8 @@ node_parameters {
    AiParameterBOOL("useDof", true);
    AiParameterFLT("fStop", 1.4f);
    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
-   AiParameterFLT("opticalVignetting", 0.0f); //distance of the opticalVignetting virtual aperture
+   AiParameterFLT("opticalVignettingDistance", 0.0f); //distance of the opticalVignetting virtual aperture
+   AiParameterFLT("opticalVignettingRadius", 0.0f); // 1-.. range float, to multiply with the actual aperture radius
    AiParameterFLT("highlightWidth", 0.2f);
    AiParameterFLT("highlightStrength", 10.0f);
    AiParameterBOOL("useImage", false);
@@ -667,7 +669,7 @@ node_update {
    AiCameraUpdate(node, false);
 
    cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
-   
+
    // calculate field of view (theta = 2arctan*(sensorSize/focalLength))
    camera->fov = 2.0f * atan((_sensorWidth / (2.0f * (_focalLength/10)))); // in radians
    camera->tan_fov = tanf(camera->fov/ 2);
@@ -746,10 +748,10 @@ camera_create_ray {
         output->dir = AiV3Normalize(focusPoint - output->origin);
 
         // Optical Vignetting (CAT EYE EFFECT)
-        if (_opticalVignetting > 0.0f){
+        if (_opticalVignettingDistance > 0.0f){
             // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
             AtPoint opticalVignetPoint;
-            opticalVignetPoint = output->dir * _opticalVignetting;
+            opticalVignetPoint = output->dir * _opticalVignettingDistance;
 
             // re-center point
             opticalVignetPoint -= output->origin;
@@ -757,17 +759,18 @@ camera_create_ray {
             // find hypotenuse of x, y points.
             float pointHypotenuse = sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
 
-
             // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
-            if (ABS(pointHypotenuse) > camera->apertureRadius){
+            float virtualApertureTrueRadius = camera->apertureRadius * _opticalVignettingRadius;
+
+            if (ABS(pointHypotenuse) > virtualApertureTrueRadius){
                 // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
                 output->weight = 0.0f;
             }
 
             // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
             // adding weight to opposite edges to get nice rim on the highlights
-            else if (ABS(pointHypotenuse) < camera->apertureRadius && ABS(pointHypotenuse) > (camera->apertureRadius - _highlightWidth)){
-                output->weight *= _highlightStrength * (1 - (camera->apertureRadius - ABS(pointHypotenuse))) * sqrt(input->sx * input->sx + input->sy * input->sy);
+            else if (ABS(pointHypotenuse) < virtualApertureTrueRadius && ABS(pointHypotenuse) > (virtualApertureTrueRadius - _highlightWidth)){
+                output->weight *= _highlightStrength * (1 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) * sqrt(input->sx * input->sx + input->sy * input->sy);
             }
         }
     }
