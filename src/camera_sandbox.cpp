@@ -165,7 +165,6 @@ int main()
     AtVector normal_hitPoint;
 
 
-    raySphereIntersection(rayDirection, rayOrigin, sphereCenter, sphereRadius, hitPoint, normal_hitPoint);
 
 
 
@@ -178,15 +177,66 @@ int main()
     AtVector normalVector = {1/sqrtf(2), 1/sqrtf(2), 0.0}; // normal vector of hitpoint
     AtVector transmissionVector = {0.0, 0.0, 0.0}; // transmitted vector
 
-    calculateTransmissionVector(ior1, ior2, incidentVector, normalVector, transmissionVector);
 
 
 
+    // reverse the datasets in the vector, since we will start with the rear-most lens element
+    std::reverse(lensRadiusCurvature.begin(),lensRadiusCurvature.end());
+    std::reverse(lensThickness.begin(),lensThickness.end());
+    std::reverse(lensIOR.begin(),lensIOR.end());
+    std::reverse(lensAperture.begin(),lensAperture.end());
 
 
-    // actual loop
-    for(int i=0; i<lensRadiusCurvature.size(); ++i){
-        // write this shit tomorrow and smoke a spliff
+    // for every lens element in vector
+    for(int i; i<lensRadiusCurvature.size(); ++i){
+
+        // make sure to think about the the element with missing radius, that´s the diaphragma
+        // how on earth is this not going to be full of noise? rejection sampling for small
+        // aperture radii would be a nightmare
+        // need to come up with a system to change this specific vector element since it´s the aperture
+
+        // find where the sphere center is
+        // this should in theory work for both convex and concave lenses
+        // only consider the X axis here
+        // spherecenter = (sum of lensthicknesses up till i) + radiusofcurvature[i]
+        spherecenter.x = std::accumulate(lensThickness.begin(), lensThickness.begin()+int(i+1), 0.0) + lensRadiusCurvature[i];
+        spherecenter.y = 0.0;
+        spherecenter.z = 0.0;
+
+        // do i need to account for an initial distance to the first lens element?
+        // not really.. this is the last element of the distancelist (so first one to use!)
+        // no special calculations needed woohoo
+
+        // once we know the sphere center and sphere radius, we can compute the rayintersection
+        // call the raysphereintersection
+        // ray origin gets updated
+        raySphereIntersection(rayDirection, rayOrigin, sphereCenter, sphereRadius, hitPoint, normal_hitPoint);
+
+        // if hitpoint is outside given lensdiameter[i], abort the ray
+        // i think i´ll have to calculate the hypotenuse for this, which would involve another square root..
+        float hitPointHypotenuse = sqrtf(hitPoint.x * hitPoint.x + hitPoint.y * hitPoint.y);
+        if(hitPointHypotenuse > lensAperture[i]){
+            //kill ray
+        }
+
+        // once we know the hitpoint and its normal, we can compute snells law
+        // call the transmission function
+        // ray direction gets updated
+        if(lensIOR[i] == lensIOR[i-1]){
+            // just continue ray direction until next hit
+        }
+        else{
+            calculateTransmissionVector(ior1, ior2, incidentVector, normalVector, transmissionVector);
+        }
+
+
+        // focusing the lens is possible by shifting all lens elements by a certain distance, there´s a formula in the paper
+        // but I don´t quite understand it yet
+
+        // focal length can be changed by scaling each of the linear dimensions by the desired focal length, divided by 100.
+        // to combat the rejection sampling, it might be worth pre-computing a thick lens approximation, and then only fire rays with a direction within that limit?
+
+        // by applying a correct weighting to the rays traced through the system we can derive correct image exposure along the film plane
     }
 
 
