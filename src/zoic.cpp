@@ -609,13 +609,13 @@ struct Lensdata{
 
 
 // READ IN TABULAR LENS DATA
-void readTabularLensData(std::string lensDataFileName, Lensdata ld){
+void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
 
     // reset vectors
-    ld.lensAperture.clear();
-    ld.lensIOR.clear();
-    ld.lensRadiusCurvature.clear();
-    ld.lensAperture.clear();
+    ld->lensAperture.clear();
+    ld->lensIOR.clear();
+    ld->lensRadiusCurvature.clear();
+    ld->lensAperture.clear();
 
     std::ifstream lensDataFile(lensDataFileName);
     std::string line;
@@ -643,11 +643,11 @@ void readTabularLensData(std::string lensDataFileName, Lensdata ld){
                 }
 
                 if (lensDataCounter == 1){
-                    ld.lensRadiusCurvature.push_back (std::stod(token));
+                    ld->lensRadiusCurvature.push_back (std::stod(token));
                 }
 
                 if (lensDataCounter == 2){
-                    ld.lensThickness.push_back (std::stod(token));
+                    ld->lensThickness.push_back (std::stod(token));
                 }
 
                 if (lensDataCounter == 3){
@@ -656,11 +656,11 @@ void readTabularLensData(std::string lensDataFileName, Lensdata ld){
                     if(number == 0.0){
                         number = 1.0;
                     }
-                    ld.lensIOR.push_back (number);
+                    ld->lensIOR.push_back (number);
                 }
 
                 if (lensDataCounter == 4){
-                    ld.lensAperture.push_back (std::stod(token));
+                    ld->lensAperture.push_back (std::stod(token));
                     lensDataCounter = 0;
                 }
                 lensDataCounter += 1;
@@ -674,8 +674,8 @@ void readTabularLensData(std::string lensDataFileName, Lensdata ld){
     AiMsgInfo("# ROC \t Thickness \t IOR \t Aperture #");
     AiMsgInfo("##############################################");
 
-    for(int i = 0; i < ld.lensRadiusCurvature.size(); i++){
-        AiMsgInfo("%f    %f    %f    %f", ld.lensRadiusCurvature[i], ld.lensThickness[i], ld.lensIOR[i], ld.lensAperture[i]);
+    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+        AiMsgInfo("%f    %f    %f    %f", ld->lensRadiusCurvature[i], ld->lensThickness[i], ld->lensIOR[i], ld->lensAperture[i]);
     }
 
     AiMsgInfo("##############################################");
@@ -683,23 +683,121 @@ void readTabularLensData(std::string lensDataFileName, Lensdata ld){
     AiMsgInfo("##############################################");
 
     // reverse the datasets in the vector, since we will start with the rear-most lens element
-    std::reverse(ld.lensRadiusCurvature.begin(),ld.lensRadiusCurvature.end());
-    std::reverse(ld.lensThickness.begin(),ld.lensThickness.end());
-    std::reverse(ld.lensIOR.begin(),ld.lensIOR.end());
-    std::reverse(ld.lensAperture.begin(),ld.lensAperture.end());
+    std::reverse(ld->lensRadiusCurvature.begin(),ld->lensRadiusCurvature.end());
+    std::reverse(ld->lensThickness.begin(),ld->lensThickness.end());
+    std::reverse(ld->lensIOR.begin(),ld->lensIOR.end());
+    std::reverse(ld->lensAperture.begin(),ld->lensAperture.end());
 
 }
 
-/*
 
-double calculateImageDistance(double objectDistance, Lensdata ld){
+// RAY SPHERE INTERSECTIONS
+AtVector raySphereIntersection(AtVector ray_direction, AtVector ray_origin, AtVector sphere_center, double sphere_radius, bool reverse){
+
+    ray_direction = AiV3Normalize(ray_direction);
+    AtVector L = sphere_center - ray_origin;
+
+    // project the directionvector onto the distancevector
+    double tca = AiV3Dot(L, ray_direction);
+
+    double radius2 = sphere_radius * sphere_radius;
+
+    // if intersection is in the opposite direction of the ray, don't worry about it
+    //if (tca < 0.0) {return vec3(0.0,0.0,0.0);}
+
+    double d2 = AiV3Dot(L, L) - tca * tca;
+
+    // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
+    // come up with a better way of killing the ray (already there in path tracer)
+    //if (d2 > radius2){return vec3(0.0,0.0,0.0);}
+
+    // pythagoras' theorem
+    double thc = sqrt(radius2 - d2);
+
+    if(!reverse){
+        return ray_origin + ray_direction * (tca + thc * std::copysign(1.0, sphere_radius));
+    }
+    else{
+        return ray_origin + ray_direction * (tca - thc * copysign(1.0, sphere_radius));
+    }
+}
+
+
+
+// COMPUTE NORMAL HITPOINT
+AtVector intersectionNormal(AtVector hit_point, AtVector sphere_center, double sphere_radius){
+    return AiV3Normalize(sphere_center - hit_point) * std::copysign(1.0, sphere_radius);
+}
+
+
+
+// TRANSMISSION VECTOR
+AtVector calculateTransmissionVector(double ior1, double ior2, AtVector incidentVector, AtVector normalVector){
+
+    AtVector transmissionVector;
+
+    // VECTORS NEED TO BE NORMALIZED BEFORE USE!
+    incidentVector = AiV3Normalize(incidentVector);
+    normalVector = AiV3Normalize(normalVector);
+
+
+    double eta = ior1 / ior2;
+    double c1 = - AiV3Dot(incidentVector, normalVector);
+    double cs2 = eta * eta * (1.0 - c1 * c1);
+
+    //if (cs2 > 1.0){ // total internal reflection, can only occur when ior1 > ior2
+        //std::cout << "Total internal reflection case";
+        // kill ray here
+    //}
+
+    double cosT = sqrt(std::abs(1.0 - cs2));
+
+    transmissionVector.x = incidentVector.x * eta + normalVector.x * (eta * c1 - cosT);
+    transmissionVector.y = incidentVector.y * eta + normalVector.y * (eta * c1 - cosT);
+    transmissionVector.z = incidentVector.z * eta + normalVector.z * (eta * c1 - cosT);
+
+    return transmissionVector;
+
+}
+
+
+
+// LINE LINE INTERSECTIONS
+AtVector2 lineLineIntersection(AtVector line1_origin, AtVector line1_direction, AtVector line2_origin, AtVector line2_direction){
+    // Get A,B,C of first line - points : ps1 to pe1
+    double A1 = line1_direction.y - line1_origin.y;
+    double B1 = line1_origin.x - line1_direction.x;
+    double C1 = A1 * line1_origin.x + B1 * line1_origin.y;
+
+    // Get A,B,C of second line - points : ps2 to pe2
+    double A2 = line2_direction.y - line2_origin.y;
+    double B2 = line2_origin.x - line2_direction.x;
+    double C2 = A2 * line2_origin.x + B2 * line2_origin.y;
+
+    // Get delta and check if the lines are parallel
+    double delta = A1 * B2 - A2 * B1;
+
+    // now return the Vector2 intersection point
+    AtVector2 intersectionPoint;
+    intersectionPoint.x = (B2 * C1 - B1 * C2) / delta;
+    intersectionPoint.y = (A1 * C2 - A2 * C1) / delta;
+
+    return intersectionPoint;
+}
+
+
+
+double calculateImageDistance(double objectDistance, Lensdata *ld){
 
     double imageDistance;
+
 
     AtVector ray_origin_focus;
     ray_origin_focus.x = objectDistance;
     ray_origin_focus.y = 0.0;
     ray_origin_focus.z = 0.0;
+
+
 
     // 20.0 needs to be changed to a number as small as possible whilst still getting no numerical errors. (eg 0.001)
     AtVector ray_direction_focus;
@@ -709,40 +807,41 @@ double calculateImageDistance(double objectDistance, Lensdata ld){
 
     double summedThickness_focus = 0.0;
 
-    // change this to i < ld.lensRadiusCurvature.size()
-    //const int lensElementsCount = 11;
-    for(int i = 0; i < ld.lensRadiusCurvature.size(); i++){
+    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+
 
         if(i==0){
-            for(int k = 0; k < ld.lensRadiusCurvature.size(); k++){
-                summedThickness_focus += ld.lensThickness[k];
+            for(int k = 0; k < ld->lensRadiusCurvature.size(); k++){
+                summedThickness_focus += ld->lensThickness[k];
             }
         }
 
-        // (condition) ? true : false;
-        i == 0 ? summedThickness_focus = summedThickness_focus : summedThickness_focus -= ld.lensThickness[ld.lensRadiusCurvature.size() - i];
 
-        if(ld.lensRadiusCurvature[i] == 0.0){
-            ld.lensRadiusCurvature[i] = 99999.0;
+
+        // (condition) ? true : false;
+        i == 0 ? summedThickness_focus = summedThickness_focus : summedThickness_focus -= ld->lensThickness[ld->lensRadiusCurvature.size() - i];
+
+        if(ld->lensRadiusCurvature[i] == 0.0){
+            ld->lensRadiusCurvature[i] = 99999.0;
         }
 
         AtVector sphere_center;
-        sphere_center.x = summedThickness_focus - ld.lensRadiusCurvature[ld.lensRadiusCurvature.size() -1 -i];
+        sphere_center.x = summedThickness_focus - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() -1 -i];
         sphere_center.y = 0.0;
         sphere_center.z = 0.0;
 
         AtVector hit_point;
-        hit_point = raySphereIntersection(ray_direction_focus, ray_origin_focus, sphere_center, ld.lensRadiusCurvature[ld.lensRadiusCurvature.size() - 1 - i], true);
+        hit_point = raySphereIntersection(ray_direction_focus, ray_origin_focus, sphere_center, ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], true);
 
         AtVector hit_point_normal;
-        hit_point_normal = intersectionNormal(hit_point, sphere_center, - ld.lensRadiusCurvature[ld.lensRadiusCurvature.size() - 1 - i]);
+        hit_point_normal = intersectionNormal(hit_point, sphere_center, - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i]);
 
 
         if(i==0){
-            ray_direction_focus = calculateTransmissionVector(1.0, ld.lensIOR[ld.lensRadiusCurvature.size() - 1 - i], ray_direction_focus, hit_point_normal);
+            ray_direction_focus = calculateTransmissionVector(1.0, ld->lensIOR[ld->lensRadiusCurvature.size() - 1 - i], ray_direction_focus, hit_point_normal);
         }
         else{
-            ray_direction_focus = calculateTransmissionVector(ld.lensIOR[ld.lensRadiusCurvature.size() - i], ld.lensIOR[ld.lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal);
+            ray_direction_focus = calculateTransmissionVector(ld->lensIOR[ld->lensRadiusCurvature.size() - i], ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal);
 
         }
 
@@ -750,71 +849,93 @@ double calculateImageDistance(double objectDistance, Lensdata ld){
         ray_origin_focus = hit_point;
 
         // shoot off rays after last refraction
-        if(i == ld.lensRadiusCurvature.size() - 1){
-            ray_direction_focus = calculateTransmissionVector(ld.lensIOR[ld.lensRadiusCurvature.size() - 1 - i], 1.0, ray_direction_focus, hit_point_normal);
+        if(i == ld->lensRadiusCurvature.size() - 1){
+            ray_direction_focus = calculateTransmissionVector(ld->lensIOR[ld->lensRadiusCurvature.size() - 1 - i], 1.0, ray_direction_focus, hit_point_normal);
 
             // find intersection point
-            imageDistance = lineLineIntersection(vec3(-99999.0, 0.0, 0.0), vec3(99999.0, 0.0, 0.0), ray_origin_focus, vec3(ray_origin_focus.x + ray_direction_focus.x, ray_origin_focus.y + ray_direction_focus.y , 0.0)).x;
-            //col = drawLine(col, red, coord, vec2(imageDistance.x, 10.0), vec2(imageDistance.x, -10.0), lineWidth);
+            AtVector axialStart;
+            axialStart.x = -99999.0;
+            axialStart.y = 0.0;
+            axialStart.z = 0.0;
+
+            AtVector axialEnd;
+            axialStart.x = 99999.0;
+            axialStart.y = 0.0;
+            axialStart.z = 0.0;
+
+            AtVector lineDirection;
+            lineDirection.x = ray_origin_focus.x + ray_direction_focus.x;
+            lineDirection.y = ray_origin_focus.y + ray_direction_focus.y;
+            lineDirection.z = 0.0;
+
+            imageDistance = lineLineIntersection(axialStart, axialEnd, ray_origin_focus, lineDirection).x;
         }
+
     }
+    AiMsgInfo("Image distance at object distance [%f]: %f", objectDistance, imageDistance);
 
     return imageDistance;
 
+
 }
 
-*/
+
 
 
 node_parameters {
-   AiParameterFLT("sensorWidth", 3.6f); // 35mm film
-   AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
-   AiParameterFLT("focalLength", 65.0f); // distance between sensor and lens
-   AiParameterBOOL("useDof", true);
-   AiParameterFLT("fStop", 1.4f);
-   AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
-   AiParameterFLT("opticalVignettingDistance", 0.0f); //distance of the opticalVignetting virtual aperture
-   AiParameterFLT("opticalVignettingRadius", 0.0f); // 1-.. range float, to multiply with the actual aperture radius
-   AiParameterFLT("highlightWidth", 0.2f);
-   AiParameterFLT("highlightStrength", 10.0f);
-   AiParameterBOOL("useImage", false);
-   AiParameterStr("bokehPath", ""); //bokeh shape image location
-   AiParameterFLT("exposureControl", 0.0f);
+    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
+    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
+    AiParameterFLT("focalLength", 65.0f); // distance between sensor and lens
+    AiParameterBOOL("useDof", true);
+    AiParameterFLT("fStop", 1.4f);
+    AiParameterFLT("focalDistance", 110.0f); // distance from lens to focal point
+    AiParameterFLT("opticalVignettingDistance", 0.0f); //distance of the opticalVignetting virtual aperture
+    AiParameterFLT("opticalVignettingRadius", 0.0f); // 1-.. range float, to multiply with the actual aperture radius
+    AiParameterFLT("highlightWidth", 0.2f);
+    AiParameterFLT("highlightStrength", 10.0f);
+    AiParameterBOOL("useImage", false);
+    AiParameterStr("bokehPath", ""); //bokeh shape image location
+    AiParameterFLT("exposureControl", 0.0f);
 }
 
 
 node_initialize {
-   cameraData *camera = new cameraData();
-   AiCameraInitialize(node, (void*)camera);
+    cameraData *camera = new cameraData();
+    AiCameraInitialize(node, (void*)camera);
 
 }
 
 node_update {
-   AiCameraUpdate(node, false);
+    AiCameraUpdate(node, false);
 
-   cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
+    cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
 
-   // calculate field of view (theta = 2arctan*(sensorSize/focalLength))
-   camera->fov = 2.0f * atan((_sensorWidth / (2.0f * (_focalLength/10)))); // in radians
-   camera->tan_fov = tanf(camera->fov/ 2);
+    // calculate field of view (theta = 2arctan*(sensorSize/focalLength))
+    camera->fov = 2.0f * atan((_sensorWidth / (2.0f * (_focalLength/10)))); // in radians
+    camera->tan_fov = tanf(camera->fov/ 2);
 
-   // calculate aperture radius (apertureRadius = focalLength / 2*fStop)
-   camera->apertureRadius = (_focalLength/10) / (2*_fStop);
+    // calculate aperture radius (apertureRadius = focalLength / 2*fStop)
+    camera->apertureRadius = (_focalLength/10) / (2*_fStop);
 
-   camera->image.invalidate();
+    camera->image.invalidate();
 
-   // make probability functions of the bokeh image
-   if (_useImage == true){
+    // make probability functions of the bokeh image
+    if (_useImage == true){
        if (!camera->image.read(_bokehPath)){
             AiMsgError("Couldn't open image!");
             AiRenderAbort();
        }
-   }
+    }
 
-   // this seems to work!
-   std::string lensDataFileName;
-   lensDataFileName = "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat";
-   readTabularLensData(lensDataFileName, ld);
+    // this seems to work!
+    std::string lensDataFileName;
+    lensDataFileName = "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat";
+    readTabularLensData(lensDataFileName, &ld);
+
+    // change number for variable
+    // shift first lens element (and all others consequently) so the image distance at
+    // a certain object distance falls on the film plane
+    ld.lensThickness[0] -= calculateImageDistance(1600.0, &ld);
 }
 
 node_finish {
