@@ -17,10 +17,12 @@ LIBS += \
 
 SOURCES += \
     zoic.cpp \
-    camera_sandbox.cpp
+    camera_sandbox.cpp \
+    shadertoy_debugging.cpp
 
 HEADERS += \
 
 DISTFILES += \
     ../ae/aiZoicTemplate.py \
-    ../bin/zoic.mtd
+    ../bin/zoic.mtd \
+    buildflags.txt

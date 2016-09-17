@@ -89,21 +89,28 @@ void raySphereIntersection(AtVector rayDirection, AtVector rayOrigin, AtVector s
 
     // only calculate the first intersection point, no need for second one in this case!
     float t0 = tca - thc;
-    //float t1 = tca + thc;
+    float t1 = tca + thc;
+
+    if (t1>t0){
+        hitPoint = rayOrigin + rayDirection * t1;
+    }
+    else{
+        hitPoint = rayOrigin + rayDirection * t0;
+    }
 
     // calculate hit point with the vector equation
-    hitPoint = rayOrigin + rayDirection * t0;
+    hitPoint = rayOrigin + rayDirection * t1;
 
-    std::cout << hitPoint.x << " " << hitPoint.y << " " << hitPoint.z << std::endl;
+    std::cout << "hitpoint: " << hitPoint.x << " " << hitPoint.y << " " << hitPoint.z << std::endl;
 
     // compute normal of hitpoint
     normal_hitPoint = AiV3Normalize(hitPoint - sphereCenter);
 
     std:: cout << "normal_hitpoint: " << normal_hitPoint.x << " " << normal_hitPoint.y << " " << normal_hitPoint.z << std::endl;
+
 }
 
-
-
+/*
 
 // TRANSMISSION VECTOR
 void calculateTransmissionVector(float ior1, float ior2, AtVector incidentVector, AtVector normalVector, AtVector& transmissionVector){
@@ -126,6 +133,7 @@ void calculateTransmissionVector(float ior1, float ior2, AtVector incidentVector
     std::cout << "Transmission vector ..SHOULD.. be: {" << transmissionVector.x << ", " << transmissionVector.y << ", " << transmissionVector.z << "}" << std::endl;
 }
 
+*/
 
 
 
@@ -138,6 +146,21 @@ int main()
     std::vector<float> lensThickness;
     std::vector<float> lensIOR;
     std::vector<float> lensAperture;
+
+    AtVector rayDirection = {5,5,0};
+    AtVector rayOrigin = {0,0,0};
+    AtVector sphereCenter = {1,1,0};
+    float sphereRadius = 2.0f;
+    AtVector hitPoint;
+    AtVector normal_hitPoint;
+
+    //raySphereIntersection(rayDirection, rayOrigin, sphereCenter, sphereRadius, hitPoint, normal_hitPoint);
+
+    AtVector2 vectortest= {1.0,1.0};
+    std::cout << AiV2Length(vectortest);
+
+
+    /*
 
     lensDataFileName = "/Users/zpelgrims/Downloads/lens/dgauss.50mm.dat";
 
@@ -238,6 +261,7 @@ int main()
 
         // by applying a correct weighting to the rays traced through the system we can derive correct image exposure along the film plane
     }
+    */
 
 
 }

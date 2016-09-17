@@ -3,61 +3,9 @@
 // Special thanks to Marc-Antoine Desjardins for the help on the image sampling
 // Special thanks to Benedikt Bitterli for the information on optical vignetting
 // Special thanks to Tom Minor for the help with C++ (it was needed!)
+// Special thanks to Gaetan Guidet for the C++ cleanup on Github.
 
 // (C) Zeno Pelgrims, www.zenopelgrims.com
-
-// to build on my linux machine:
-// g++ -std=c++11 -o $ZENOCAMERA/src/zoic.os -c -fPIC -DNO_OIIO -D_LINUX -I/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/include $ZENOCAMERA/src/zoic.cpp -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff;
-// g++ -o $ZENOCAMERA/bin/zoic.so -shared $ZENOCAMERA/src/zoic.os -DNO_OIIO -L/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/bin -lai -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff
-
-
-// IDEAS
-
-/* Shutter speed should affect motion blur and should read scene fps
-
-    24 fps
-    1/50th speed
-    ideal -> 0.5 frames before and 0.5 frames after
-
-*/
-
-/* FILTER MAP:
-
-    From arnold website: "Weights the camera sample by a scalar amount defined by the shader linked to the filtermap.
-    This shader will use as an input the u,v coordinates in image-space coords [0,1) and x,y in pixel coordinates.
-    This allows you to darken certain regions of the image, perfect to simulate vignetting effects.
-    There is an optimization in place where if the filter returns pure black then the camera ray is not fired.
-    This can help in cases such as when rendering with the fisheye camera where, depending on its autocrop setting, parts of the frame trace no rays at all."
-
-*/
-
-/* SAMPLING IDEA
-
-    Would be cool to have a function to reduce the diff/spec/etc samples in out of focus areas.
-    Not sure how to tackle this and not sure if this is possible withing the range of a camera shader.
-
-*/
-
-/* SAMPLING IDEA
-
-    To get hard edged bokeh shapes with high aperture sizes, maybe do a prepass (render image with low sampling and no dof) and then use that prepass in the same way as the bokeh sampling?
-    More samples for the highlights makes sense if you're defocusing.
-    This should be done by picking ray directions that will hit highlight areas of the image more often.
-
-    I could also make the highlights brighter (and therefore the bokeh shapes more apparent) by adding to the weight of these rays.
-
-*/
-
-/* TODO
-
-    Make a standard for this optical vignetting thing, not just random values
-
-    Send extra samples to edges of the image (based on gradient) // not sure if this possible since sx, sy are read only variables.
-
-    Something wrong when I change focal length to high number, losing a lot of samples for some reason
-    even losing samples in the middle..
-
-*/
 
 #include <ai.h>
 #include <cstring>
@@ -67,6 +15,11 @@
 #include <cstdio>
 #include <algorithm>
 #include <functional>
+#include <string>
+#include <fstream>
+#include <vector>
+#include <sstream>
+#include <numeric>
 
 #ifdef NO_OIIO
 // AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
@@ -594,6 +547,7 @@ struct cameraData{
 };
 
 
+
 // PBRT v2 source code  - Concentric disk sampling (Sampling the disk in a more uniform way than with random sampling)
 inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
     float radius; // radius
@@ -642,6 +596,176 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
 
 // ---
 
+
+
+struct Lensdata{
+    std::vector<double> lensRadiusCurvature;
+    std::vector<double> lensThickness;
+    std::vector<double> lensIOR;
+    std::vector<double> lensAperture;
+
+} ld;
+
+
+
+// READ IN TABULAR LENS DATA
+void readTabularLensData(std::string lensDataFileName, Lensdata ld){
+
+    // reset vectors
+    ld.lensAperture.clear();
+    ld.lensIOR.clear();
+    ld.lensRadiusCurvature.clear();
+    ld.lensAperture.clear();
+
+    std::ifstream lensDataFile(lensDataFileName);
+    std::string line;
+    std::string token;
+    std::stringstream iss;
+    int lensDataCounter = 1;
+
+
+    AiMsgInfo("##############################################");
+    AiMsgInfo("############# READING LENS DATA ##############");
+    AiMsgInfo("##############################################");
+
+    while (getline(lensDataFile, line))
+    {
+        if (line.length() == 0 || line[0] == '#'){
+            AiMsgInfo("Comment or empty line, skipping line");
+        }
+        else {
+            iss << line;
+
+            // put values (converting from string to float) into the vectors
+            while (getline(iss, token, '\t') ){
+                if (token == " "){
+                   AiMsgError("Please make sure your .dat file only contains TAB spacings.");
+                }
+
+                if (lensDataCounter == 1){
+                    ld.lensRadiusCurvature.push_back (std::stod(token));
+                }
+
+                if (lensDataCounter == 2){
+                    ld.lensThickness.push_back (std::stod(token));
+                }
+
+                if (lensDataCounter == 3){
+                    // check for 0.0 IOR case, set to 1.0
+                    double number = std::stod(token);
+                    if(number == 0.0){
+                        number = 1.0;
+                    }
+                    ld.lensIOR.push_back (number);
+                }
+
+                if (lensDataCounter == 4){
+                    ld.lensAperture.push_back (std::stod(token));
+                    lensDataCounter = 0;
+                }
+                lensDataCounter += 1;
+            }
+
+            iss.clear();
+        }
+    }
+
+    AiMsgInfo("##############################################");
+    AiMsgInfo("# ROC \t Thickness \t IOR \t Aperture #");
+    AiMsgInfo("##############################################");
+
+    for(int i = 0; i < ld.lensRadiusCurvature.size(); i++){
+        AiMsgInfo("%f    %f    %f    %f", ld.lensRadiusCurvature[i], ld.lensThickness[i], ld.lensIOR[i], ld.lensAperture[i]);
+    }
+
+    AiMsgInfo("##############################################");
+    AiMsgInfo("########### END READING LENS DATA ############");
+    AiMsgInfo("##############################################");
+
+    // reverse the datasets in the vector, since we will start with the rear-most lens element
+    std::reverse(ld.lensRadiusCurvature.begin(),ld.lensRadiusCurvature.end());
+    std::reverse(ld.lensThickness.begin(),ld.lensThickness.end());
+    std::reverse(ld.lensIOR.begin(),ld.lensIOR.end());
+    std::reverse(ld.lensAperture.begin(),ld.lensAperture.end());
+
+}
+
+/*
+
+double calculateImageDistance(double objectDistance, Lensdata ld){
+
+    double imageDistance;
+
+    AtVector ray_origin_focus;
+    ray_origin_focus.x = objectDistance;
+    ray_origin_focus.y = 0.0;
+    ray_origin_focus.z = 0.0;
+
+    // 20.0 needs to be changed to a number as small as possible whilst still getting no numerical errors. (eg 0.001)
+    AtVector ray_direction_focus;
+    ray_direction_focus.x = - objectDistance;
+    ray_direction_focus.y = 20.0;
+    ray_direction_focus.z = 0.0;
+
+    double summedThickness_focus = 0.0;
+
+    // change this to i < ld.lensRadiusCurvature.size()
+    //const int lensElementsCount = 11;
+    for(int i = 0; i < ld.lensRadiusCurvature.size(); i++){
+
+        if(i==0){
+            for(int k = 0; k < ld.lensRadiusCurvature.size(); k++){
+                summedThickness_focus += ld.lensThickness[k];
+            }
+        }
+
+        // (condition) ? true : false;
+        i == 0 ? summedThickness_focus = summedThickness_focus : summedThickness_focus -= ld.lensThickness[ld.lensRadiusCurvature.size() - i];
+
+        if(ld.lensRadiusCurvature[i] == 0.0){
+            ld.lensRadiusCurvature[i] = 99999.0;
+        }
+
+        AtVector sphere_center;
+        sphere_center.x = summedThickness_focus - ld.lensRadiusCurvature[ld.lensRadiusCurvature.size() -1 -i];
+        sphere_center.y = 0.0;
+        sphere_center.z = 0.0;
+
+        AtVector hit_point;
+        hit_point = raySphereIntersection(ray_direction_focus, ray_origin_focus, sphere_center, ld.lensRadiusCurvature[ld.lensRadiusCurvature.size() - 1 - i], true);
+
+        AtVector hit_point_normal;
+        hit_point_normal = intersectionNormal(hit_point, sphere_center, - ld.lensRadiusCurvature[ld.lensRadiusCurvature.size() - 1 - i]);
+
+
+        if(i==0){
+            ray_direction_focus = calculateTransmissionVector(1.0, ld.lensIOR[ld.lensRadiusCurvature.size() - 1 - i], ray_direction_focus, hit_point_normal);
+        }
+        else{
+            ray_direction_focus = calculateTransmissionVector(ld.lensIOR[ld.lensRadiusCurvature.size() - i], ld.lensIOR[ld.lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal);
+
+        }
+
+        // set hitpoint to be the new origin
+        ray_origin_focus = hit_point;
+
+        // shoot off rays after last refraction
+        if(i == ld.lensRadiusCurvature.size() - 1){
+            ray_direction_focus = calculateTransmissionVector(ld.lensIOR[ld.lensRadiusCurvature.size() - 1 - i], 1.0, ray_direction_focus, hit_point_normal);
+
+            // find intersection point
+            imageDistance = lineLineIntersection(vec3(-99999.0, 0.0, 0.0), vec3(99999.0, 0.0, 0.0), ray_origin_focus, vec3(ray_origin_focus.x + ray_direction_focus.x, ray_origin_focus.y + ray_direction_focus.y , 0.0)).x;
+            //col = drawLine(col, red, coord, vec2(imageDistance.x, 10.0), vec2(imageDistance.x, -10.0), lineWidth);
+        }
+    }
+
+    return imageDistance;
+
+}
+
+*/
+
+
 node_parameters {
    AiParameterFLT("sensorWidth", 3.6f); // 35mm film
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
@@ -686,6 +810,11 @@ node_update {
             AiRenderAbort();
        }
    }
+
+   // this seems to work!
+   std::string lensDataFileName;
+   lensDataFileName = "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat";
+   readTabularLensData(lensDataFileName, ld);
 }
 
 node_finish {
@@ -698,10 +827,12 @@ node_finish {
 
 
 camera_create_ray {
+
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
-
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
+
+    bool kolb = false;
 
     AtPoint p;
     p.x = input->sx * camera->tan_fov;
@@ -735,43 +866,48 @@ camera_create_ray {
         lensU = lensU * camera->apertureRadius;
         lensV = lensV * camera->apertureRadius;
 
-        // Compute point on plane of focus, intersection on z axis
-        float intersection = std::abs(_focalDistance / output->dir.z);
-        AtPoint focusPoint = output->dir * intersection;
-
         // update arnold ray origin
         output->origin.x = lensU;
         output->origin.y = lensV;
         output->origin.z = 0.0;
 
-        // update arnold ray direction, normalize
-        output->dir = AiV3Normalize(focusPoint - output->origin);
+        if (!kolb){
+            // Compute point on plane of focus, intersection on z axis
+            float intersection = std::abs(_focalDistance / output->dir.z);
+            AtPoint focusPoint = output->dir * intersection;
 
-        // Optical Vignetting (CAT EYE EFFECT)
-        if (_opticalVignettingDistance > 0.0f){
-            // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
-            AtPoint opticalVignetPoint;
-            opticalVignetPoint = output->dir * _opticalVignettingDistance;
+            // update arnold ray direction, normalize
+            output->dir = AiV3Normalize(focusPoint - output->origin);
 
-            // re-center point
-            opticalVignetPoint -= output->origin;
+            // Optical Vignetting (CAT EYE EFFECT)
+            if (_opticalVignettingDistance > 0.0f){
+                // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
+                AtPoint opticalVignetPoint;
+                opticalVignetPoint = output->dir * _opticalVignettingDistance;
 
-            // find hypotenuse of x, y points.
-            float pointHypotenuse = sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
+                // re-center point
+                opticalVignetPoint -= output->origin;
 
-            // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
-            float virtualApertureTrueRadius = camera->apertureRadius * _opticalVignettingRadius;
+                // find hypotenuse of x, y points.
+                float pointHypotenuse = sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
 
-            if (ABS(pointHypotenuse) > virtualApertureTrueRadius){
-                // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
-                output->weight = 0.0f;
+                // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
+                float virtualApertureTrueRadius = camera->apertureRadius * _opticalVignettingRadius;
+
+                if (ABS(pointHypotenuse) > virtualApertureTrueRadius){
+                    // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
+                    output->weight = 0.0f;
+                }
+
+                // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
+                // adding weight to opposite edges to get nice rim on the highlights
+                else if (ABS(pointHypotenuse) < virtualApertureTrueRadius && ABS(pointHypotenuse) > (virtualApertureTrueRadius - _highlightWidth)){
+                    output->weight *= _highlightStrength * (1 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) * sqrt(input->sx * input->sx + input->sy * input->sy);
+                }
             }
+        }
+        else if(kolb){
 
-            // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
-            // adding weight to opposite edges to get nice rim on the highlights
-            else if (ABS(pointHypotenuse) < virtualApertureTrueRadius && ABS(pointHypotenuse) > (virtualApertureTrueRadius - _highlightWidth)){
-                output->weight *= _highlightStrength * (1 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) * sqrt(input->sx * input->sx + input->sy * input->sy);
-            }
         }
     }
 

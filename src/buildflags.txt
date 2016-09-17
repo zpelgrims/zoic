@@ -1,0 +1,27 @@
+# ARNOLD OWN SHADERS --- STILL NEEDS TO BE SET UP!!!!
+
+export ZENOCAMERA="/Volumes/ZENO_2016/projects/zoic"
+
+alias buildCamera="g++ -std=c++11 -I"/Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/include" -L"/Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/bin" -lai -DNO_OIIO -dynamiclib $ZENOCAMERA/src/zoic.cpp -o $ZENOCAMERA/src/zoic.dylib"
+
+#alias buildCamera="g++ -std=c++11 -o $ZENOCAMERA/src/zoic.os -c -fPIC -DNO_OIIO -D_LINUX -I/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/include $ZENOCAMERA/src/zoic.cpp -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff; g++ -o $ZENOCAMERA/src/zoic.so -shared $ZENOCAMERA/src/zoic.os -DNO_OIIO -L/run/media/i7210038/ZENO_MAJOR/Dropbox/majorproject/data/solidangle/Arnold-4.2.11.0-linux/bin -lai -L/usr/lib64 -lOpenImageIO -L/opt/appleseed/lib -ltiff"
+
+
+alias renderCamera="/Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/bin/kick -i /Volumes/ZENO_2016/projects/zoic/tests/arnold/lights.ass -g 2.2 -v 2 -l Applications/solidangle/mtoa/2017/shaders -o /Volumes/ZENO_2016/projects/zoic/tests/images/testScene_lights.exr -dp"
+
+export ARNOLD_PLUGIN_PATH=$ARNOLD_PLUGIN_PATH:$ZENOCAMERA"/src"
+export MTOA_TEMPLATES_PATH=$MTOA_TEMPLATES_PATH:"/Volumes/ZENO_2016/projects/zoic/maya/ae"
+
+
+
+
+WINDOWS:
+
+set ZENOCAMERA="F:/projects/zoic"
+
+
+
+g++ -std=gnu++11 -I"F:/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/include" -L"F:/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/bin" -lai -DNO_OIIO -shared F:/projects/zoic/src/zoic.cpp -o F:/projects/zoic/src/zoic.dll -lpthread
+
+g++ -std=gnu++11 -I"F:/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/include" -L"F:/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/bin" -lai -DNO_OIIO -c F:/projects/zoic/src/zoic.cpp;
+g++ -std=gnu++11 -shared -o F:/projects/zoic/src/zoic.dll F:/projects/zoic/src/zoic.o -Wl, --out-implib, F:/projects/zoic/src/libexample_dll.a; s

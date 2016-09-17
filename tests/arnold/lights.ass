@@ -77,12 +77,12 @@ sky
 {
  name aiSky
  color aiImage1
- intensity 10
+ intensity 5
  visibility 243
  opaque_alpha on
  format "latlong"
  X_angle -0
- Y_angle -0
+ Y_angle -65
  Z_angle -0
  X 1 0 0
  Y 0 1 0
@@ -110,7 +110,7 @@ driver_exr
 image
 {
  name aiImage1
- filename "tests/images/night2.pfm"
+ filename "/Volumes/ZENO_2016/projects/zoic/tests/images/cityscape_night.exr"
  filter "smart_bicubic"
  mipmap_bias 0
  single_channel off
