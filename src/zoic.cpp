@@ -880,7 +880,8 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
     AtVector hit_point_normal;
     AtVector sphere_center;
     double summedThickness;
-    double apertureRadius = 10.0;
+    // obviously change this to a variable
+    double apertureRadius = 20.0;
     bool lensElementAperture;
 
     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
@@ -1113,6 +1114,9 @@ camera_create_ray {
         //output->dir = AiV3Normalize(output->dir - output->origin);
 
         traceThroughLensElements(&output->origin, &output->dir, &output->weight, &ld, input->lensx, input->lensy);
+
+        // flip ray direction
+        output->dir *= -1.0;
     }
 
     // control to go light stops up and down
