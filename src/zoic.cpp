@@ -84,6 +84,7 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 #define _useImage  (params[10].BOOL)
 #define _bokehPath (params[11].STR)
 #define _exposureControl (params[12].FLT)
+#define _kolb (params[13].BOOL)
 
 
 struct arrayCompare{
@@ -594,8 +595,6 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
     *dy = radius * std::sin(theta);
 }
 
-// ---
-
 
 
 struct Lensdata{
@@ -603,6 +602,7 @@ struct Lensdata{
     std::vector<double> lensThickness;
     std::vector<double> lensIOR;
     std::vector<double> lensAperture;
+    double apertureDistance;
 
 } ld;
 
@@ -901,12 +901,8 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
         // set hitpoint to be the new origin
         *ray_origin = hit_point;
-        //AiMsgInfo("hitpoint: %f, %f, %f", hit_point.x, hit_point.y, hit_point.z);
 
         double hitPointHypotenuse = sqrt(hit_point.x * hit_point.x + hit_point.y * hit_point.y);
-
-        //AiMsgInfo("ld->lensAperture, %f", ld->lensAperture[i-1]/2.0);
-        //AiMsgInfo("ld->lensRadiusCurvature[i], %f", ld->lensRadiusCurvature[i]);
 
 
         if(hitPointHypotenuse > (ld->lensAperture[i]/2.0)){
@@ -931,14 +927,10 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
             tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal);
         }
 
-        //AiMsgInfo("tmpRayDirection: %f, %f, %f", tmpRayDirection.x, tmpRayDirection.y, tmpRayDirection.z);
-        *ray_direction = tmpRayDirection * 1000.0;
+        *ray_direction = tmpRayDirection;
 
     }
 }
-
-
-
 
 
 
@@ -956,6 +948,7 @@ node_parameters {
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); //bokeh shape image location
     AiParameterFLT("exposureControl", 0.0f);
+    AiParameterBOOL("kolb", true);
 }
 
 
@@ -987,15 +980,28 @@ node_update {
        }
     }
 
-    // read in lens data file
-    std::string lensDataFileName;
-    lensDataFileName = "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat";
-    readTabularLensData(lensDataFileName, &ld);
+    if (_kolb){
+        // read in lens data file
+        std::string lensDataFileName;
+        lensDataFileName = "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat";
+        readTabularLensData(lensDataFileName, &ld);
 
-    // change number for variable
-    // shift first lens element (and all others consequently) so that
-    // the image distance at a certain object distance falls on the film plane
-    ld.lensThickness[0] -= calculateImageDistance(2000.0, &ld);
+        // change number for variable
+        // shift first lens element (and all others consequently) so that
+        // the image distance at a certain object distance falls on the film plane
+        ld.lensThickness[0] -= calculateImageDistance(3000.0, &ld);
+
+        // find how far the aperture is from the film plane
+        ld.apertureDistance = 0.0;
+        for(int i = 0; i < ld.lensRadiusCurvature.size(); i++){
+            ld.apertureDistance += ld.lensThickness[i];
+            if(ld.lensRadiusCurvature[i] == 0.0 || ld.lensRadiusCurvature[i] == 99999.0){
+                AiMsgInfo("\x1b[1;36mAperture distance after lens shift = [%f]\e[0m", ld.apertureDistance);
+                break;
+            }
+        }
+    }
+
 }
 
 node_finish {
@@ -1012,15 +1018,17 @@ camera_create_ray {
     const AtParamValue* params = AiNodeGetParams(node);
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
 
-    bool kolb = true;
 
     // chang this to an enum, thinlens, raytraced
-    if(!kolb){
+    if(!_kolb){
+
+        // create point on lens
         AtPoint p;
         p.x = input->sx * camera->tan_fov;
         p.y = input->sy * camera->tan_fov;
         p.z = 1.0;
 
+        // compute direction
         output->dir = AiV3Normalize(p - output->origin);
 
         // now looking down -Z
@@ -1030,6 +1038,7 @@ camera_create_ray {
         bool tmpUseDof = false;
         //if (_useDof == true) {
         if (tmpUseDof == true) {
+
             // Initialize point on lens
             float lensU = 0.0f;
             float lensV = 0.0f;
@@ -1042,20 +1051,14 @@ camera_create_ray {
                 camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
             }
 
-            // this creates a square bokeh!
-            // lensU = input->lensx * apertureRadius;
-            // lensV = input->lensy * apertureRadius;
-
             // scale new lens coordinates by the aperture radius
             lensU = lensU * camera->apertureRadius;
             lensV = lensV * camera->apertureRadius;
 
             // update arnold ray origin
-            // enable again to enable DOF
             output->origin.x = lensU;
             output->origin.y = lensV;
             output->origin.z = 0.0;
-
 
             // Compute point on plane of focus, intersection on z axis
             float intersection = std::abs(_focalDistance / output->dir.z);
@@ -1091,22 +1094,12 @@ camera_create_ray {
         }
     }
 
-    // defo not working yet, not sure where it fails
-    if(kolb){
+    // only working half arsed right now, many things might be wrong.
+    if(_kolb){
 
         output->origin.x = (input->sx) * 36.0;
         output->origin.y = (input->sy) * 24.0;
         output->origin.z = 0.0;
-
-        // find how far the aperture is
-        // compute this once instead
-        float apertureDistance = 0.0;
-        for(int i = 0; i < ld.lensRadiusCurvature.size(); i++){
-            apertureDistance += ld.lensThickness[i];
-            if(ld.lensRadiusCurvature[i] == 0.0 || ld.lensRadiusCurvature[i] == 99999.0){
-                break;
-            }
-        }
 
         // determine in which direction to shoot the rays
         float lensU, lensV = 0.0;
@@ -1114,21 +1107,13 @@ camera_create_ray {
 
         output->dir.x = lensU;// * 10.0; //change to proper aperture radius
         output->dir.y = lensV;// * 10.0;
-        output->dir.z = apertureDistance;
+        output->dir.z = ld.apertureDistance;
 
         //output->dir.y *= -1.0;
-
         //output->dir = AiV3Normalize(output->dir - output->origin);
 
-
-        //AiMsgInfo("ray_direction: %f, %f, %f",ray_direction->x, ray_direction->y, ray_direction->z);
-        //AiMsgInfo("output->origin[%f]: %f, %f, %f", input->lensx, output->origin.x, output->origin.y, output->origin.z);
-
         traceThroughLensElements(&output->origin, &output->dir, &output->weight, &ld, input->lensx, input->lensy);
-        //AiMsgInfo("output->dir[%f]: %f, %f, %f", input->lensx, output->dir.x, output->dir.y, output->dir.z);
     }
-
-    //AiMsgInfo("input sx, sy: %f, %f", input->lensx, input->lensy);
 
     // control to go light stops up and down
     float e2 = _exposureControl * _exposureControl;
@@ -1138,28 +1123,6 @@ camera_create_ray {
     else if (_exposureControl < 0){
         output->weight *= 1.0f / (1.0f + e2);
     }
-
-
-    /*
-    // not sure if needed, but can't hurt. Taken from solidangle website.
-    // ----------------------------------------------------------------------------------------------
-    // scale derivatives
-    float dsx = input->dsx * camera->tan_fov;
-    float dsy = input->dsy * camera->tan_fov;
-
-    AtVector d = p;  // direction vector == point on the image plane
-    float d_dot_d = AiV3Dot(d, d);
-    float temp = 1.0f / sqrtf(d_dot_d * d_dot_d * d_dot_d);
-
-    // already initialized to 0's, only compute the non zero coordinates
-    output->dDdx.x = (d_dot_d * dsx - (d.x * dsx) * d.x) * temp;
-    output->dDdx.y = (              - (d.x * dsx) * d.y) * temp;
-    output->dDdx.z = (              - (d.x * dsx) * d.z) * temp;
-    output->dDdy.x = (              - (d.y * dsy) * d.x) * temp;
-    output->dDdy.y = (d_dot_d * dsy - (d.y * dsy) * d.y) * temp;
-    output->dDdy.z = (              - (d.y * dsy) * d.z) * temp;
-    // ----------------------------------------------------------------------------------------------
-    */
 }
 
 
