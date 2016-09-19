@@ -164,7 +164,7 @@ public:
 
 #ifdef NO_OIIO
 
-        AiMsgInfo("Reading image using Arnold API: %s", bokeh_kernel_filename);
+        AiMsgInfo("\x1b[1;36m[ZOIC] Reading image using Arnold API: %s\e[0m", bokeh_kernel_filename);
 
         AtString path(bokeh_kernel_filename);
 
@@ -189,7 +189,7 @@ public:
 
 #else
 
-        AiMsgInfo("Reading image using OpenImageIO: %s", bokeh_kernel_filename);
+        AiMsgInfo("\x1b[1;36m[ZOIC] Reading image using OpenImageIO: %s\e[0m", bokeh_kernel_filename);
 
         //Search for an ImageIO plugin that is capable of reading the file ("foo.jpg"), first by
         //trying to deduce the correct plugin from the file extension, but if that fails, by opening
@@ -217,10 +217,10 @@ public:
 
 #endif
 
-        AiMsgInfo("Image Width: %d", x);
-        AiMsgInfo("Image Height: %d", y);
-        AiMsgInfo("Image Channels: %d", nchannels);
-        AiMsgInfo("Total amount of pixels to process: %d", x * y);
+        AiMsgInfo("\x1b[1;36m[ZOIC] Image Width: %d\e[0m", x);
+        AiMsgInfo("\x1b[1;36m[ZOIC] Image Height: %d\e[0m", y);
+        AiMsgInfo("\x1b[1;36m[ZOIC] Image Channels: %d\e[0m", nchannels);
+        AiMsgInfo("\x1b[1;36m[ZOIC] Total amount of pixels to process: %d\e[0m", x * y);
 
         DEBUG_ONLY({
             // print out raw pixel data
@@ -457,7 +457,7 @@ public:
     void bokehSample(float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
 
         if (!isValid()){
-            AiMsgWarning("Invalid bokeh image data.");
+            AiMsgWarning("[ZOIC] Invalid bokeh image data.");
             *dx = 0.0f;
             *dy = 0.0f;
             return;
@@ -761,9 +761,6 @@ AtVector calculateTransmissionVector(double ior1, double ior2, AtVector incident
 
     double cosT = sqrt(std::abs(1.0 - cs2));
 
-    //transmissionVector.x = incidentVector.x * eta + normalVector.x * (eta * c1 - cosT);
-    //transmissionVector.y = incidentVector.y * eta + normalVector.y * (eta * c1 - cosT);
-    //transmissionVector.z = incidentVector.z * eta + normalVector.z * (eta * c1 - cosT);
     transmissionVector = (incidentVector * eta) + (normalVector * ((eta * c1) - cosT));
 
     return transmissionVector;
