@@ -7,6 +7,13 @@
 
 // (C) Zeno Pelgrims, www.zenopelgrims.com
 
+
+// TODO
+
+// Make sure all units are the same (eg kolb is in mm whilst thin lens is in cm..)
+// Max aperture is specified in lens description, so clamp when user tries to go wider, also give feedback about this.
+
+
 #include <ai.h>
 #include <cstring>
 #include <cstdlib>
@@ -603,7 +610,8 @@ struct Lensdata{
     std::vector<double> lensIOR;
     std::vector<double> lensAperture;
     double apertureDistance;
-
+    int vignettedRays, succesRays;
+    float xres, yres;
 } ld;
 
 
@@ -624,15 +632,15 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     int lensDataCounter = 1;
 
 
-    AiMsgInfo("\x1b[1;36m##############################################\e[0m");
-    AiMsgInfo("\x1b[1;36m############# READING LENS DATA ##############\e[0m");
-    AiMsgInfo("\x1b[1;36m##############################################\e[0m");
-    AiMsgInfo("\x1b[1;36mIf you're reading this, welcome to the nerd club :-D\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] ##############################################\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] ############# READING LENS DATA ##############\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] ##############################################\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] If you're reading this, welcome to the nerd club :-D\e[0m");
 
     while (getline(lensDataFile, line))
     {
         if (line.length() == 0 || line[0] == '#'){
-            AiMsgInfo("\x1b[1;36mComment or empty line, skipping line\e[0m");
+            AiMsgInfo("\x1b[1;36m[ZOIC] Comment or empty line, skipping line\e[0m");
         }
         else {
             iss << line;
@@ -640,7 +648,7 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
             // put values (converting from string to float) into the vectors
             while (getline(iss, token, '\t') ){
                 if (token == " "){
-                   AiMsgError("Please make sure your .dat file only contains TAB spacings.");
+                   AiMsgError("[ZOIC] Please make sure your .dat file only contains TAB spacings.");
                 }
 
                 if (lensDataCounter == 1){
@@ -671,17 +679,17 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
         }
     }
 
-    AiMsgInfo("\x1b[1;36m##############################################\e[0m");
-    AiMsgInfo("\x1b[1;36m# ROC \t Thickness \t IOR \t Aperture #\e[0m");
-    AiMsgInfo("\x1b[1;36m##############################################\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] ##############################################\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] # ROC \t Thickness \t IOR \t Aperture #\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] ##############################################\e[0m");
 
     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
-        AiMsgInfo("\x1b[1;36m%f    %f    %f    %f\e[0m", ld->lensRadiusCurvature[i], ld->lensThickness[i], ld->lensIOR[i], ld->lensAperture[i]);
+        AiMsgInfo("\x1b[1;36m[ZOIC] %f    %f    %f    %f\e[0m", ld->lensRadiusCurvature[i], ld->lensThickness[i], ld->lensIOR[i], ld->lensAperture[i]);
     }
 
-    AiMsgInfo("\x1b[1;36m##############################################\e[0m");
-    AiMsgInfo("\x1b[1;36m########### END READING LENS DATA ############\e[0m");
-    AiMsgInfo("\x1b[1;36m##############################################\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] ##############################################\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] ########### END READING LENS DATA ############\e[0m");
+    AiMsgInfo("\x1b[1;36m[ZOIC] ##############################################\e[0m");
 
     // reverse the datasets in the vector, since we will start with the rear-most lens element
     std::reverse(ld->lensRadiusCurvature.begin(),ld->lensRadiusCurvature.end());
@@ -867,8 +875,8 @@ double calculateImageDistance(double objectDistance, Lensdata *ld){
 
     }
 
-    AiMsgInfo("\x1b[1;36mObject distance = [%f]\e[0m", objectDistance);
-    AiMsgInfo("\x1b[1;36mImage distance = [%f]\e[0m", imageDistance);
+    AiMsgInfo("\x1b[1;36m[ZOIC] Object distance = [%f]\e[0m", objectDistance);
+    AiMsgInfo("\x1b[1;36m[ZOIC] Image distance = [%f]\e[0m", imageDistance);
     return imageDistance;
 }
 
@@ -907,10 +915,12 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
 
         if(hitPointHypotenuse > (ld->lensAperture[i]/2.0)){
+            ld->vignettedRays += 1;
             *weight = 0.0f;
         }
 
         if(lensElementAperture == true && hitPointHypotenuse > apertureRadius){
+            ld->vignettedRays += 1;
             *weight = 0.0f;
         }
 
@@ -929,7 +939,7 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
         }
 
         *ray_direction = tmpRayDirection;
-
+        ld->succesRays += 1;
     }
 }
 
@@ -976,12 +986,19 @@ node_update {
     // make probability functions of the bokeh image
     if (_useImage == true){
        if (!camera->image.read(_bokehPath)){
-            AiMsgError("Couldn't open image!");
+            AiMsgError("[ZOIC] Couldn't open image!");
             AiRenderAbort();
        }
     }
 
     if (_kolb){
+        // Update shaderData variables
+        AtNode* options = AiUniverseGetOptions();
+        ld.xres = static_cast<float>(AiNodeGetInt(options,"xres"));
+        ld.yres = static_cast<float>(AiNodeGetInt(options,"yres"));
+        AiMsgInfo("\x1b[1;36m[ZOIC] xres, yres = [%f, %f]\e[0m", ld.xres, ld.yres);
+
+
         // read in lens data file
         std::string lensDataFileName;
         lensDataFileName = "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat";
@@ -997,7 +1014,7 @@ node_update {
         for(int i = 0; i < ld.lensRadiusCurvature.size(); i++){
             ld.apertureDistance += ld.lensThickness[i];
             if(ld.lensRadiusCurvature[i] == 0.0 || ld.lensRadiusCurvature[i] == 99999.0){
-                AiMsgInfo("\x1b[1;36mAperture distance after lens shift = [%f]\e[0m", ld.apertureDistance);
+                AiMsgInfo("\x1b[1;36m[ZOIC] Aperture distance after lens shift = [%f]\e[0m", ld.apertureDistance);
                 break;
             }
         }
@@ -1007,6 +1024,10 @@ node_update {
 
 node_finish {
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
+
+    AiMsgInfo("\x1b[1;36m[ZOIC] Succesful rays = [%d]\e[0m", ld.succesRays);
+    AiMsgInfo("\x1b[1;36m[ZOIC] Vignetted rays = [%d]\e[0m", ld.vignettedRays);
+    AiMsgInfo("\x1b[1;36m[ZOIC] Succes Percentage = [%f]\e[0m", (float(ld.vignettedRays) / float(ld.succesRays) * 100.0));
 
     delete camera;
     AiCameraDestroy(node);
@@ -1101,6 +1122,33 @@ camera_create_ray {
         output->origin.x = (input->sx) * 36.0;
         output->origin.y = (input->sy) * 24.0;
         output->origin.z = 0.0;
+
+
+
+        /*
+
+        AtPoint2 s = {input->sx / ld.xres, input->sy / ld.yres};
+
+        float aspect = ld.xres / ld.yres;
+
+        float diagonal = sqrt(_sensorWidth * _sensorWidth + _sensorHeight *  _sensorHeight);
+
+        float x = sqrt(diagonal * diagonal / (1.0 + aspect * aspect));
+        float y = aspect * x;
+
+        AtPoint2 notsure1 = {float(-x / 2.0), float(-y / 2.0)};
+        AtPoint2 notsure2 = {float(x / 2.0), float(y / 2.0)};
+
+        // not sure about this whole lerp thing, how do i go about using this stuff?
+        AtPoint2 pFilm2;
+        pFilm2.x = AiV2Lerp(s.x, notsure1, notsure2);
+        pFilm2.y = AiV2Lerp(s.y, notsure1, notsure2);
+
+        output->origin = {-pFilm2.x, pFilm2.y, 0.0};
+
+        */
+
+
 
         // determine in which direction to shoot the rays
         float lensU, lensV = 0.0;
