@@ -535,8 +535,8 @@ public:
         float flippedColumn = recalulatedPixelRow * -1.0f;
 
         // send values back
-        *dx = (float)flippedRow / (float)x * 2;
-        *dy = (float)flippedColumn / (float)y * 2;
+        *dx = (float)flippedRow / (float)x * 2.0;
+        *dy = (float)flippedColumn / (float)y * 2.0;
     }
 };
 
@@ -612,6 +612,7 @@ struct Lensdata{
     double apertureDistance;
     int vignettedRays, succesRays;
     float xres, yres;
+    int oppsiteSideRay;
 } ld;
 
 
@@ -712,13 +713,15 @@ AtVector raySphereIntersection(AtVector ray_direction, AtVector ray_origin, AtVe
     double radius2 = sphere_radius * sphere_radius;
 
     // if intersection is in the opposite direction of the ray, don't worry about it
-    //if (tca < 0.0) {return vec3(0.0,0.0,0.0);}
+    if (tca < 0.0) {
+        ld.oppsiteSideRay +=1;
+        //AiMsgInfo("\x1b[1;36m[ZOIC] Intersection was on opposite side of the ray. Skipping.\e[0m");
+    }
 
     double d2 = AiV3Dot(L, L) - tca * tca;
 
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
-    // come up with a better way of killing the ray (already there in path tracer)
-    //if (d2 > radius2){return vec3(0.0,0.0,0.0);}
+    if (d2 > radius2){AiMsgInfo("\x1b[1;36m[ZOIC] Distance from ray to center of lensSphere is larger than it's radius. Skipping. \e[0m");}
 
     // pythagoras' theorem
     double thc = sqrt(radius2 - d2);
@@ -1024,7 +1027,10 @@ node_finish {
 
     AiMsgInfo("\x1b[1;36m[ZOIC] Succesful rays = [%d]\e[0m", ld.succesRays);
     AiMsgInfo("\x1b[1;36m[ZOIC] Vignetted rays = [%d]\e[0m", ld.vignettedRays);
-    AiMsgInfo("\x1b[1;36m[ZOIC] Succes Percentage = [%f]\e[0m", (float(ld.vignettedRays) / float(ld.succesRays) * 100.0));
+    AiMsgInfo("\x1b[1;36m[ZOIC] Vignetted Percentage = [%f]\e[0m", (float(ld.vignettedRays) / float(ld.succesRays) * 100.0));
+
+    AiMsgInfo("\x1b[1;36m[ZOIC] Rays on opposite side = [%d]\e[0m", ld.oppsiteSideRay);
+    AiMsgInfo("\x1b[1;36m[ZOIC] Opposite side rays percentage = [%f]\e[0m", float(ld.oppsiteSideRay)/float(ld.succesRays) * 100.0);
 
     delete camera;
     AiCameraDestroy(node);
