@@ -569,6 +569,7 @@ struct Lensdata{
     int vignettedRays, succesRays;
     float xres, yres;
     int totalInternalReflection;
+    float optimalAperture;
 } ld;
 
 
@@ -871,7 +872,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld){
 
 
 
-void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, float *weight, Lensdata *ld, float lensx, float lensy, float apertureRadius){
+void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, float *weight, Lensdata *ld, float apertureRadius){
 
     AtVector hit_point;
     AtVector hit_point_normal;
@@ -946,6 +947,60 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
 
 
+
+bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld, float apertureRadius){
+
+    AtVector hit_point;
+    AtVector hit_point_normal;
+    AtVector sphere_center;
+    double summedThickness;
+    bool lensElementAperture;
+
+
+    // I need to exit when the aperture stop gets hit
+
+    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+
+        // (condition) ? true : false;
+        i == 0 ? summedThickness = ld->lensThickness[0] : summedThickness += ld->lensThickness[i];
+
+        if(ld->lensRadiusCurvature[i] == 0.0 || ld->lensRadiusCurvature[i] == 99999.0){
+            ld->lensRadiusCurvature[i] = 99999.0;
+            lensElementAperture = true;
+        }
+
+        sphere_center.x = 0.0;
+        sphere_center.y = 0.0;
+        sphere_center.z = summedThickness - ld->lensRadiusCurvature[i];
+
+        hit_point = raySphereIntersection(ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
+
+        // set hitpoint to be the new origin
+        ray_origin = hit_point;
+
+        double hitPointHypotenuse = sqrt(hit_point.x * hit_point.x + hit_point.y * hit_point.y);
+
+        if(lensElementAperture == true && hitPointHypotenuse > apertureRadius){
+            return 0;
+        }
+
+        hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
+
+        AtVector tmpRayDirection;
+
+        // if ior1 and ior2 are not the same, calculate new ray direction vector
+        if(ld->lensIOR[i] != ld->lensIOR[i+1]){
+            tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true);
+        }
+
+        ray_direction = tmpRayDirection;
+    }
+
+    return 1;
+}
+
+
+
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6f); // 35mm film
     AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
@@ -1010,7 +1065,7 @@ node_update {
         if (ld.lensRadiusCurvature.size() == 0){
             AiMsgError("[ZOIC] Failed to read lens data file.");
             AiMsgError("[ZOIC] ... Is it the path correct?");
-            AiMsgError("[ZOIC] ... Does it have 4 columns?");
+            AiMsgError("[ZOIC] ... Does it have 4 tabbed columns?");
             exit (EXIT_FAILURE);
         }
 
@@ -1031,17 +1086,23 @@ node_update {
             }
         }
 
-        // search for ideal max coordinates to shoot rays to, by tracing test rays and seeing which one fails
-        // give this a better description lololol
+        // search for ideal max height to shoot rays to on first lens element, by tracing test rays and seeing which one fails
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
-        int sampleCount = 64;
+        // and I don't think it does..
+
+        int sampleCount = 1024;
         AtVector sampleOrigin = {0.0, 0.0, 0.0};
         for (int i = 0; i < sampleCount; i++){
             float heightVariation = ld.lensAperture[0] / float(sampleCount);
             AtVector sampleDirection = {0.0, heightVariation * float(i), float(ld.lensThickness[0])};
-            AiMsgInfo("[ZOIC] SampleDirection.y = [%f]", sampleDirection.y);
+            //AiMsgInfo("[ZOIC] SampleDirection.y = [%f]", sampleDirection.y);
 
-            //traceThroughLensElements(sampleOrigin, sampleDirection, &output->weight, &ld, input->lensx, input->lensy, _kolbApertureRadius);
+            if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld, _kolbApertureRadius)){
+                AiMsgInfo("[ZOIC] Positive failure at sample [%d] out of [%d]", i, sampleCount);
+                ld.optimalAperture = sampleDirection.y - heightVariation;
+                AiMsgInfo("[ZOIC] Optimal max height to shoot rays to on first lens element = [%f]", ld.optimalAperture);
+                break;
+            }
 
         }
     }
@@ -1177,7 +1238,12 @@ camera_create_ray {
             output->dir.z = ld.lensThickness[0];
         }
 
-        traceThroughLensElements(&output->origin, &output->dir, &output->weight, &ld, input->lensx, input->lensy, _kolbApertureRadius);
+        output->dir.x = lensU * ld.optimalAperture; //change to proper aperture radius
+        output->dir.y = lensV * ld.optimalAperture;
+        output->dir.z = ld.lensThickness[0];
+
+
+        traceThroughLensElements(&output->origin, &output->dir, &output->weight, &ld, _kolbApertureRadius);
 
         // flip ray direction
         output->dir *= -1.0;
