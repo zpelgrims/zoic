@@ -566,14 +566,14 @@ struct Lensdata{
     std::vector<double> lensThickness;
     std::vector<double> lensIOR;
     std::vector<double> lensAperture;
-                double userApertureRadius;
+    double userApertureRadius;
     int apertureElement;
-                int vignettedRays, succesRays;
-                int totalInternalReflection;
+    int vignettedRays, succesRays;
+    int totalInternalReflection;
     double apertureDistance;
     float xres, yres;
     float optimalAperture;
-                float focalLengthRatio;
+    float focalLengthRatio;
 } ld;
 
 
