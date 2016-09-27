@@ -36,7 +36,8 @@ class aiZoicTemplate(templates.AttributeTemplate):
         self.addControl("aiFStop", label="F-stop")
         self.addControl("aiFocalDistance", label="Focus distance (cm)")
         self.addSeparator()
-        self.addControl("aiOpticalVignetting", label="Optical Vignetting")
+        self.addControl("aiOpticalVignettingDistance", label="Optical Vignetting Distance")
+        self.addControl("aiOpticalVignettingRadius", label="Optical Vignetting Radius")
         self.addControl("aiHighlightWidth", label="Highlight Width")
         self.addControl("aiHighlightStrength", label="Highlight Strength")
         self.addSeparator()
@@ -44,5 +45,9 @@ class aiZoicTemplate(templates.AttributeTemplate):
         self.addCustom('aiBokehPath', self.filenameNew, self.filenameReplace)
         self.addSeparator()
         self.addControl("aiExposureControl", label="Exposure")
+        self.addSeparator()
+        self.addControl("aiKolb", label="Kolb")
+        self.addControl("aiKolbApertureRadius", label="Aperture Radius Kolb")
+
 
 templates.registerTranslatorUI(aiZoicTemplate, "camera", "zoic")
