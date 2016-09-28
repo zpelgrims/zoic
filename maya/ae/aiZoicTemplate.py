@@ -6,12 +6,12 @@ import mtoa.ui.ae.utils as aeUtils
 class aiZoicTemplate(templates.AttributeTemplate):
 
     def filenameEditBokeh(self, mData) :
-            attr = self.nodeAttr('aiBokehPath')
-            cmds.setAttr(attr,mData,type="string")
+        attr = self.nodeAttr('aiBokehPath')
+        cmds.setAttr(attr,mData,type="string")
 
     def filenameEditLensData(self, mData) :
-            attr = self.nodeAttr('aiLensDataPath')
-            cmds.setAttr(attr,mData,type="string")
+        attr = self.nodeAttr('aiLensDataPath')
+        cmds.setAttr(attr,mData,type="string")
 
     def LoadFilenameButtonPush(self, *args):
         basicFilter = 'All Files (*.*)'

@@ -21,6 +21,5 @@ SOURCES += \
 HEADERS += \
 
 DISTFILES += \
-    ../ae/aiZoicTemplate.py \
-    ../bin/zoic.mtd \
-    buildflags.txt
+    /Volumes/ZENO_2016/projects/zoic/maya/ae/aiZoicTemplate.py \
+    /Volumes/ZENO_2016/projects/zoic/src/zoic.mtd
