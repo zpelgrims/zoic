@@ -1,5 +1,5 @@
 # zoic
-Extended camera shader for the Arnold renderer.
+Extended camera shader for the ever-awesome Arnold renderer.
 
 ## Requirements
 
