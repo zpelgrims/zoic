@@ -86,19 +86,24 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 #define _sensorWidth  (params[0].FLT)
 #define _sensorHeight  (params[1].FLT)
 #define _focalLength  (params[2].FLT)
-#define _useDof  (params[3].BOOL)
-#define _fStop  (params[4].FLT)
-#define _focalDistance  (params[5].FLT)
-#define _opticalVignettingDistance  (params[6].FLT)
-#define _opticalVignettingRadius  (params[7].FLT)
-#define _highlightWidth  (params[8].FLT)
-#define _highlightStrength  (params[9].FLT)
-#define _useImage  (params[10].BOOL)
-#define _bokehPath (params[11].STR)
-#define _exposureControl (params[12].FLT)
-#define _kolb (params[13].BOOL)
-#define _lensDataPath (params[14].STR)
-#define _kolbSamplingMethod (params[15].BOOL)
+#define _fStop  (params[3].FLT)
+#define _focalDistance  (params[4].FLT)
+
+#define _useImage  (params[5].BOOL)
+#define _bokehPath (params[6].STR)
+
+#define _kolb (params[7].BOOL)
+#define _lensDataPath (params[8].STR)
+#define _kolbSamplingMethod (params[9].BOOL)
+
+#define _useDof  (params[10].BOOL)
+#define _opticalVignettingDistance  (params[11].FLT)
+#define _opticalVignettingRadius  (params[12].FLT)
+#define _highlightWidth  (params[13].FLT)
+#define _highlightStrength  (params[14].FLT)
+
+#define _exposureControl (params[15].FLT)
+
 
 
 struct arrayCompare{
@@ -329,7 +334,7 @@ public:
                 summedRowValues[i] += normalizedPixelValues[k];
             }
 
-            DEBUG_ONLY(std::cout << "Summed Values row [" << i << "]: " << summedRowValues[i] << std::endl);
+           DEBUG_ONLY(std::cout << "Summed Values row [" << i << "]: " << summedRowValues[i] << std::endl);
         }
 
 
@@ -467,7 +472,7 @@ public:
             AiMsgWarning("[ZOIC] Invalid bokeh image data.");
             *dx = 0.0f;
             *dy = 0.0f;
-            return;
+           return;
         }
 
         // print random number between 0 and 1
@@ -593,7 +598,7 @@ inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
     if (sx == 0.0f && sy == 0.0f){
        *dx=0.0f;
         *dy = 0.0f;
-    }
+   }
     if (sx >= -sy) {
         if (sx > sy) {
             // Handle first region of disk

@@ -5,8 +5,12 @@ import mtoa.ui.ae.utils as aeUtils
 
 class aiZoicTemplate(templates.AttributeTemplate):
 
-    def filenameEdit(self, mData) :
+    def filenameEditBokeh(self, mData) :
             attr = self.nodeAttr('aiBokehPath')
+            cmds.setAttr(attr,mData,type="string")
+
+    def filenameEditLensData(self, mData) :
+            attr = self.nodeAttr('aiLensDataPath')
             cmds.setAttr(attr,mData,type="string")
 
     def LoadFilenameButtonPush(self, *args):
@@ -16,8 +20,14 @@ class aiZoicTemplate(templates.AttributeTemplate):
             self.filenameEdit(ret[0])
             cmds.textFieldButtonGrp("filenameGrp", edit=True, text=ret[0])
 
-    def filenameNew(self, nodeName):
-        path = cmds.textFieldButtonGrp("filenameGrp", label="Bokeh image location", changeCommand=self.filenameEdit, width=300)
+    def filenameNewBokeh(self, nodeName):
+        path = cmds.textFieldButtonGrp("filenameGrp", label="Lens data location", changeCommand=self.filenameEditBokeh, width=300)
+        cmds.textFieldButtonGrp(path, edit=True, text=cmds.getAttr(nodeName))
+        cmds.textFieldButtonGrp(path, edit=True, buttonLabel="...",
+        buttonCommand=self.LoadFilenameButtonPush)
+
+    def filenameNewLensData(self, nodeName):
+        path = cmds.textFieldButtonGrp("filenameGrp", label="Bokeh image location", changeCommand=self.filenameEditLensData, width=300)
         cmds.textFieldButtonGrp(path, edit=True, text=cmds.getAttr(nodeName))
         cmds.textFieldButtonGrp(path, edit=True, buttonLabel="...",
         buttonCommand=self.LoadFilenameButtonPush)
@@ -31,23 +41,36 @@ class aiZoicTemplate(templates.AttributeTemplate):
         self.addControl("aiSensorWidth", label="Sensor Width (cm)")
         self.addControl("aiSensorHeight", label="Sensor Height (cm)")
         self.addControl("aiFocalLength", label="Focal Length (mm)")
-        self.addSeparator()
-        self.addControl("aiUseDof", label="Enable depth of field")
         self.addControl("aiFStop", label="F-stop")
         self.addControl("aiFocalDistance", label="Focus distance (cm)")
+
         self.addSeparator()
+
+        self.addControl("aiUseImage", label="Enable Image based bokeh")
+        self.addCustom('aiBokehPath', self.filenameNewBokeh, self.filenameReplace)
+
+        self.addSeparator()
+
+        self.addControl("aiKolb", label="Camera model [off = thin-lens / on = raytraced]")
+
+        self.addSeparator()
+
+        self.addCustom('aiLensDataPath', self.filenameNewLensData, self.filenameReplace)
+        self.addControl("aiKolbSamplingMethod", label="Raytraced Sampling Method")
+
+        self.addSeparator()
+
+        self.addControl("aiUseDof", label="Enable thin-lens depth of field")
         self.addControl("aiOpticalVignettingDistance", label="Optical Vignetting Distance")
         self.addControl("aiOpticalVignettingRadius", label="Optical Vignetting Radius")
         self.addControl("aiHighlightWidth", label="Highlight Width")
         self.addControl("aiHighlightStrength", label="Highlight Strength")
+
         self.addSeparator()
-        self.addControl("aiUseImage", label="Enable Image based bokeh")
-        self.addCustom('aiBokehPath', self.filenameNew, self.filenameReplace)
-        self.addSeparator()
+
         self.addControl("aiExposureControl", label="Exposure")
+
         self.addSeparator()
-        self.addControl("aiKolb", label="Kolb")
-        self.addControl("aiKolbApertureRadius", label="Aperture Radius Kolb")
 
 
 templates.registerTranslatorUI(aiZoicTemplate, "camera", "zoic")

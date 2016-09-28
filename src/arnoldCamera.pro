@@ -16,9 +16,7 @@ LIBS += \
     /Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/bin/libai.dylib \
 
 SOURCES += \
-    zoic.cpp \
-    camera_sandbox.cpp \
-    shadertoy_debugging.cpp
+    zoic.cpp
 
 HEADERS += \
 
