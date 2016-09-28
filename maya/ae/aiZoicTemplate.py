@@ -21,13 +21,13 @@ class aiZoicTemplate(templates.AttributeTemplate):
             cmds.textFieldButtonGrp("filenameGrp", edit=True, text=ret[0])
 
     def filenameNewBokeh(self, nodeName):
-        path = cmds.textFieldButtonGrp("filenameGrp", label="Lens data location", changeCommand=self.filenameEditBokeh, width=300)
+        path = cmds.textFieldButtonGrp("filenameGrp", label="Bokeh image location", changeCommand=self.filenameEditBokeh, width=300)
         cmds.textFieldButtonGrp(path, edit=True, text=cmds.getAttr(nodeName))
         cmds.textFieldButtonGrp(path, edit=True, buttonLabel="...",
         buttonCommand=self.LoadFilenameButtonPush)
 
     def filenameNewLensData(self, nodeName):
-        path = cmds.textFieldButtonGrp("filenameGrp", label="Bokeh image location", changeCommand=self.filenameEditLensData, width=300)
+        path = cmds.textFieldButtonGrp("filenameGrp", label="Lens data location", changeCommand=self.filenameEditLensData, width=300)
         cmds.textFieldButtonGrp(path, edit=True, text=cmds.getAttr(nodeName))
         cmds.textFieldButtonGrp(path, edit=True, buttonLabel="...",
         buttonCommand=self.LoadFilenameButtonPush)
