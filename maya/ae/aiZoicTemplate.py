@@ -13,27 +13,38 @@ class aiZoicTemplate(templates.AttributeTemplate):
         attr = self.nodeAttr('aiLensDataPath')
         cmds.setAttr(attr,mData,type="string")
 
-    def LoadFilenameButtonPush(self, *args):
+    def LoadFilenameButtonPushBokeh(self, *args):
         basicFilter = 'All Files (*.*)'
         ret = cmds.fileDialog2(fileFilter=basicFilter, dialogStyle=2, cap='Load File',okc='Load',fm=4)
         if ret is not None and len(ret):
-            self.filenameEdit(ret[0])
-            cmds.textFieldButtonGrp("filenameGrp", edit=True, text=ret[0])
+            self.filenameEditBokeh(ret[0])
+            cmds.textFieldButtonGrp("filenameBokehGrp", edit=True, text=ret[0])
+
+    def LoadFilenameButtonPushLensData(self, *args):
+        basicFilter = 'All Files (*.*)'
+        ret = cmds.fileDialog2(fileFilter=basicFilter, dialogStyle=2, cap='Load File',okc='Load',fm=4)
+        if ret is not None and len(ret):
+            self.filenameEditLensData(ret[0])
+            cmds.textFieldButtonGrp("filenameLensDataGrp", edit=True, text=ret[0])
 
     def filenameNewBokeh(self, nodeName):
-        path = cmds.textFieldButtonGrp("filenameGrp", label="Bokeh image location", changeCommand=self.filenameEditBokeh, width=300)
+        path = cmds.textFieldButtonGrp("filenameBokehGrp", label="Bokeh image location", changeCommand=self.filenameEditBokeh, width=300)
         cmds.textFieldButtonGrp(path, edit=True, text=cmds.getAttr(nodeName))
         cmds.textFieldButtonGrp(path, edit=True, buttonLabel="...",
-        buttonCommand=self.LoadFilenameButtonPush)
+        buttonCommand=self.LoadFilenameButtonPushBokeh)
 
     def filenameNewLensData(self, nodeName):
-        path = cmds.textFieldButtonGrp("filenameGrp", label="Lens data location", changeCommand=self.filenameEditLensData, width=300)
+        path = cmds.textFieldButtonGrp("filenameLensDataGrp", label="Lens data location", changeCommand=self.filenameEditLensData, width=300)
         cmds.textFieldButtonGrp(path, edit=True, text=cmds.getAttr(nodeName))
         cmds.textFieldButtonGrp(path, edit=True, buttonLabel="...",
-        buttonCommand=self.LoadFilenameButtonPush)
+        buttonCommand=self.LoadFilenameButtonPushLensData)
 
-    def filenameReplace(self, nodeName):
-        cmds.textFieldButtonGrp("filenameGrp", edit=True, text=cmds.getAttr(nodeName) )
+    def filenameReplaceBokeh(self, nodeName):
+        cmds.textFieldButtonGrp("filenameBokehGrp", edit=True, text=cmds.getAttr(nodeName) )
+
+    def filenameReplaceLensData(self, nodeName):
+        cmds.textFieldButtonGrp("filenameLensDataGrp", edit=True, text=cmds.getAttr(nodeName) )
+
 
 
 
@@ -47,7 +58,7 @@ class aiZoicTemplate(templates.AttributeTemplate):
         self.addSeparator()
 
         self.addControl("aiUseImage", label="Enable Image based bokeh")
-        self.addCustom('aiBokehPath', self.filenameNewBokeh, self.filenameReplace)
+        self.addCustom('aiBokehPath', self.filenameNewBokeh, self.filenameReplaceBokeh)
 
         self.addSeparator()
 
@@ -55,7 +66,7 @@ class aiZoicTemplate(templates.AttributeTemplate):
 
         self.addSeparator()
 
-        self.addCustom('aiLensDataPath', self.filenameNewLensData, self.filenameReplace)
+        self.addCustom('aiLensDataPath', self.filenameNewLensData, self.filenameReplaceLensData)
         self.addControl("aiKolbSamplingMethod", label="Raytraced Sampling Method")
 
         self.addSeparator()

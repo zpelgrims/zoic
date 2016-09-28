@@ -88,20 +88,16 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 #define _focalLength  (params[2].FLT)
 #define _fStop  (params[3].FLT)
 #define _focalDistance  (params[4].FLT)
-
 #define _useImage  (params[5].BOOL)
 #define _bokehPath (params[6].STR)
-
 #define _kolb (params[7].BOOL)
 #define _lensDataPath (params[8].STR)
 #define _kolbSamplingMethod (params[9].BOOL)
-
 #define _useDof  (params[10].BOOL)
 #define _opticalVignettingDistance  (params[11].FLT)
 #define _opticalVignettingRadius  (params[12].FLT)
 #define _highlightWidth  (params[13].FLT)
 #define _highlightStrength  (params[14].FLT)
-
 #define _exposureControl (params[15].FLT)
 
 
@@ -1074,19 +1070,19 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6f); // 35mm film
     AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
     AiParameterFLT("focalLength", 100.0f); // distance between sensor and lens
-    AiParameterBOOL("useDof", false);
     AiParameterFLT("fStop", 1.4f);
     AiParameterFLT("focalDistance", 120.0f); // distance from lens to focal point
+    AiParameterBOOL("useImage", false);
+    AiParameterStr("bokehPath", ""); //bokeh shape image location
+    AiParameterBOOL("kolb", true);
+    AiParameterStr("lensDataPath", ""); // lens data file location
+    AiParameterBOOL("kolbSamplingMethod", true);
+    AiParameterBOOL("useDof", false);
     AiParameterFLT("opticalVignettingDistance", 0.0f); //distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 0.0f); // 1.0 - .. range float, to multiply with the actual aperture radius
     AiParameterFLT("highlightWidth", 0.2f);
     AiParameterFLT("highlightStrength", 10.0f);
-    AiParameterBOOL("useImage", false);
-    AiParameterStr("bokehPath", ""); //bokeh shape image location
     AiParameterFLT("exposureControl", 0.0f);
-    AiParameterBOOL("kolb", true);
-    AiParameterStr("lensDataPath", ""); // lens data file location
-    AiParameterBOOL("kolbSamplingMethod", true);
 }
 
 
@@ -1132,6 +1128,7 @@ node_update {
         std::string lensDataFileName;
         lensDataFileName = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/dgauss.100mm.dat";
         //lensDataFileName = "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat";
+        lensDataFileName = _lensDataPath;
         readTabularLensData(lensDataFileName, &ld);
 
         // bail out if something is incorrect with the vectors
