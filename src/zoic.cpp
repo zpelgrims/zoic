@@ -1,23 +1,29 @@
-// ZOIC - Extended Arnold camera shader with options for image based bokeh shapes and optical vignetting.
+// ZOIC - Extended Arnold camera shader with options for:
+// Refracting through lens elements read from real life lens data (physically accurate lens distortion and optical vignetting)
+// Image based bokeh shapes
+// Emperical optical vignetting using the thin-lens equation.
+
 
 // Special thanks to Marc-Antoine Desjardins for the help on the image sampling
-// Special thanks to Benedikt Bitterli for the information on optical vignetting
+// Special thanks to Benedikt Bitterli for the information on emperical optical vignetting
 // Special thanks to Tom Minor for the help with C++ (it was needed!)
 // Special thanks to Gaetan Guidet for the C++ cleanup on Github.
 
+
 // (C) Zeno Pelgrims, www.zenopelgrims.com
+
 
 
 // TODO
 
 // Get initial sampling coordinates right
+// get focus right (.. then it works..)
+// assign variable to height to shoot rays on
 // convert coordinate system in functions where i do the lineline intersection (x is z and z is x)
-// catch error when file is not there
 // Make sure all units are the same (eg kolb is in mm whilst thin lens is in cm..)
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // precompute as much as possible (sphere centers, ...)
-// change lens file path to variable when doing interface files
-// give better description
+
 
 #include <ai.h>
 #include <cstring>
@@ -494,7 +500,7 @@ public:
         // recalculate pixel row so that the center pixel is (0,0) - might run into problems with images of dimensions like 2x2, 4x4, 6x6, etc
         int recalulatedPixelRow = actualPixelRow - ((x - 1) / 2);
 
-        DEBUG_ONLY({
+       DEBUG_ONLY({
             // print values
             std::cout << "INDEX IN CDF ROW: " << r << std::endl;
             std::cout << "ACTUAL PIXEL ROW: " << actualPixelRow << std::endl;
@@ -575,6 +581,7 @@ struct Lensdata{
     float xres, yres;
     float optimalAperture;
     float focalLengthRatio;
+    float filmDiagonal;
 } ld;
 
 
@@ -583,7 +590,7 @@ struct Lensdata{
 // PBRT v2 source code  - Concentric disk sampling (Sampling the disk in a more uniform way than with random sampling)
 inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
     float radius; // radius
-    float theta; // angle
+   float theta; // angle
 
     // Map uniform random numbers to $[-1,1]^2$
     float sx = 2.0f * u1 - 1.0f;
@@ -709,7 +716,7 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
 void cleanupLensData(Lensdata *ld){
     for (int i = 0; i < ld->lensRadiusCurvature.size(); i++){
        // check if there is a 0.0 lensRadiusCurvature, which is the aperture.
-       if (ld->lensRadiusCurvature[i] == 0.0){
+      if (ld->lensRadiusCurvature[i] == 0.0){
            ld->apertureElement = i;
            AiMsgInfo("[ZOIC] Aperture is lens element number = [%d]", ld->apertureElement);
 
@@ -844,7 +851,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld){
 
         AtVector sphere_center;
         sphere_center.x = summedThickness_focus - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i];
-        sphere_center.y = 0.0;
+       sphere_center.y = 0.0;
         sphere_center.z = 0.0;
 
         AtVector hit_point = raySphereIntersection(ray_direction_focus, ray_origin_focus, sphere_center, ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], true, false);
@@ -926,13 +933,13 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
         AtVector tmpRayDirection;
 
-                               // if not last lens element
-                               if(i != ld->lensRadiusCurvature.size() - 1){
-                                               tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], *ray_direction, hit_point_normal, true);
-                                } else { // last lens element
-                                               // i assume the material outside the lens is air
-                                               tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true);
-                               }
+       // if not last lens element
+       if(i != ld->lensRadiusCurvature.size() - 1){
+            tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], *ray_direction, hit_point_normal, true);
+        } else { // last lens element
+            // assuming the material outside the lens is air
+            tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true);
+       }
 
         // check for total internal reflection case
         if (tmpRayDirection.x == 0.0 && tmpRayDirection.y == 0.0 && tmpRayDirection.z == 0.0){
@@ -942,7 +949,7 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
         *ray_direction = tmpRayDirection;
 
-                               // count succesful rays
+        // count succesful rays
         ld->succesRays += 1;
     }
 }
@@ -1022,6 +1029,56 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
 
 
 
+// watch out here, x is the z coordinate here and z is x.. (still need to convert)
+void traceThroughLensElementsTEST(Lensdata *ld){
+
+    double tracedFocalLength;
+    double focalPointDistance;
+    double principlePlaneDistance;
+    double summedThickness_fp = 0.0;
+
+    //this might not do in all cases, maybe find better way
+    float rayOriginHeight = ld->lensAperture[0] * 0.25;
+
+    AtVector ray_origin_fp = {0.0, 0.0, 0.0};
+    AtVector ray_direction_fp = {99999.0, rayOriginHeight, 0.0};
+
+    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+        i == 0 ? summedThickness_fp = ld->lensThickness[0] : summedThickness_fp += ld->lensThickness[i];
+
+        AtVector sphere_center;
+        sphere_center.x = summedThickness_fp - ld->lensRadiusCurvature[i];
+        sphere_center.y = 0.0;
+        sphere_center.z = 0.0;
+
+        AtVector hit_point = raySphereIntersection(ray_direction_fp, ray_origin_fp, sphere_center, ld->lensRadiusCurvature[i], false, false);
+
+        AtVector hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
+
+        if(i != ld->lensRadiusCurvature.size() - 1){
+            ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], ray_direction_fp, hit_point_normal, true);
+        } else { // last element in array
+            ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], 1.0, ray_direction_fp, hit_point_normal, true);
+
+            // find intersection point
+            AtVector axialStart = {0.0, 0.0, 0.0};
+            AtVector axialEnd = {99999.0, 0.0, 0.0};
+            AtVector lineDirection;
+            lineDirection.x = ray_origin_fp.x + ray_direction_fp.x * 1000.0;
+            lineDirection.y = ray_origin_fp.y + ray_direction_fp.y * 1000.0;
+            lineDirection.z = 0.0;
+
+            focalPointDistance = lineLineIntersection(axialStart, axialEnd, ray_origin_fp, lineDirection).x;
+            AiMsgInfo("[ZOIC] Focal point with origin 0 = [%f]", focalPointDistance);
+        }
+
+        // set hitpoint to be the new origin
+        ray_origin_fp = hit_point;
+    }
+}
+
+
+
 bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld){
 
     AtVector hit_point;
@@ -1070,14 +1127,14 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6f); // 35mm film
     AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
     AiParameterFLT("focalLength", 100.0f); // distance between sensor and lens
-    AiParameterFLT("fStop", 1.4f);
+    AiParameterFLT("fStop", 1.8f);
     AiParameterFLT("focalDistance", 120.0f); // distance from lens to focal point
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); //bokeh shape image location
     AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", ""); // lens data file location
-    AiParameterBOOL("kolbSamplingMethod", true);
-    AiParameterBOOL("useDof", false);
+    AiParameterBOOL("kolbSamplingMethod", false);
+    AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 0.0f); //distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 0.0f); // 1.0 - .. range float, to multiply with the actual aperture radius
     AiParameterFLT("highlightWidth", 0.2f);
@@ -1123,13 +1180,20 @@ node_update {
         ld.yres = static_cast<float>(AiNodeGetInt(options,"yres"));
         AiMsgInfo("[ZOIC] Image resolution = [%f, %f]", ld.xres, ld.yres);
 
+                               // not sure if this is the right way to do it.. probably more to it than this!
+        // these values seem to produce the same image as the other camera which is correct.. hey ho
+        ld.filmDiagonal = sqrt(_sensorWidth *_sensorWidth + _sensorHeight * _sensorHeight) * 4.25;
 
-        // read in lens data file
-        std::string lensDataFileName;
-        lensDataFileName = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/dgauss.100mm.dat";
-        //lensDataFileName = "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat";
-        lensDataFileName = _lensDataPath;
-        readTabularLensData(lensDataFileName, &ld);
+       // check if file is supplied
+       // string is const char* so have to do it the oldskool way
+       if ((_lensDataPath != NULL) && (_lensDataPath[0] == '\0')){
+           AiMsgError("[ZOIC] Lens Data Path is empty");
+           exit (EXIT_FAILURE);
+       } else {
+           AiMsgInfo("[ZOIC] Lens Data Path = [%s]", _lensDataPath);
+           readTabularLensData(_lensDataPath, &ld);
+       }
+
 
         // bail out if something is incorrect with the vectors
         if (ld.lensRadiusCurvature.size() == 0 ||
@@ -1155,6 +1219,7 @@ node_update {
             AiMsgWarning("[ZOIC] Clamping aperture radius from [%f] to [%f]", ld.userApertureRadius, ld.lensAperture[ld.apertureElement]);
             ld.userApertureRadius = ld.lensAperture[ld.apertureElement];
         }
+
 
         // find by how much all lens elements should be scaled
         ld.focalLengthRatio = _focalLength / kolbFocalLength;
@@ -1196,6 +1261,9 @@ node_update {
                 }
             }
         }
+
+        // just a test
+        traceThroughLensElementsTEST(&ld);
     }
 }
 
@@ -1226,7 +1294,7 @@ camera_create_ray {
         AtPoint p;
         p.x = input->sx * camera->tan_fov;
         p.y = input->sy * camera->tan_fov;
-        p.z = 1.0;
+       p.z = 1.0;
 
         // compute direction
         output->dir = AiV3Normalize(p - output->origin);
@@ -1292,11 +1360,9 @@ camera_create_ray {
 
     if(_kolb){
 
-        // not sure if this is the right way to do it.. probably more to it than this!
-        // these values seem to produce the same image as the other camera which is correct.. hey ho
-        float filmDiagonal = sqrt(_sensorWidth *_sensorWidth + _sensorHeight * _sensorHeight) * 0.425;
-        output->origin.x = input->sx * (filmDiagonal * 10.0);
-        output->origin.y = input->sy * (filmDiagonal * 10.0);
+        // determine origin of rays
+        output->origin.x = input->sx * (ld.filmDiagonal);
+        output->origin.y = input->sy * (ld.filmDiagonal);
         output->origin.z = 0.0;
 
 

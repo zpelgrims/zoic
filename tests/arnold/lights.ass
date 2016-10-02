@@ -25,9 +25,8 @@ options
 zoic
 {
  name perspShape
- sensorWidth 3.5999999
- sensorHeight 2.4000001
  bokehPath "tests/images/shapes/bokeh_18.jpg"
+ lensDataPath "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat"
  matrix
  0.312334925 0 -0.949972034 0
  0.153605282 -0.986840844 0.0505028479 0
