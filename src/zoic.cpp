@@ -57,7 +57,7 @@
 
 // tmp debug stuff
 #include <pngwriter.h>
-pngwriter png(1800, 800, .3,"/Users/zpelgrims/test.png");
+pngwriter png(1800, 800, 0.3,"/Volumes/ZENO_2016/projects/zoic/tests/images/lens_rays.png");
 
 int counter = 0;
 
@@ -610,8 +610,8 @@ struct Lensdata{
 
 
 struct DrawData{
-    std::vector<float> coordinates;
-    std::vector<float> points;
+    std::vector<double> coordinates;
+    std::vector<double> points;
 } dd;
 
 
@@ -764,26 +764,26 @@ void cleanupLensData(Lensdata *ld){
 // RAY SPHERE INTERSECTIONS
 AtVector raySphereIntersection(AtVector ray_direction, AtVector ray_origin, AtVector sphere_center, double sphere_radius, bool reverse, bool tracingRealRays){
 
-    ray_direction = AiV3Normalize(ray_direction);
+    AtVector norm_ray_direction = AiV3Normalize(ray_direction);
     AtVector L = sphere_center - ray_origin;
 
     // project the directionvector onto the distancevector
-    double tca = AiV3Dot(L, ray_direction);
+    double tca = AiV3Dot(L, norm_ray_direction);
 
     double radius2 = sphere_radius * sphere_radius;
     double d2 = AiV3Dot(L, L) - tca * tca;
 
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
-                // this is just some arbitrary value that I will use to check for errors
-    if (tracingRealRays && d2 > radius2){return {0.0, 0.0, 0.0};}
+    // this is just some arbitrary value that I will use to check for errors
+    if (tracingRealRays == true && d2 > radius2){return {0.0, 0.0, 0.0};}
 
     double thc = sqrt(radius2 - d2);
 
     if(!reverse){
-        return ray_origin + ray_direction * (tca + thc * std::copysign(1.0, sphere_radius));
+        return ray_origin + norm_ray_direction * (tca + thc * std::copysign(1.0, sphere_radius));
     }
     else{
-        return ray_origin + ray_direction * (tca - thc * copysign(1.0, sphere_radius));
+        return ray_origin + norm_ray_direction * (tca - thc * std::copysign(1.0, sphere_radius));
     }
 }
 
@@ -959,6 +959,17 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
         hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
 
+        dd->points.push_back(hit_point.z);
+        dd->points.push_back(hit_point.y);
+
+
+        dd->coordinates.push_back(hit_point.z);
+        dd->coordinates.push_back(hit_point.y);
+        dd->coordinates.push_back(ray_origin->z);
+        dd->coordinates.push_back(ray_origin->y);
+
+        // set hitpoint to be the new origin
+        *ray_origin = hit_point;
 
 
        // if not last lens element
@@ -967,20 +978,16 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
         } else { // last lens element
             // assuming the material outside the lens is air
             tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true);
+
+            dd->coordinates.push_back(hit_point.z);
+            dd->coordinates.push_back(hit_point.y);
+            dd->coordinates.push_back(tmpRayDirection.z * 1000.0);
+            dd->coordinates.push_back(tmpRayDirection.y * 1000.0);
        }
 
-       dd->points.push_back(hit_point.x);
-       dd->points.push_back(hit_point.y);
 
 
-       dd->coordinates.push_back(hit_point.x);
-       dd->coordinates.push_back(hit_point.y);
-       dd->coordinates.push_back(ray_origin->x);
-       dd->coordinates.push_back(ray_origin->y);
 
-
-       // set hitpoint to be the new origin
-       *ray_origin = hit_point;
 
         // check for total internal reflection case
         if (tmpRayDirection.x == 0.0 && tmpRayDirection.y == 0.0 && tmpRayDirection.z == 0.0){
@@ -994,9 +1001,8 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
     // count succesful rays
     ld->succesRays += 1;
-
     // test
-    AiMsgInfo("[ZOIC] RAY: [%d]: hitpoint && raydirection: %f %f %f, %f %f %f", counter, hit_point.x, hit_point.y, hit_point.z, tmpRayDirection.x, tmpRayDirection.y, tmpRayDirection.z);
+    //AiMsgInfo("[ZOIC] RAY: [%d]: hitpoint && raydirection: %f %f %f, %f %f %f", counter, hit_point.x, hit_point.y, hit_point.z, tmpRayDirection.x, tmpRayDirection.y, tmpRayDirection.z);
 }
 
 
@@ -1347,17 +1353,17 @@ node_finish {
     float translateX = 100.0;
     float translateY = 400.0;
 
-    for (int i = 0; i < dd.points.size() / 2; i++){
-        png.filledcircle((dd.points[i * 2] * scale) + translateX, (dd.points[(i * 2) + 1] * scale) + translateY, 3.0, 1.0, 1.0, 1.0);
-    }
-
     if (dd.coordinates.size() > 3){
         for (int i = 0; i < dd.coordinates.size() / 4; i++){
             png.line((dd.coordinates[i * 4] * scale) + translateX,
                     (dd.coordinates[(i * 4) + 1] * scale) + translateY,
                     (dd.coordinates[(i * 4) + 2] * scale) + translateX,
-                    (dd.coordinates[(i * 4) + 3] * scale) + translateY, 1.0, 1.0, 1.0);
+                    (dd.coordinates[(i * 4) + 3] * scale) + translateY, 0.6, 0.6, 0.6);
         }
+    }
+
+    for (int i = 0; i < dd.points.size() / 2; i++){
+        png.filledcircle((dd.points[i * 2] * scale) + translateX, (dd.points[(i * 2) + 1] * scale) + translateY, 4.0, 1.0, 1.0, 1.0);
     }
 
     png.close();
@@ -1366,7 +1372,7 @@ node_finish {
 
 camera_create_ray {
 
-    if (counter == 50){
+    if (counter == 5000){
         AiRenderAbort();
     }
 
@@ -1457,8 +1463,12 @@ camera_create_ray {
         output->origin.y = input->sy * (ld.filmDiagonal);
         output->origin.z = 0.0;
 
-        AiMsgInfo("[ZOIC] input = [%f, %f]", input->sx, input->sy);
-        AiMsgInfo("[ZOIC] origin = [%f, %f, %f]", output->origin.x, output->origin.y, output->origin.z);
+
+
+
+
+        //AiMsgInfo("[ZOIC] input = [%f, %f]", input->sx, input->sy);
+        //AiMsgInfo("[ZOIC] origin = [%f, %f, %f]", output->origin.x, output->origin.y, output->origin.z);
 
 
         // determine in which direction to shoot the rays
@@ -1470,6 +1480,7 @@ camera_create_ray {
             // sample bokeh image
             camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
         }
+
 
         // pick between different sampling methods (change to enum)
         // sampling first element is "ground truth" but wastes a lot of rays
@@ -1489,7 +1500,7 @@ camera_create_ray {
         // flip ray direction
         output->dir *= -1.0;
 
-        AiMsgInfo("[ZOIC] counter = [%d]", counter);
+        //AiMsgInfo("[ZOIC] counter = [%d]", counter);
     }
 
     // control to go light stops up and down
