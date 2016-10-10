@@ -24,7 +24,23 @@
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // precompute as much as possible (sphere centers, ...)
 
+/* WHAT THE HELL, WHY IN 3's??? At least that means i can lower the rendertime by a factor of 3 too.
+ * OR IS THIS AN OUTPUT ERROR? I DONT THINK SO
 
+00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: -7.416297 11.924154 143.458160, 0.092027 -0.007381 0.995729
+00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: -7.416273 11.924155 143.458160, 0.092026 -0.007381 0.995729
+00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: -7.416299 11.924183 143.458145, 0.092027 -0.007381 0.995729
+00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: 6.245546 -23.701040 139.793015, 0.079063 0.024819 0.996561
+00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: 6.245576 -23.701036 139.793015, 0.079062 0.024819 0.996561
+00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: 6.245547 -23.701010 139.793030, 0.079063 0.024818 0.996561
+00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: 8.200994 6.395137 144.235397, 0.077386 -0.001935 0.997000
+00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: 8.201020 6.395138 144.235382, 0.077385 -0.001936 0.996999
+00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: 8.200998 6.395163 144.235382, 0.077386 -0.001936 0.996999
+00:00:00   143MB         |   [ZOIC] hitpoint && raydirection: -35.381058 2.851584 89.898521, -5.595987 -5.595987 81.472694
+00:00:00   143MB         |   [ZOIC] hitpoint && raydirection: -35.381004 2.851586 89.898499, -5.595987 -5.595987 81.472694
+00:00:00   143MB         |   [ZOIC] hitpoint && raydirection: -35.381058 2.851634 89.898514, -5.595987 -5.595987 81.472694
+
+*/
 #include <ai.h>
 #include <cstring>
 #include <cstdlib>
@@ -38,6 +54,14 @@
 #include <vector>
 #include <sstream>
 #include <numeric>
+
+// tmp debug stuff
+#include <pngwriter.h>
+pngwriter png(1800, 800, .3,"/Users/zpelgrims/test.png");
+
+int counter = 0;
+
+
 
 #ifdef NO_OIIO
 // AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
@@ -585,6 +609,10 @@ struct Lensdata{
 } ld;
 
 
+struct DrawData{
+    std::vector<float> coordinates;
+    std::vector<float> points;
+} dd;
 
 
 // PBRT v2 source code  - Concentric disk sampling (Sampling the disk in a more uniform way than with random sampling)
@@ -889,12 +917,13 @@ double calculateImageDistance(double objectDistance, Lensdata *ld){
 
 
 
-void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, float *weight, Lensdata *ld){
+void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, float *weight, Lensdata *ld, DrawData *dd){
 
     AtVector hit_point;
     AtVector hit_point_normal;
     AtVector sphere_center;
     double summedThickness;
+    AtVector tmpRayDirection;
 
     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
 
@@ -913,8 +942,7 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
             break;
         }
 
-        // set hitpoint to be the new origin
-        *ray_origin = hit_point;
+
 
         double hitPointHypotenuse = sqrt(hit_point.x * hit_point.x + hit_point.y * hit_point.y);
         if(hitPointHypotenuse > (ld->lensAperture[i]/2.0)){
@@ -931,7 +959,7 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
         hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
 
-        AtVector tmpRayDirection;
+
 
        // if not last lens element
        if(i != ld->lensRadiusCurvature.size() - 1){
@@ -941,6 +969,19 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
             tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true);
        }
 
+       dd->points.push_back(hit_point.x);
+       dd->points.push_back(hit_point.y);
+
+
+       dd->coordinates.push_back(hit_point.x);
+       dd->coordinates.push_back(hit_point.y);
+       dd->coordinates.push_back(ray_origin->x);
+       dd->coordinates.push_back(ray_origin->y);
+
+
+       // set hitpoint to be the new origin
+       *ray_origin = hit_point;
+
         // check for total internal reflection case
         if (tmpRayDirection.x == 0.0 && tmpRayDirection.y == 0.0 && tmpRayDirection.z == 0.0){
             *weight = 0.0f;
@@ -949,9 +990,13 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
         *ray_direction = tmpRayDirection;
 
-        // count succesful rays
-        ld->succesRays += 1;
     }
+
+    // count succesful rays
+    ld->succesRays += 1;
+
+    // test
+    AiMsgInfo("[ZOIC] RAY: [%d]: hitpoint && raydirection: %f %f %f, %f %f %f", counter, hit_point.x, hit_point.y, hit_point.z, tmpRayDirection.x, tmpRayDirection.y, tmpRayDirection.z);
 }
 
 
@@ -1133,7 +1178,7 @@ node_parameters {
     AiParameterStr("bokehPath", ""); //bokeh shape image location
     AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", ""); // lens data file location
-    AiParameterBOOL("kolbSamplingMethod", false);
+    AiParameterBOOL("kolbSamplingMethod", true);
     AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 0.0f); //distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 0.0f); // 1.0 - .. range float, to multiply with the actual aperture radius
@@ -1145,7 +1190,15 @@ node_parameters {
 
 node_initialize {
     cameraData *camera = new cameraData();
-   AiCameraInitialize(node, (void*)camera);
+    AiCameraInitialize(node, (void*)camera);
+
+    // draw axial
+    dd.coordinates.push_back(-9999.0);
+    dd.coordinates.push_back(0.0);
+    dd.coordinates.push_back(9999.0);
+    dd.coordinates.push_back(0.0);
+
+
 
 }
 
@@ -1180,7 +1233,13 @@ node_update {
         ld.yres = static_cast<float>(AiNodeGetInt(options,"yres"));
         AiMsgInfo("[ZOIC] Image resolution = [%f, %f]", ld.xres, ld.yres);
 
-                               // not sure if this is the right way to do it.. probably more to it than this!
+        ld.lensRadiusCurvature.empty();
+        ld.lensThickness.empty();
+        ld.lensIOR.empty();
+        ld.lensAperture.empty();
+
+
+        // not sure if this is the right way to do it.. probably more to it than this!
         // these values seem to produce the same image as the other camera which is correct.. hey ho
         ld.filmDiagonal = sqrt(_sensorWidth *_sensorWidth + _sensorHeight * _sensorHeight) * 4.25;
 
@@ -1277,10 +1336,40 @@ node_finish {
 
     delete camera;
     AiCameraDestroy(node);
+
+
+
+    AiMsgInfo("[ZOIC] Coordinate vector size = [%lu]", dd.coordinates.size());
+    AiMsgInfo("[ZOIC] Points vector size = [%lu]", dd.points.size());
+
+    // draw everything to png
+    float scale = 10.0;
+    float translateX = 100.0;
+    float translateY = 400.0;
+
+    for (int i = 0; i < dd.points.size() / 2; i++){
+        png.filledcircle((dd.points[i * 2] * scale) + translateX, (dd.points[(i * 2) + 1] * scale) + translateY, 3.0, 1.0, 1.0, 1.0);
+    }
+
+    if (dd.coordinates.size() > 3){
+        for (int i = 0; i < dd.coordinates.size() / 4; i++){
+            png.line((dd.coordinates[i * 4] * scale) + translateX,
+                    (dd.coordinates[(i * 4) + 1] * scale) + translateY,
+                    (dd.coordinates[(i * 4) + 2] * scale) + translateX,
+                    (dd.coordinates[(i * 4) + 3] * scale) + translateY, 1.0, 1.0, 1.0);
+        }
+    }
+
+    png.close();
 }
 
 
 camera_create_ray {
+
+    if (counter == 50){
+        AiRenderAbort();
+    }
+
 
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
@@ -1294,7 +1383,10 @@ camera_create_ray {
         AtPoint p;
         p.x = input->sx * camera->tan_fov;
         p.y = input->sy * camera->tan_fov;
-       p.z = 1.0;
+        p.z = 1.0;
+
+
+        AiMsgInfo("[ZOIC] input = [%f, %f]", input->sx, input->sy);
 
         // compute direction
         output->dir = AiV3Normalize(p - output->origin);
@@ -1365,6 +1457,9 @@ camera_create_ray {
         output->origin.y = input->sy * (ld.filmDiagonal);
         output->origin.z = 0.0;
 
+        AiMsgInfo("[ZOIC] input = [%f, %f]", input->sx, input->sy);
+        AiMsgInfo("[ZOIC] origin = [%f, %f, %f]", output->origin.x, output->origin.y, output->origin.z);
+
 
         // determine in which direction to shoot the rays
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
@@ -1389,10 +1484,12 @@ camera_create_ray {
             output->dir.z = ld.lensThickness[0];
         }
 
-        traceThroughLensElements(&output->origin, &output->dir, &output->weight, &ld);
+        traceThroughLensElements(&output->origin, &output->dir, &output->weight, &ld, &dd);
 
         // flip ray direction
         output->dir *= -1.0;
+
+        AiMsgInfo("[ZOIC] counter = [%d]", counter);
     }
 
     // control to go light stops up and down
@@ -1402,6 +1499,8 @@ camera_create_ray {
     } else if (_exposureControl < 0){
         output->weight *= 1.0f / (1.0f + e2);
     }
+
+    counter += 1;
 }
 
 
