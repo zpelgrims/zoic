@@ -6,7 +6,7 @@
 
 options
 {
- AA_samples 10
+ AA_samples 5
  outputs "RGBA RGBA defaultArnoldFilter@gaussian_filter defaultArnoldDriver@driver_exr.RGBA"
  xres 500
  yres 500
