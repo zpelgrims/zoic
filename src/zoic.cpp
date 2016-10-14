@@ -606,8 +606,8 @@ struct Lensdata{
     int totalInternalReflection;
     double apertureDistance;
     float xres, yres;
-    float optimalAperture;
-    float focalLengthRatio;
+    double optimalAperture;
+    double focalLengthRatio;
     float filmDiagonal;
     double lensShift;
 } ld;
@@ -619,10 +619,49 @@ struct DrawData{
 } dd;
 
 
+class vec3 {
+    public:
+        double x;
+        double y;
+        double z;
+};
+
+
+double vec3dot(vec3 vector1, vec3 vector2){
+    return (vector1.x * vector2.x + vector1.y * vector2.y + vector1.z * vector2.z);
+}
+
+
+vec3 vec3subtr(vec3 vector1, vec3 vector2){
+    vec3 subtraction;
+    subtraction.x = vector1.x - vector2.x;
+    subtraction.y = vector1.y - vector2.y;
+    subtraction.z = vector1.z - vector2.z;
+    return subtraction;
+}
+
+
+vec3 vec3add(vec3 vector1, vec3 vector2){
+    vec3 add;
+    add.x = vector1.x + vector2.x;
+    add.y = vector1.y + vector2.y;
+    add.z = vector1.z + vector2.z;
+    return add;
+}
+
+
+void vec3normalize(vec3 *vector1){
+    double length = sqrt((vector1->x * vector1->x) + (vector1->y * vector1->y) + (vector1->z * vector1->z));
+    vector1->x /= length;
+    vector1->y /= length;
+    vector1->z /= length;
+}
+
+
 // PBRT v2 source code  - Concentric disk sampling (Sampling the disk in a more uniform way than with random sampling)
 inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
     float radius; // radius
-   float theta; // angle
+    float theta; // angle
 
     // Map uniform random numbers to $[-1,1]^2$
     float sx = 2.0f * u1 - 1.0f;
