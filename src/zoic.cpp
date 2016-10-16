@@ -57,13 +57,13 @@
 
 // tmp debug stuff
 #include <pngwriter.h>
-pngwriter png(7200, 1000, 0.3,"/Volumes/ZENO_2016/projects/zoic/tests/images/lens_rays.png");
+pngwriter png(10000, 1500, 0.3,"/Volumes/ZENO_2016/projects/zoic/tests/images/lens_rays.png");
 
 int counter = 0;
 bool draw = true;
-float scale = 5.0;
-float translateX = 300.0;
-float translateY = 500.0;
+float scale = 3.0;
+float translateX = 100.0;
+float translateY = 750.0;
 
 
 #ifdef NO_OIIO
@@ -650,22 +650,38 @@ vec3 vec3add(vec3 vector1, vec3 vector2){
 }
 
 
-void vec3normalize(vec3 *vector1){
-    double length = sqrt((vector1->x * vector1->x) + (vector1->y * vector1->y) + (vector1->z * vector1->z));
-    vector1->x /= length;
-    vector1->y /= length;
-    vector1->z /= length;
+vec3 vec3normalize(vec3 vector1){
+    vec3 normalizedVector;
+    double length = sqrt((vector1.x * vector1.x) + (vector1.y * vector1.y) + (vector1.z * vector1.z));
+
+    if(length == 0.0){
+        length = 0.0000001;
+    }
+    if(vector1.x == 0.0){
+        vector1.x = 0.0000001;
+    }
+    if(vector1.y == 0.0){
+        vector1.y = 0.0000001;
+    }
+    if(vector1.z == 0.0){
+        vector1.z = 0.0000001;
+    }
+
+    normalizedVector.x = vector1.x / length;
+    normalizedVector.y = vector1.y / length;
+    normalizedVector.z = vector1.z / length;
+    return normalizedVector;
 }
 
 
 // PBRT v2 source code  - Concentric disk sampling (Sampling the disk in a more uniform way than with random sampling)
 inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
-    float radius; // radius
-    float theta; // angle
+    double radius; // radius
+    double theta; // angle
 
     // Map uniform random numbers to $[-1,1]^2$
-    float sx = 2.0f * u1 - 1.0f;
-    float sy = 2.0f * u2 - 1.0f;
+    double sx = 2.0f * u1 - 1.0f;
+    double sy = 2.0f * u2 - 1.0f;
 
     // Map square to $(r,\theta)$
     // Handle degeneracy at the origin
@@ -805,47 +821,75 @@ void cleanupLensData(Lensdata *ld){
 
 
 // RAY SPHERE INTERSECTIONS
-AtVector raySphereIntersection(AtVector ray_direction, AtVector ray_origin, AtVector sphere_center, double sphere_radius, bool reverse, bool tracingRealRays){
+vec3 raySphereIntersection(vec3 ray_direction, vec3 ray_origin, vec3 sphere_center, double sphere_radius, bool reverse, bool tracingRealRays){
 
-    AtVector norm_ray_direction = AiV3Normalize(ray_direction);
-    AtVector L = sphere_center - ray_origin;
+    vec3 norm_ray_direction = vec3normalize(ray_direction);
+
+    //AiMsgInfo("[ZOIC] norm_ray_direction = [%f %f %f]", norm_ray_direction.x, norm_ray_direction.y, norm_ray_direction.z);
+
+    vec3 L = vec3subtr(sphere_center, ray_origin);
+
+    //AiMsgInfo("[ZOIC] L = [%f %f %f]", L.x, L.y, L.z);
 
     // project the directionvector onto the distancevector
-    double tca = AiV3Dot(L, norm_ray_direction);
+    double tca = vec3dot(L, norm_ray_direction);
+
+    //AiMsgInfo("[ZOIC] tca = [%f]", tca);
 
     double radius2 = sphere_radius * sphere_radius;
-    double d2 = AiV3Dot(L, L) - tca * tca;
+    double d2 = vec3dot(L, L) - tca * tca;
+
+    //AiMsgInfo("[ZOIC] d2 = [%f]", d2);
 
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
     // this is just some arbitrary value that I will use to check for errors
     if (tracingRealRays == true && d2 > radius2){return {0.0, 0.0, 0.0};}
 
     double thc = sqrt(radius2 - d2);
+    //AiMsgInfo("[ZOIC] thc = [%f]", thc);
+
+    vec3 hit_point;
 
     if(!reverse){
-        return ray_origin + norm_ray_direction * (tca + thc * std::copysign(1.0, sphere_radius));
+        hit_point.x = ray_origin.x + norm_ray_direction.x * (tca + thc * std::copysign(1.0, sphere_radius));
+        hit_point.y = ray_origin.y + norm_ray_direction.y * (tca + thc * std::copysign(1.0, sphere_radius));
+        hit_point.z = ray_origin.z + norm_ray_direction.z * (tca + thc * std::copysign(1.0, sphere_radius));
+        return hit_point;
     }
     else{
-        return ray_origin + norm_ray_direction * (tca - thc * std::copysign(1.0, sphere_radius));
+        hit_point.x = ray_origin.x + norm_ray_direction.x * (tca - thc * std::copysign(1.0, sphere_radius));
+        hit_point.y = ray_origin.y + norm_ray_direction.y * (tca - thc * std::copysign(1.0, sphere_radius));
+        hit_point.z = ray_origin.z + norm_ray_direction.z * (tca - thc * std::copysign(1.0, sphere_radius));
+        return hit_point;
     }
 }
 
 
 // COMPUTE NORMAL HITPOINT
-AtVector intersectionNormal(AtVector hit_point, AtVector sphere_center, double sphere_radius){
-    return AiV3Normalize(sphere_center - hit_point) * std::copysign(1.0, sphere_radius);
+vec3 intersectionNormal(vec3 hit_point, vec3 sphere_center, double sphere_radius){
+    vec3 normalized = vec3normalize(vec3subtr(sphere_center, hit_point));
+    normalized.x *= std::copysign(1.0, sphere_radius);
+    normalized.y *= std::copysign(1.0, sphere_radius);
+    normalized.z *= std::copysign(1.0, sphere_radius);
+    return normalized;
 }
 
 
 // TRANSMISSION VECTOR
-AtVector calculateTransmissionVector(double ior1, double ior2, AtVector incidentVector, AtVector normalVector, bool tracingRealRays){
+vec3 calculateTransmissionVector(double ior1, double ior2, vec3 incidentVector, vec3 normalVector, bool tracingRealRays){
 
     // VECTORS NEED TO BE NORMALIZED BEFORE USE!
-    incidentVector = AiV3Normalize(incidentVector);
-    normalVector = AiV3Normalize(normalVector);
+    incidentVector = vec3normalize(incidentVector);
+    normalVector = vec3normalize(normalVector);
 
-    double eta = ior1 / ior2;
-    double c1 = - AiV3Dot(incidentVector, normalVector);
+    double eta;
+    if (ior2 == 1.0){
+        eta = ior1;
+    } else{
+        eta = ior1 / ior2;
+    }
+
+    double c1 = - vec3dot(incidentVector, normalVector);
     double cs2 = eta * eta * (1.0 - c1 * c1);
 
     // total internal reflection, can only occur when ior1 > ior2
@@ -855,14 +899,19 @@ AtVector calculateTransmissionVector(double ior1, double ior2, AtVector incident
         return {0.0, 0.0, 0.0};
     }
 
-    return (incidentVector * eta) + (normalVector * ((eta * c1) - sqrt(std::abs(1.0 - cs2))));
+    vec3 transmissionVector;
+    transmissionVector.x = (incidentVector.x * eta) + (normalVector.x * ((eta * c1) - sqrt(1.0 - cs2)));
+    transmissionVector.y = (incidentVector.y * eta) + (normalVector.y * ((eta * c1) - sqrt(1.0 - cs2)));
+    transmissionVector.z = (incidentVector.z * eta) + (normalVector.z * ((eta * c1) - sqrt(1.0 - cs2)));
+
+    return transmissionVector;
 }
 
 
 
 // LINE LINE INTERSECTIONS
 // watch out here, x is the z coordinate here and z is x.. (still need to convert)
-AtVector2 lineLineIntersection(AtVector line1_origin, AtVector line1_direction, AtVector line2_origin, AtVector line2_direction){
+AtVector2 lineLineIntersection(vec3 line1_origin, vec3 line1_direction, vec3 line2_origin, vec3 line2_direction){
     // Get A,B,C of first line - points : ps1 to pe1
     double A1 = line1_direction.y - line1_origin.y;
     double B1 = line1_origin.x - line1_direction.x;
@@ -891,7 +940,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
 
     // watch out here, x is the z coordinate here and z is x.. (still need to convert)
     double imageDistance;
-    AtVector ray_origin_focus;
+    vec3 ray_origin_focus;
     ray_origin_focus.x = objectDistance;
     ray_origin_focus.y = 0.0;
     ray_origin_focus.z = 0.0;
@@ -908,9 +957,9 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
 
 
     // 20.0 needs to be changed to a number as small as possible whilst still getting no numerical errors. (eg 0.001)
-    AtVector ray_direction_focus;
+    vec3 ray_direction_focus;
     ray_direction_focus.x = - objectDistance;
-    ray_direction_focus.y = 26.0;
+    ray_direction_focus.y = 25.855;
     ray_direction_focus.z = 0.0;
 
     double summedThickness_focus = 0.0;
@@ -930,14 +979,14 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
             ld->lensRadiusCurvature[i] = 99999.0;
         }
 
-        AtVector sphere_center;
+        vec3 sphere_center;
         sphere_center.x = summedThickness_focus - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i];
         sphere_center.y = 0.0;
         sphere_center.z = 0.0;
 
-        AtVector hit_point = raySphereIntersection(ray_direction_focus, ray_origin_focus, sphere_center, ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], true, false);
+        vec3 hit_point = raySphereIntersection(ray_direction_focus, ray_origin_focus, sphere_center, ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], true, false);
 
-        AtVector hit_point_normal = intersectionNormal(hit_point, sphere_center, - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i]);
+        vec3 hit_point_normal = intersectionNormal(hit_point, sphere_center, - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i]);
 
         if(draw){
             png.line((hit_point.x * scale) + translateX, (hit_point.y * scale) + translateY, (ray_origin_focus.x * scale) + translateX, (ray_origin_focus.y * scale) + translateY, 0.64, 1.0, 0.0);
@@ -958,12 +1007,12 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
             ray_direction_focus = calculateTransmissionVector(ld->lensIOR[ld->lensRadiusCurvature.size() - 1 - i], 1.0, ray_direction_focus, hit_point_normal, false);
 
             // find intersection point
-            AtVector axialStart = {-99999.0, 0.0, 0.0};
-            AtVector axialEnd = {99999.0, 0.0, 0.0};
-            AtVector lineDirection = {ray_origin_focus.x + ray_direction_focus.x, ray_origin_focus.y + ray_direction_focus.y, 0.0};
+            vec3 axialStart = {-99999.0, 0.0, 0.0};
+            vec3 axialEnd = {99999.0, 0.0, 0.0};
+            vec3 lineDirection = {ray_origin_focus.x + ray_direction_focus.x, ray_origin_focus.y + ray_direction_focus.y, 0.0};
             imageDistance = lineLineIntersection(axialStart, axialEnd, ray_origin_focus, lineDirection).x;
             if(draw){
-                png.line((hit_point.x * scale) + translateX, (hit_point.y * scale) + translateY, (ray_direction_focus.x * 10000.0 * scale) + translateX, (ray_direction_focus.y * 10000.0 * scale) + translateY, 0.64, 1.0, 0.0);
+                png.line((hit_point.x * scale) + translateX, (hit_point.y * scale) + translateY, (ray_direction_focus.x * 1000000.0 * scale) + translateX, (ray_direction_focus.y * 1000000.0 * scale) + translateY, 0.64, 1.0, 0.0);
             }
         }
 
@@ -984,13 +1033,13 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
 
 
 
-void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, float *weight, Lensdata *ld, DrawData *dd, bool draw){
+void traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, float *weight, Lensdata *ld, DrawData *dd, bool draw){
 
-    AtVector hit_point;
-    AtVector hit_point_normal;
-    AtVector sphere_center;
+    vec3 hit_point;
+    vec3 hit_point_normal;
+    vec3 sphere_center;
     double summedThickness;
-    AtVector tmpRayDirection;
+    vec3 tmpRayDirection;
 
     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
         if(i == 0){
@@ -1053,8 +1102,8 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
             if (draw){
                 dd->coordinates.push_back(hit_point.z);
                 dd->coordinates.push_back(hit_point.y);
-                dd->coordinates.push_back(tmpRayDirection.z * 10000.0);
-                dd->coordinates.push_back(tmpRayDirection.y * 10000.0);
+                dd->coordinates.push_back(tmpRayDirection.z * 10000000.0);
+                dd->coordinates.push_back(tmpRayDirection.y * 10000000.0);
             }
 
        }
@@ -1081,11 +1130,11 @@ void traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, flo
 
 void drawLenses(Lensdata *ld, DrawData *dd){
 
-    AtVector hit_point;
-    AtVector sphere_center;
+    vec3 hit_point;
+    vec3 sphere_center;
     float summedThickness;
-    AtVector rayOrigin = {0.0, 0.0, 0.0};
-    AtVector rayDirection;
+    vec3 rayOrigin = {0.0, 0.0, 0.0};
+    vec3 rayDirection;
 
     std::vector<float> lensFrontSurfaceX;
     std::vector<float> lensFrontSurfaceY;
@@ -1137,38 +1186,47 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
     //this might not do in all cases, maybe find better way
     float rayOriginHeight = ld->lensAperture[0] * 0.25;
 
-    AtVector ray_origin_fp = {0.0, rayOriginHeight, 0.0};
-    AtVector ray_direction_fp = {99999.0, 0.0, 0.0};
+    vec3 ray_origin_fp = {0.0, rayOriginHeight, 0.0};
+    vec3 ray_direction_fp = {99999.0, 0.0, 0.0};
+
+
 
     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
         i == 0 ? summedThickness_fp = ld->lensThickness[0] : summedThickness_fp += ld->lensThickness[i];
 
-        AtVector sphere_center;
+        vec3 sphere_center;
         sphere_center.x = summedThickness_fp - ld->lensRadiusCurvature[i];
         sphere_center.y = 0.0;
         sphere_center.z = 0.0;
 
-        AtVector hit_point = raySphereIntersection(ray_direction_fp, ray_origin_fp, sphere_center, ld->lensRadiusCurvature[i], false, false);
+        //AiMsgInfo("[ZOIC] sphere_center = [%f %f %f]", sphere_center.x, sphere_center.y, sphere_center.z);
 
-        AtVector hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
+        vec3 hit_point = raySphereIntersection(ray_direction_fp, ray_origin_fp, sphere_center, ld->lensRadiusCurvature[i], false, false);
 
+        //AiMsgInfo("[ZOIC] hit_point = [%f %f %f]", hit_point.x, hit_point.y, hit_point.z);
+
+        vec3 hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
+
+        //AiMsgInfo("[ZOIC] hit_point_normal = [%f %f %f]", hit_point_normal.x, hit_point_normal.y, hit_point_normal.z);
 
         if(i != ld->lensRadiusCurvature.size() - 1){
             ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], ray_direction_fp, hit_point_normal, true);
+            AiMsgInfo("[ZOIC] IORS ONE TWO [%d] = [%f %f]", i, ld->lensIOR[i], ld->lensIOR[i+1]);
         } else { // last element in array
             ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], 1.0, ray_direction_fp, hit_point_normal, true);
+            AiMsgInfo("[ZOIC] IORS ONE TWO [%d] = [%f %f]", i, ld->lensIOR[i], 1.0);
 
-            AtVector pp_line1start; //original parallel ray start
+            vec3 pp_line1start; //original parallel ray start
             pp_line1start.x = 0.0;
             pp_line1start.y = rayOriginHeight;
             pp_line1start.z = 0.0;
 
-            AtVector pp_line1end; //original parallel ray end
+            vec3 pp_line1end; //original parallel ray end
             pp_line1end.x = 99999.0;
             pp_line1end.y = rayOriginHeight;
             pp_line1end.z = 0.0;
 
-            AtVector pp_line2end; //direction ray end
+            vec3 pp_line2end; //direction ray end
             pp_line2end.x = ray_origin_fp.x + (ray_direction_fp.x * 1000.0);
             pp_line2end.y = ray_origin_fp.y + (ray_direction_fp.y * 1000.0);
             pp_line2end.z = 0.0;
@@ -1177,9 +1235,9 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
             AiMsgInfo("[ZOIC] Principle Plane distance = [%f]", principlePlaneDistance);
 
             // find intersection point
-            AtVector axialStart = {0.0, 0.0, 0.0};
-            AtVector axialEnd = {99999.0, 0.0, 0.0};
-            AtVector lineDirection;
+            vec3 axialStart = {0.0, 0.0, 0.0};
+            vec3 axialEnd = {99999.0, 0.0, 0.0};
+            vec3 lineDirection;
             lineDirection.x = ray_origin_fp.x + ray_direction_fp.x * 1000.0;
             lineDirection.y = ray_origin_fp.y + ray_direction_fp.y * 1000.0;
             lineDirection.z = 0.0;
@@ -1200,11 +1258,11 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
 
 
 
-bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld){
+bool traceThroughLensElementsForApertureSize(vec3 ray_origin, vec3 ray_direction, Lensdata *ld){
 
-    AtVector hit_point;
-    AtVector hit_point_normal;
-    AtVector sphere_center;
+    vec3 hit_point;
+    vec3 hit_point_normal;
+    vec3 sphere_center;
     double summedThickness;
 
     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
@@ -1368,6 +1426,7 @@ node_update {
         // shift first lens element (and all others consequently) so that
         // the image distance at a certain object distance falls on the film plane
         ld.lensShift = calculateImageDistance(_focalDistance * 10.0, &ld, &dd, false);
+        AiMsgInfo("[ZOIC] Aperture distance after lens shift = [%f]", ld.apertureDistance);
         //ld.lensThickness[0] -= ld.lensShift;
 
         calculateImageDistance(_focalDistance * 10.0, &ld, &dd, true);
@@ -1387,10 +1446,10 @@ node_update {
         // and I don't think it does..
         if(_kolbSamplingMethod == 1){
             int sampleCount = 1024;
-            AtVector sampleOrigin = {0.0, 0.0, 0.0};
+            vec3 sampleOrigin = {0.0, 0.0, 0.0};
             for (int i = 0; i < sampleCount; i++){
                 float heightVariation = ld.lensAperture[0] / float(sampleCount);
-                AtVector sampleDirection = {0.0, heightVariation * float(i), float(ld.lensThickness[0])};
+                vec3 sampleDirection = {0.0, heightVariation * float(i), float(ld.lensThickness[0])};
 
                 if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
                     AiMsgInfo("[ZOIC] Positive failure at sample [%d] out of [%d]", i, sampleCount);
@@ -1416,6 +1475,10 @@ node_finish {
         png.filledcircle(translateX, ((12.0 - ((24.0/200.0) * (float)i)) * scale) + translateY, 1.0, 1.0, 1.0, 1.0);
 
     }
+
+    png.line(((1200 * scale )+ translateX), (99999.0 * scale) + translateY, ((1200 * scale )+ translateX), (-99999.0 * scale) + translateY, 1.0, 1.0, 1.0);
+
+
 
     drawLenses(&ld, &dd);
 
@@ -1530,13 +1593,19 @@ camera_create_ray {
 
 
     if(_kolb){
+        vec3 origin;
+        //origin.x = 0.0;
+        //origin.y = -10.0;
+        //origin.z = ld.lensShift;// + 0.125;
+
+        vec3 direction;
 
         // determine origin of rays
-        output->origin.x = 0.0;//input->sx * (ld.filmDiagonal * 0.5);
-        output->origin.y = 0.0;//input->sy * (ld.filmDiagonal * 0.5);
-        output->origin.z = ld.lensShift;
+        origin.x = input->sx * (ld.filmDiagonal * 0.5);
+        origin.y = input->sy * (ld.filmDiagonal * 0.5);
+        origin.z = ld.lensShift;
 
-
+        ///* TEMP!
 
         // determine in which direction to shoot the rays
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
@@ -1553,22 +1622,33 @@ camera_create_ray {
         // sampling first element is "ground truth" but wastes a lot of rays
         // sampling optimal aperture is efficient, but might not make a whole image
         if (_kolbSamplingMethod == 0){ // using noisy ground truth
-            output->dir.x = lensU * ld.lensAperture[0];
-            output->dir.y = lensV * ld.lensAperture[0];
-            output->dir.z = ld.lensThickness[0];
+            direction.x = lensU * ld.lensAperture[0];
+            direction.y = lensV * ld.lensAperture[0];
+            direction.z = ld.lensThickness[0];
         } else if (_kolbSamplingMethod == 1){ // using binary aperture search
-            output->dir.x = lensU * ld.optimalAperture;
-            output->dir.y = lensV * ld.optimalAperture;
-            output->dir.z = ld.lensThickness[0];
+            direction.x = lensU * ld.optimalAperture;
+            direction.y = lensV * ld.optimalAperture;
+            direction.z = ld.lensThickness[0];
         }
 
+        //*/
+
+        //direction.x = 0.0;//input->sx * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
+        //direction.y = input->sy * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
+        //direction.z = ld.lensThickness[0];
+
+        traceThroughLensElements(&origin, &direction, &output->weight, &ld, &dd, draw);
 
 
-        output->dir.x = input->sx * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
-        output->dir.y = input->sy * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
-        output->dir.z = ld.lensThickness[0];
 
-        traceThroughLensElements(&output->origin, &output->dir, &output->weight, &ld, &dd, draw);
+
+        output->origin.x = origin.x;
+        output->origin.y = origin.y;
+        output->origin.z = origin.z;
+
+        output->dir.x = direction.x;
+        output->dir.y = direction.y;
+        output->dir.z = direction.z;
 
         // flip ray direction
         output->dir *= -1.0;

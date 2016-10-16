@@ -17,3 +17,13 @@ tests/*
 Sconstruct
 excons/
 
+
+src/s_kallweit/realistic.h
+
+src/s_kallweit/dgauss.100mm.dat
+
+src/s_kallweit/realistic.cpp
+
+tests/images/testScene_distance.exr
+
+tests/images/testScene_spheres.exr
