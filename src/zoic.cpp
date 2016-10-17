@@ -17,12 +17,15 @@
 // TODO
 
 // Get initial sampling coordinates right
-// get focus right (.. then it works..)
+// implement ray plane instead of ray ray intersection
+// fix origin issue (just sliiiiightly off, but makes a difference to focus)
 // assign variable to height to shoot rays on
 // convert coordinate system in functions where i do the lineline intersection (x is z and z is x)
 // Make sure all units are the same (eg kolb is in mm whilst thin lens is in cm..)
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // precompute as much as possible (sphere centers, ...)
+// fix multithreading (might be the image drawing)
+// change defines to eum
 
 /* WHAT THE HELL, WHY IN 3's??? At least that means i can lower the rendertime by a factor of 3 too.
  * OR IS THIS AN OUTPUT ERROR? I DONT THINK SO
@@ -41,6 +44,8 @@
 00:00:00   143MB         |   [ZOIC] hitpoint && raydirection: -35.381058 2.851634 89.898514, -5.595987 -5.595987 81.472694
 
 */
+
+
 #include <ai.h>
 #include <cstring>
 #include <cstdlib>
@@ -54,17 +59,15 @@
 #include <vector>
 #include <sstream>
 #include <numeric>
-
-// tmp debug stuff
 #include <pngwriter.h>
+
+bool draw = true;
+float scale = 8.0;
+float translateX = 100.0;
+float translateY = 750.0;
 pngwriter png(10000, 1500, 0.3,"/Volumes/ZENO_2016/projects/zoic/tests/images/lens_rays.png");
 
 int counter = 0;
-bool draw = true;
-float scale = 3.0;
-float translateX = 100.0;
-float translateY = 750.0;
-
 
 #ifdef NO_OIIO
 // AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
@@ -619,6 +622,7 @@ struct DrawData{
 } dd;
 
 
+// little vector class, needed doubles instead of the float vector class arnold provides
 class vec3 {
     public:
         double x;
@@ -824,29 +828,18 @@ void cleanupLensData(Lensdata *ld){
 vec3 raySphereIntersection(vec3 ray_direction, vec3 ray_origin, vec3 sphere_center, double sphere_radius, bool reverse, bool tracingRealRays){
 
     vec3 norm_ray_direction = vec3normalize(ray_direction);
-
-    //AiMsgInfo("[ZOIC] norm_ray_direction = [%f %f %f]", norm_ray_direction.x, norm_ray_direction.y, norm_ray_direction.z);
-
     vec3 L = vec3subtr(sphere_center, ray_origin);
-
-    //AiMsgInfo("[ZOIC] L = [%f %f %f]", L.x, L.y, L.z);
-
     // project the directionvector onto the distancevector
     double tca = vec3dot(L, norm_ray_direction);
 
-    //AiMsgInfo("[ZOIC] tca = [%f]", tca);
-
     double radius2 = sphere_radius * sphere_radius;
     double d2 = vec3dot(L, L) - tca * tca;
-
-    //AiMsgInfo("[ZOIC] d2 = [%f]", d2);
 
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
     // this is just some arbitrary value that I will use to check for errors
     if (tracingRealRays == true && d2 > radius2){return {0.0, 0.0, 0.0};}
 
     double thc = sqrt(radius2 - d2);
-    //AiMsgInfo("[ZOIC] thc = [%f]", thc);
 
     vec3 hit_point;
 
@@ -908,7 +901,7 @@ vec3 calculateTransmissionVector(double ior1, double ior2, vec3 incidentVector, 
 }
 
 
-
+/*
 // LINE LINE INTERSECTIONS
 // watch out here, x is the z coordinate here and z is x.. (still need to convert)
 AtVector2 lineLineIntersection(vec3 line1_origin, vec3 line1_direction, vec3 line2_origin, vec3 line2_direction){
@@ -932,6 +925,18 @@ AtVector2 lineLineIntersection(vec3 line1_origin, vec3 line1_direction, vec3 lin
 
     return intersectionPoint;
 }
+*/
+
+
+vec3 linePlaneIntersection(vec3 a, vec3 b){
+    vec3 n = {0.0, 1.0, 0.0};
+    vec3 ba = b-a;
+    float nDotA = vec3dot(n, a);
+    float nDotBA = vec3dot(n, ba);
+
+    return a + (((d - nDotA)/nDotBA) * ba);
+
+}
 
 
 // CALCULATE IMAGE DISTANCE
@@ -946,20 +951,12 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
     ray_origin_focus.z = 0.0;
 
 
-    //dd->coordinates.push_back(objectDistance);
-    //dd->coordinates.push_back(9999.0);
-    //dd->coordinates.push_back(objectDistance);
-    //dd->coordinates.push_back(-9999.0);
-
     png.line((objectDistance * scale) + translateX, (9999.0 * scale) + translateY, (objectDistance * scale) + translateX, (-9999.0 * scale) + translateY, 0.64, 1.0, 0.0);
 
 
-
-
-    // 20.0 needs to be changed to a number as small as possible whilst still getting no numerical errors. (eg 0.001)
     vec3 ray_direction_focus;
     ray_direction_focus.x = - objectDistance;
-    ray_direction_focus.y = 25.855;
+    ray_direction_focus.y = ld->lensAperture[ld->lensAperture.size() - 1] * 0.01;
     ray_direction_focus.z = 0.0;
 
     double summedThickness_focus = 0.0;
@@ -975,10 +972,6 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
         // (condition) ? true : false;
         i == 0 ? summedThickness_focus = summedThickness_focus : summedThickness_focus -= ld->lensThickness[ld->lensRadiusCurvature.size() - i];
 
-        if(ld->lensRadiusCurvature[i] == 0.0){
-            ld->lensRadiusCurvature[i] = 99999.0;
-        }
-
         vec3 sphere_center;
         sphere_center.x = summedThickness_focus - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i];
         sphere_center.y = 0.0;
@@ -988,9 +981,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
 
         vec3 hit_point_normal = intersectionNormal(hit_point, sphere_center, - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i]);
 
-        if(draw){
-            png.line((hit_point.x * scale) + translateX, (hit_point.y * scale) + translateY, (ray_origin_focus.x * scale) + translateX, (ray_origin_focus.y * scale) + translateY, 0.64, 1.0, 0.0);
-        }
+        png.line((hit_point.x * scale) + translateX, (hit_point.y * scale) + translateY, (ray_origin_focus.x * scale) + translateX, (ray_origin_focus.y * scale) + translateY, 0.64, 1.0, 0.0);
 
 
         if(i==0){
@@ -1011,9 +1002,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
             vec3 axialEnd = {99999.0, 0.0, 0.0};
             vec3 lineDirection = {ray_origin_focus.x + ray_direction_focus.x, ray_origin_focus.y + ray_direction_focus.y, 0.0};
             imageDistance = lineLineIntersection(axialStart, axialEnd, ray_origin_focus, lineDirection).x;
-            if(draw){
-                png.line((hit_point.x * scale) + translateX, (hit_point.y * scale) + translateY, (ray_direction_focus.x * 1000000.0 * scale) + translateX, (ray_direction_focus.y * 1000000.0 * scale) + translateY, 0.64, 1.0, 0.0);
-            }
+            png.line((hit_point.x * scale) + translateX, (hit_point.y * scale) + translateY, (ray_direction_focus.x * 1000000.0 * scale) + translateX, (ray_direction_focus.y * 1000000.0 * scale) + translateY, 0.64, 1.0, 0.0);
         }
 
     }
@@ -1022,10 +1011,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
     AiMsgInfo("[ZOIC] Image distance = [%f]", imageDistance);
 
 
-    dd->coordinates.push_back(imageDistance);
-    dd->coordinates.push_back(-9999.0);
-    dd->coordinates.push_back(imageDistance);
-    dd->coordinates.push_back(9999.0);
+    png.line((imageDistance * scale) + translateX, (9999.0 * scale) + translateY, (imageDistance * scale) + translateX, (-9999.0 * scale) + translateY, 0.64, 1.0, 0.0);
 
 
     return imageDistance;
@@ -1091,22 +1077,19 @@ void traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, float *weig
         *ray_origin = hit_point;
 
 
-       // if not last lens element
-       if(i != ld->lensRadiusCurvature.size() - 1){
+        // if not last lens element
+        if(i != ld->lensRadiusCurvature.size() - 1){
             tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], *ray_direction, hit_point_normal, true);
         } else { // last lens element
             // assuming the material outside the lens is air
             tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true);
 
+            dd->coordinates.push_back(hit_point.z);
+            dd->coordinates.push_back(hit_point.y);
+            dd->coordinates.push_back(tmpRayDirection.z * 10000000.0);
+            dd->coordinates.push_back(tmpRayDirection.y * 10000000.0);
 
-            if (draw){
-                dd->coordinates.push_back(hit_point.z);
-                dd->coordinates.push_back(hit_point.y);
-                dd->coordinates.push_back(tmpRayDirection.z * 10000000.0);
-                dd->coordinates.push_back(tmpRayDirection.y * 10000000.0);
-            }
-
-       }
+        }
 
 
         // check for total internal reflection case
@@ -1183,12 +1166,10 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
     double principlePlaneDistance;
     double summedThickness_fp = 0.0;
 
-    //this might not do in all cases, maybe find better way
-    float rayOriginHeight = ld->lensAperture[0] * 0.25;
+    float rayOriginHeight = ld->lensAperture[0] * 0.01;
 
     vec3 ray_origin_fp = {0.0, rayOriginHeight, 0.0};
     vec3 ray_direction_fp = {99999.0, 0.0, 0.0};
-
 
 
     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
@@ -1199,22 +1180,14 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
         sphere_center.y = 0.0;
         sphere_center.z = 0.0;
 
-        //AiMsgInfo("[ZOIC] sphere_center = [%f %f %f]", sphere_center.x, sphere_center.y, sphere_center.z);
-
         vec3 hit_point = raySphereIntersection(ray_direction_fp, ray_origin_fp, sphere_center, ld->lensRadiusCurvature[i], false, false);
-
-        //AiMsgInfo("[ZOIC] hit_point = [%f %f %f]", hit_point.x, hit_point.y, hit_point.z);
 
         vec3 hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
 
-        //AiMsgInfo("[ZOIC] hit_point_normal = [%f %f %f]", hit_point_normal.x, hit_point_normal.y, hit_point_normal.z);
-
         if(i != ld->lensRadiusCurvature.size() - 1){
             ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], ray_direction_fp, hit_point_normal, true);
-            AiMsgInfo("[ZOIC] IORS ONE TWO [%d] = [%f %f]", i, ld->lensIOR[i], ld->lensIOR[i+1]);
         } else { // last element in array
             ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], 1.0, ray_direction_fp, hit_point_normal, true);
-            AiMsgInfo("[ZOIC] IORS ONE TWO [%d] = [%f %f]", i, ld->lensIOR[i], 1.0);
 
             vec3 pp_line1start; //original parallel ray start
             pp_line1start.x = 0.0;
@@ -1222,13 +1195,13 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
             pp_line1start.z = 0.0;
 
             vec3 pp_line1end; //original parallel ray end
-            pp_line1end.x = 99999.0;
+            pp_line1end.x = 999999.0;
             pp_line1end.y = rayOriginHeight;
             pp_line1end.z = 0.0;
 
             vec3 pp_line2end; //direction ray end
-            pp_line2end.x = ray_origin_fp.x + (ray_direction_fp.x * 1000.0);
-            pp_line2end.y = ray_origin_fp.y + (ray_direction_fp.y * 1000.0);
+            pp_line2end.x = ray_origin_fp.x + (ray_direction_fp.x * 100000.0);
+            pp_line2end.y = ray_origin_fp.y + (ray_direction_fp.y * 100000.0);
             pp_line2end.z = 0.0;
 
             principlePlaneDistance = lineLineIntersection(pp_line1start, pp_line1end, ray_origin_fp, pp_line2end).x;
@@ -1236,10 +1209,10 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
 
             // find intersection point
             vec3 axialStart = {0.0, 0.0, 0.0};
-            vec3 axialEnd = {99999.0, 0.0, 0.0};
+            vec3 axialEnd = {999999.0, 0.0, 0.0};
             vec3 lineDirection;
-            lineDirection.x = ray_origin_fp.x + ray_direction_fp.x * 1000.0;
-            lineDirection.y = ray_origin_fp.y + ray_direction_fp.y * 1000.0;
+            lineDirection.x = ray_origin_fp.x + ray_direction_fp.x * 100000.0;
+            lineDirection.y = ray_origin_fp.y + ray_direction_fp.y * 100000.0;
             lineDirection.z = 0.0;
 
             focalPointDistance = lineLineIntersection(axialStart, axialEnd, ray_origin_fp, lineDirection).x;
@@ -1306,7 +1279,7 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6f); // 35mm film
     AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
     AiParameterFLT("focalLength", 100.0f); // distance between sensor and lens
-    AiParameterFLT("fStop", 1.8f);
+    AiParameterFLT("fStop", 4.8f);
     AiParameterFLT("focalDistance", 120.0f); // distance from lens to focal point
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); //bokeh shape image location
@@ -1329,10 +1302,6 @@ node_initialize {
     // draw axials
     png.line((-9999 * scale) + translateX, (0.0 * scale) + translateY, (9999.0 * scale) + translateX, (0.0 * scale) + translateY, 1.0, 0.64, 0.64);
     png.line(translateX, (9999.0 * scale) + translateY, translateX, (-9999.0 * scale) + translateY, 1.0, 0.64, 0.64);
-
-
-
-
 }
 
 node_update {
@@ -1414,7 +1383,6 @@ node_update {
             ld.userApertureRadius = ld.lensAperture[ld.apertureElement];
         }
 
-
         // find by how much all lens elements should be scaled
         ld.focalLengthRatio = _focalLength / kolbFocalLength;
 
@@ -1423,13 +1391,8 @@ node_update {
 
         traceThroughLensElementsForFocalLength(&ld);
 
-        // shift first lens element (and all others consequently) so that
-        // the image distance at a certain object distance falls on the film plane
+        // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
         ld.lensShift = calculateImageDistance(_focalDistance * 10.0, &ld, &dd, false);
-        AiMsgInfo("[ZOIC] Aperture distance after lens shift = [%f]", ld.apertureDistance);
-        //ld.lensThickness[0] -= ld.lensShift;
-
-        calculateImageDistance(_focalDistance * 10.0, &ld, &dd, true);
 
         // find how far the aperture is from the film plane
         ld.apertureDistance = 0.0;
@@ -1444,6 +1407,8 @@ node_update {
         // search for ideal max height to shoot rays to on first lens element, by tracing test rays and seeing which one fails
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
         // and I don't think it does..
+
+        // use lookup table instead!
         if(_kolbSamplingMethod == 1){
             int sampleCount = 1024;
             vec3 sampleOrigin = {0.0, 0.0, 0.0};
@@ -1470,26 +1435,16 @@ node_finish {
     AiMsgInfo("[ZOIC] Vignetted Percentage = [%f]", (float(ld.vignettedRays) / float(ld.succesRays) * 100.0));
     AiMsgInfo("[ZOIC] Total internal reflection cases = [%d]", ld.totalInternalReflection);
 
+
     // origin line
     for(int i = 0; i < 200; i++){
         png.filledcircle(translateX, ((12.0 - ((24.0/200.0) * (float)i)) * scale) + translateY, 1.0, 1.0, 1.0, 1.0);
-
     }
-
-    png.line(((1200 * scale )+ translateX), (99999.0 * scale) + translateY, ((1200 * scale )+ translateX), (-99999.0 * scale) + translateY, 1.0, 1.0, 1.0);
-
-
-
     drawLenses(&ld, &dd);
 
 
     delete camera;
     AiCameraDestroy(node);
-
-
-    AiMsgInfo("[ZOIC] Coordinate vector size = [%lu]", dd.coordinates.size());
-    AiMsgInfo("[ZOIC] Points vector size = [%lu]", dd.points.size());
-
 
     png.close();
 }
@@ -1594,18 +1549,16 @@ camera_create_ray {
 
     if(_kolb){
         vec3 origin;
-        //origin.x = 0.0;
-        //origin.y = -10.0;
-        //origin.z = ld.lensShift;// + 0.125;
+        origin.x = 0.0;
+        origin.y = 0.0;
+        origin.z = ld.lensShift;// + 0.125;
 
         vec3 direction;
 
         // determine origin of rays
-        origin.x = input->sx * (ld.filmDiagonal * 0.5);
-        origin.y = input->sy * (ld.filmDiagonal * 0.5);
-        origin.z = ld.lensShift;
-
-        ///* TEMP!
+        //origin.x = input->sx * (ld.filmDiagonal * 0.5);
+        //origin.y = input->sy * (ld.filmDiagonal * 0.5);
+        //origin.z = ld.lensShift;
 
         // determine in which direction to shoot the rays
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
@@ -1631,15 +1584,13 @@ camera_create_ray {
             direction.z = ld.lensThickness[0];
         }
 
-        //*/
+        direction.x = 0.0; //tmp
 
         //direction.x = 0.0;//input->sx * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
         //direction.y = input->sy * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
         //direction.z = ld.lensThickness[0];
 
         traceThroughLensElements(&origin, &direction, &output->weight, &ld, &dd, draw);
-
-
 
 
         output->origin.x = origin.x;
@@ -1653,7 +1604,6 @@ camera_create_ray {
         // flip ray direction
         output->dir *= -1.0;
 
-        //AiMsgInfo("[ZOIC] counter = [%d]", counter);
         draw = false;
     }
 
