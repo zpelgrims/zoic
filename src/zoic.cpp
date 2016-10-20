@@ -1,5 +1,5 @@
 // ZOIC - Extended Arnold camera shader with options for:
-// Refracting through lens elements read from real life lens data (physically accurate lens distortion and optical vignetting)
+// Refracting through lens elements read from ground truth lens data (physically accurate lens distortion and optical vignetting)
 // Image based bokeh shapes
 // Emperical optical vignetting using the thin-lens equation.
 
@@ -16,19 +16,18 @@
 
 // TODO
 
-// Get initial sampling coordinates right
-// implement ray plane instead of ray ray intersection
+// Get initial sampling coordinates right (with diagonal of sensor)
 // fix origin issue (just sliiiiightly off, but makes a difference to focus)
-// assign variable to height to shoot rays on
 // convert coordinate system in functions where i do the lineline intersection (x is z and z is x)
-// Make sure all units are the same (eg kolb is in mm whilst thin lens is in cm..)
+// Make sure all units are the same (kolb is in mm whilst thin lens is in cm..)
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
-// precompute as much as possible (sphere centers, ...)
-// fix multithreading (might be the image drawing)
-// change defines to eum
+// fix multithreading (might be the image drawing?)
+// change defines to enum
+// check for multiple apertures in lens file
+
 
 /* WHAT THE HELL, WHY IN 3's??? At least that means i can lower the rendertime by a factor of 3 too.
- * OR IS THIS AN OUTPUT ERROR? I DONT THINK SO
+* OR IS THIS AN OUTPUT ERROR? I DONT THINK SO
 
 00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: -7.416297 11.924154 143.458160, 0.092027 -0.007381 0.995729
 00:00:00   142MB         |   [ZOIC] hitpoint && raydirection: -7.416273 11.924155 143.458160, 0.092026 -0.007381 0.995729
@@ -59,55 +58,54 @@
 #include <vector>
 #include <sstream>
 #include <numeric>
+
+
 #include <pngwriter.h>
 
-bool draw = true;
+bool draw = false;
 float scale = 8.0;
 float translateX = 100.0;
-float translateY = 750.0;
-pngwriter png(10000, 1500, 0.3,"/Volumes/ZENO_2016/projects/zoic/tests/images/lens_rays.png");
+float translateY = 1500.0;
+pngwriter png(20000, 3000, 0.3,"/Volumes/ZENO_2016/projects/zoic/tests/images/lens_rays.png");
+
 
 int counter = 0;
 
-#ifdef NO_OIIO
 // AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
-// Figure out the right one to call at compile time
-#  if AI_VERSION_ARCH_NUM > 4
-#   define AITEXTURELOAD_PROTO2
-#  else
-#    if AI_VERSION_ARCH_NUM == 4
-#      if AI_VERSION_MAJOR_NUM > 2
-#        define AITEXTURELOAD_PROTO2
-#      else
-#        if AI_VERSION_MAJOR_NUM == 2
-#          if AI_VERSION_MINOR_NUM >= 10
-#            define AITEXTURELOAD_PROTO2
-#          endif
-#          if AI_VERSION_MINOR_NUM == 9
-#            define AITEXTURELOAD_PROTO1
-#          endif
+// Figure out the right one to call at compile time, contributed by Gaetan Guidet.
+#if AI_VERSION_ARCH_NUM > 4
+# define AITEXTURELOAD_PROTO2
+#else
+#  if AI_VERSION_ARCH_NUM == 4
+#    if AI_VERSION_MAJOR_NUM > 2
+#      define AITEXTURELOAD_PROTO2
+#    else
+#      if AI_VERSION_MAJOR_NUM == 2
+#        if AI_VERSION_MINOR_NUM >= 10
+#          define AITEXTURELOAD_PROTO2
+#        endif
+#        if AI_VERSION_MINOR_NUM == 9
+#          define AITEXTURELOAD_PROTO1
 #        endif
 #      endif
 #    endif
 #  endif
-#  ifdef AITEXTURELOAD_PROTO2
+#endif
+#ifdef AITEXTURELOAD_PROTO2
 inline bool LoadTexture(const AtString path, void *pixelData){
     return AiTextureLoad(path, true, 0, pixelData);
 }
-#  else
-#    ifdef AITEXTURELOAD_PROTO1
+#else
+#  ifdef AITEXTURELOAD_PROTO1
 inline bool LoadTexture(const AtString path, void *pixelData){
     return AiTextureLoad(path, true,  pixelData);
 }
-#    else
+#  else
 inline bool LoadTexture(const AtString path, void *pixelData){
     AiMsgError("Current arnold version doesn't have texture loading API");
     return false;
 }
-#    endif
 #  endif
-#else
-#  include <OpenImageIO/imageio.h>
 #endif
 
 #ifdef _DEBUG
@@ -143,7 +141,7 @@ struct arrayCompare{
     inline arrayCompare(const float *_values) :values(_values) {}
     inline bool operator()(int _lhs, int _rhs) const{
         return values[_lhs] > values[_rhs];
-    }
+   }
 };
 
 class imageData{
@@ -206,8 +204,6 @@ public:
 
         AtInt64 nbytes = 0;
 
-#ifdef NO_OIIO
-
         AiMsgInfo("[ZOIC] Reading image using Arnold API: %s", bokeh_kernel_filename);
 
         AtString path(bokeh_kernel_filename);
@@ -231,36 +227,6 @@ public:
             return false;
         }
 
-#else
-
-        AiMsgInfo("[ZOIC] Reading image using OpenImageIO: %s", bokeh_kernel_filename);
-
-        //Search for an ImageIO plugin that is capable of reading the file ("foo.jpg"), first by
-        //trying to deduce the correct plugin from the file extension, but if that fails, by opening
-        //every ImageIO plugin it can find until one will open the file without error. When it finds
-        //the right plugin, it creates a subclass instance of ImageInput that reads the right kind of
-        //file format, and tries to fully open the file.
-        OpenImageIO::ImageInput *in = OpenImageIO::ImageInput::open (bokeh_kernel_filename);
-        if (! in){
-            return false;
-        }
-
-        const OpenImageIO::ImageSpec &spec = in->spec();
-
-        x = spec.width;
-        y = spec.height;
-        nchannels = spec.nchannels;
-
-        nbytes = x * y * nchannels * sizeof(float);
-        AiAddMemUsage(nbytes, "zoic");
-        pixelData = (float*) AiMalloc(nbytes);
-
-        in->read_image(OpenImageIO::TypeDesc::FLOAT, pixelData);
-        in->close();
-        delete in;
-
-#endif
-
         AiMsgInfo("[ZOIC] Image Width: %d", x);
         AiMsgInfo("[ZOIC] Image Height: %d", y);
         AiMsgInfo("[ZOIC] Image Channels: %d", nchannels);
@@ -282,8 +248,8 @@ public:
                     std::cout << ", ";
                 }
             }
-            std::cout << "----------------------------------------------" << std::endl;
-            std::cout << "----------------------------------------------" << std::endl;
+            AiMsgInfo("[ZOIC] ----------------------------------------------");
+            AiMsgInfo("[ZOIC] ----------------------------------------------");
         })
 
         bokehProbability();
@@ -314,7 +280,7 @@ public:
         int o2 = (nchannels >= 3 ? 2 : o1);
         float totalValue = 0.0f;
 
-        // for every pixel, stuff going wrong here
+        // for every pixel
         for (int i=0, j=0; i < npixels; ++i, j+=nchannels){
             // store pixel value in array
             // calculate luminance [Y = 0.3 R + 0.59 G + 0.11 B]
@@ -603,6 +569,7 @@ struct Lensdata{
     std::vector<double> lensThickness;
     std::vector<double> lensIOR;
     std::vector<double> lensAperture;
+    std::vector<double> lensCenter;
     double userApertureRadius;
     int apertureElement;
     int vignettedRays, succesRays;
@@ -678,51 +645,24 @@ vec3 vec3normalize(vec3 vector1){
 }
 
 
-// PBRT v2 source code  - Concentric disk sampling (Sampling the disk in a more uniform way than with random sampling)
-inline void ConcentricSampleDisk(float u1, float u2, float *dx, float *dy) {
-    double radius; // radius
-    double theta; // angle
 
-    // Map uniform random numbers to $[-1,1]^2$
-    double sx = 2.0f * u1 - 1.0f;
-    double sy = 2.0f * u2 - 1.0f;
-
-    // Map square to $(r,\theta)$
-    // Handle degeneracy at the origin
-    if (sx == 0.0f && sy == 0.0f){
-       *dx=0.0f;
-        *dy = 0.0f;
-   }
-    if (sx >= -sy) {
-        if (sx > sy) {
-            // Handle first region of disk
-            radius = sx;
-            if (sy > 0.0f) theta = sy/radius;
-            else          theta = 8.0f + sy/radius;
-        }
-        else {
-            // Handle second region of disk
-            radius = sy;
-            theta = 2.0f - sx/radius;
-        }
-    }
-    else {
-        if (sx <= sy) {
-            // Handle third region of disk
-            radius = -sx;
-            theta = 4.0f - sy/radius;
-        }
-        else {
-            // Handle fourth region of disk
-            radius = -sy;
-            theta = 6.0f + sx/radius;
-        }
+// Improved concentric mapping code by Dave Cline [peter shirley´s blog]
+AtVector2 ConcentricSampleDiskImproved(float ox, float oy) {
+    float phi,r;
+    float a = 2.0 * ox - 1.0;
+    float b = 2.0 * oy - 1.0;
+    if (a * a > b * b) {
+        r = a;
+        phi = (AI_PI / 4.0) * (b / a);
+    } else {
+        r = b;
+        phi = (AI_PI / 2.0) - (AI_PI / 4.0) * (a / b);
     }
 
-    theta *= AI_PI / 4.0f;
-    *dx = radius * std::cos(theta);
-    *dy = radius * std::sin(theta);
+    AtVector2 coords = {r * std::cos(phi),  r * std::sin(phi)};
+    return coords;
 }
+
 
 
 // READ IN TABULAR LENS DATA
@@ -776,6 +716,7 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
                     ld->lensAperture.push_back(std::stod(token));
                     lensDataCounter = 0;
                 }
+
                 lensDataCounter += 1;
             }
 
@@ -787,7 +728,7 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     AiMsgInfo("[ZOIC] # ROC \t Thickness \t IOR \t Aperture #");
     AiMsgInfo("[ZOIC] ##############################################");
 
-    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         AiMsgInfo("[ZOIC] %f    %f    %f    %f", ld->lensRadiusCurvature[i], ld->lensThickness[i], ld->lensIOR[i], ld->lensAperture[i]);
     }
 
@@ -805,23 +746,44 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
 
 
 void cleanupLensData(Lensdata *ld){
-    for (int i = 0; i < ld->lensRadiusCurvature.size(); i++){
-       // check if there is a 0.0 lensRadiusCurvature, which is the aperture.
-      if (ld->lensRadiusCurvature[i] == 0.0){
-           ld->apertureElement = i;
-           AiMsgInfo("[ZOIC] Aperture is lens element number = [%d]", ld->apertureElement);
+    for (int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
+        // check if there is a 0.0 lensRadiusCurvature, which is the aperture.
+        if (ld->lensRadiusCurvature[i] == 0.0){
+            ld->apertureElement = i;
+            AiMsgInfo("[ZOIC] Aperture is lens element number = [%d]", ld->apertureElement);
 
-           AiMsgInfo("[ZOIC] Adjusted lensRadiusCurvature[%d] [%f] to [99999.0]", i, ld->lensRadiusCurvature[i]);
-           ld->lensRadiusCurvature[i] = 99999.0;
-       }
+            AiMsgInfo("[ZOIC] Adjusted lensRadiusCurvature[%d] [%f] to [99999.0]", i, ld->lensRadiusCurvature[i]);
+            ld->lensRadiusCurvature[i] = 99999.0;
+        }
 
-       if (ld->lensIOR[i] == 0.0){
-           AiMsgInfo("[ZOIC] Changed lensIOR[%d] [%f] to [1.0]", i, ld->lensIOR[i]);
-           ld->lensIOR[i] = 1.0;
-       }
-
+        if (ld->lensIOR[i] == 0.0){
+            AiMsgInfo("[ZOIC] Changed lensIOR[%d] [%f] to [1.0]", i, ld->lensIOR[i]);
+            ld->lensIOR[i] = 1.0;
+        }
     }
 }
+
+
+// this isn't working yet
+void computeLensCenters(Lensdata *ld){
+    ld->lensCenter.clear();
+    double summedThickness;
+
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
+        if(i == 0){
+            summedThickness = ld->lensThickness[0];
+        } else {
+            summedThickness += ld->lensThickness[i];
+        }
+
+        ld->lensCenter.push_back(summedThickness - ld->lensRadiusCurvature[i]);
+    }
+
+    for(int i = 0; i < (int)ld->lensCenter.size(); i++){
+        AiMsgInfo("[ZOIC] ld->lensCenter = [%f]", ld->lensCenter[i]);
+    }
+}
+
 
 
 // RAY SPHERE INTERSECTIONS
@@ -901,7 +863,7 @@ vec3 calculateTransmissionVector(double ior1, double ior2, vec3 incidentVector, 
 }
 
 
-/*
+
 // LINE LINE INTERSECTIONS
 // watch out here, x is the z coordinate here and z is x.. (still need to convert)
 AtVector2 lineLineIntersection(vec3 line1_origin, vec3 line1_direction, vec3 line2_origin, vec3 line2_direction){
@@ -925,18 +887,31 @@ AtVector2 lineLineIntersection(vec3 line1_origin, vec3 line1_direction, vec3 lin
 
     return intersectionPoint;
 }
-*/
 
 
-vec3 linePlaneIntersection(vec3 a, vec3 b){
-    vec3 n = {0.0, 1.0, 0.0};
-    vec3 ba = b-a;
-    float nDotA = vec3dot(n, a);
-    float nDotBA = vec3dot(n, ba);
+// intersection with X axis
+vec3 linePlaneIntersection(vec3 rayOrigin, vec3 rayDirection, vec3 normal) {
 
-    return a + (((d - nDotA)/nDotBA) * ba);
+    // avoid division by 0
+    if (rayDirection.x == 0.0){rayDirection.x = 0.000000001;}
+    if (rayDirection.y == 0.0){rayDirection.y = 0.000000001;}
+    if (rayDirection.z == 0.0){rayDirection.z = 0.000000001;}
 
+    rayDirection = vec3normalize(rayDirection);
+
+    // this would be the proper way, but since coord is 0 0 0 this can be thrown away
+    // also normal will always be 0 1 0 so throw other terms away
+    //double x = (vec3dot(normal, coord) - vec3dot(normal, rayOrigin)) / vec3dot(normal, rayDirection);
+    double a = (- rayOrigin.y) / rayDirection.y;
+
+    vec3 contact;
+    contact.x = rayOrigin.x + (rayDirection.x * a);
+    contact.y = rayOrigin.y + (rayDirection.y * a);
+    contact.z = rayOrigin.z + (rayDirection.z * a);
+
+    return contact;
 }
+
 
 
 // CALCULATE IMAGE DISTANCE
@@ -962,9 +937,9 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
     double summedThickness_focus = 0.0;
 
     // go through every lens element
-    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         if(i==0){
-            for(int k = 0; k < ld->lensRadiusCurvature.size(); k++){
+            for(int k = 0; k < (int)ld->lensRadiusCurvature.size(); k++){
                 summedThickness_focus += ld->lensThickness[k];
             }
         }
@@ -994,14 +969,17 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
         ray_origin_focus = hit_point;
 
         // shoot off rays after last refraction
-        if(i == ld->lensRadiusCurvature.size() - 1){
+        if(i == (int)ld->lensRadiusCurvature.size() - 1){
             ray_direction_focus = calculateTransmissionVector(ld->lensIOR[ld->lensRadiusCurvature.size() - 1 - i], 1.0, ray_direction_focus, hit_point_normal, false);
 
             // find intersection point
-            vec3 axialStart = {-99999.0, 0.0, 0.0};
-            vec3 axialEnd = {99999.0, 0.0, 0.0};
-            vec3 lineDirection = {ray_origin_focus.x + ray_direction_focus.x, ray_origin_focus.y + ray_direction_focus.y, 0.0};
-            imageDistance = lineLineIntersection(axialStart, axialEnd, ray_origin_focus, lineDirection).x;
+            // vec3 axialStart = {-99999.0, 0.0, 0.0};
+            //vec3 axialEnd = {99999.0, 0.0, 0.0};
+            vec3 lineDirection = {ray_origin_focus.x + ray_direction_focus.x * 1000000.0, ray_origin_focus.y + ray_direction_focus.y * 1000000.0, 0.0};
+            //vec3 lineDirection = {ray_direction_focus.x * 1000000.0, ray_direction_focus.y * 100000000.0, 0.0};
+
+            //imageDistance = lineLineIntersection(axialStart, axialEnd, ray_origin_focus, lineDirection).x;
+            imageDistance = linePlaneIntersection(ray_origin_focus, lineDirection, {0.0, 1.0, 0.0}).x;
             png.line((hit_point.x * scale) + translateX, (hit_point.y * scale) + translateY, (ray_direction_focus.x * 1000000.0 * scale) + translateX, (ray_direction_focus.y * 1000000.0 * scale) + translateY, 0.64, 1.0, 0.0);
         }
 
@@ -1019,6 +997,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
 
 
 
+
 void traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, float *weight, Lensdata *ld, DrawData *dd, bool draw){
 
     vec3 hit_point;
@@ -1027,7 +1006,8 @@ void traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, float *weig
     double summedThickness;
     vec3 tmpRayDirection;
 
-    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
+
         if(i == 0){
             summedThickness = ld->lensThickness[0];
         } else {
@@ -1039,25 +1019,29 @@ void traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, float *weig
         sphere_center.z = summedThickness - ld->lensRadiusCurvature[i];
 
         hit_point = raySphereIntersection(*ray_direction, *ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
+        double hitPointHypotenuse = sqrt(hit_point.x * hit_point.x + hit_point.y * hit_point.y);
 
-        // ray won´t hit the lens
+
         if (hit_point.x == 0.0 && hit_point.y == 0.0 && hit_point.z == 0.0){
-            *weight = 0.0f;
+            ld->vignettedRays += 1;
+            *weight = 0.0;
             break;
         }
 
-        double hitPointHypotenuse = sqrt(hit_point.x * hit_point.x + hit_point.y * hit_point.y);
+        // ray hit outside of current lens radius
         if(hitPointHypotenuse > (ld->lensAperture[i]/2.0)){
             ld->vignettedRays += 1;
-            *weight = 0.0f;
-           break;
-        }
-
-        if(i == ld->apertureElement && hitPointHypotenuse > ld->userApertureRadius){
-            ld->vignettedRays += 1;
-            *weight = 0.0f;
+            *weight = 0.0;
             break;
         }
+
+        // ray hit outside of actual aperture
+        if(i == ld->apertureElement && hitPointHypotenuse > ld->userApertureRadius){
+            ld->vignettedRays += 1;
+            *weight = 0.0;
+            break;
+        }
+
 
         hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
 
@@ -1078,23 +1062,24 @@ void traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, float *weig
 
 
         // if not last lens element
-        if(i != ld->lensRadiusCurvature.size() - 1){
+        if(i != (int)ld->lensRadiusCurvature.size() - 1){
             tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], *ray_direction, hit_point_normal, true);
         } else { // last lens element
             // assuming the material outside the lens is air
             tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true);
-
-            dd->coordinates.push_back(hit_point.z);
-            dd->coordinates.push_back(hit_point.y);
-            dd->coordinates.push_back(tmpRayDirection.z * 10000000.0);
-            dd->coordinates.push_back(tmpRayDirection.y * 10000000.0);
+            if (draw){
+                dd->coordinates.push_back(hit_point.z);
+                dd->coordinates.push_back(hit_point.y);
+                dd->coordinates.push_back(tmpRayDirection.z * 10000000.0);
+                dd->coordinates.push_back(tmpRayDirection.y * 10000000.0);
+            }
 
         }
 
-
         // check for total internal reflection case
         if (tmpRayDirection.x == 0.0 && tmpRayDirection.y == 0.0 && tmpRayDirection.z == 0.0){
-            *weight = 0.0f;
+            ld->vignettedRays += 1;
+            *weight = 0.0;
             break;
         }
 
@@ -1102,10 +1087,7 @@ void traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, float *weig
 
     }
 
-    // count succesful rays
     ld->succesRays += 1;
-    // test
-    //AiMsgInfo("[ZOIC] RAY: [%d]: hitpoint && raydirection: %f %f %f, %f %f %f", counter, hit_point.x, hit_point.y, hit_point.z, tmpRayDirection.x, tmpRayDirection.y, tmpRayDirection.z);
 }
 
 
@@ -1124,10 +1106,9 @@ void drawLenses(Lensdata *ld, DrawData *dd){
     std::vector<float> lensBackSurfaceX;
     std::vector<float> lensBackSurfaceY;
 
-
     int samples = 1000;
 
-    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
 
         float heightVariation = ld->lensAperture[i] / float(samples);
 
@@ -1150,7 +1131,7 @@ void drawLenses(Lensdata *ld, DrawData *dd){
 
             png.filledcircle((hit_point.z * scale) + translateX, (hit_point.y * scale) + translateY, 1.0, 1.0, 1.0, 1.0);
 
-        }
+       }
     }
 }
 
@@ -1166,17 +1147,18 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
     double principlePlaneDistance;
     double summedThickness_fp = 0.0;
 
-    float rayOriginHeight = ld->lensAperture[0] * 0.01;
+    float rayOriginHeight = ld->lensAperture[0] * 0.1;
 
     vec3 ray_origin_fp = {0.0, rayOriginHeight, 0.0};
     vec3 ray_direction_fp = {99999.0, 0.0, 0.0};
 
 
-    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         i == 0 ? summedThickness_fp = ld->lensThickness[0] : summedThickness_fp += ld->lensThickness[i];
 
         vec3 sphere_center;
         sphere_center.x = summedThickness_fp - ld->lensRadiusCurvature[i];
+        //sphere_center.x = ld->lensCenter[i];
         sphere_center.y = 0.0;
         sphere_center.z = 0.0;
 
@@ -1184,7 +1166,7 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
 
         vec3 hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
 
-        if(i != ld->lensRadiusCurvature.size() - 1){
+        if(i != (int)ld->lensRadiusCurvature.size() - 1){
             ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], ray_direction_fp, hit_point_normal, true);
         } else { // last element in array
             ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], 1.0, ray_direction_fp, hit_point_normal, true);
@@ -1238,12 +1220,13 @@ bool traceThroughLensElementsForApertureSize(vec3 ray_origin, vec3 ray_direction
     vec3 sphere_center;
     double summedThickness;
 
-    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         i == 0 ? summedThickness = ld->lensThickness[0] : summedThickness += ld->lensThickness[i];
 
         sphere_center.x = 0.0;
         sphere_center.y = 0.0;
         sphere_center.z = summedThickness - ld->lensRadiusCurvature[i];
+        //sphere_center.z = ld->lensCenter[i];
 
         hit_point = raySphereIntersection(ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
 
@@ -1266,7 +1249,7 @@ bool traceThroughLensElementsForApertureSize(vec3 ray_origin, vec3 ray_direction
 
 
 void adjustFocalLength(Lensdata *ld){
-    for(unsigned int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         ld->lensRadiusCurvature[i] *= ld->focalLengthRatio;
         ld->lensThickness[i] *= ld->focalLengthRatio;
         ld->lensAperture[i] *= ld->focalLengthRatio;
@@ -1279,7 +1262,7 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6f); // 35mm film
     AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
     AiParameterFLT("focalLength", 100.0f); // distance between sensor and lens
-    AiParameterFLT("fStop", 4.8f);
+    AiParameterFLT("fStop", 3.2f);
     AiParameterFLT("focalDistance", 120.0f); // distance from lens to focal point
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); //bokeh shape image location
@@ -1358,7 +1341,7 @@ node_update {
 
 
         // bail out if something is incorrect with the vectors
-        if (ld.lensRadiusCurvature.size() == 0 ||
+        if ((int)ld.lensRadiusCurvature.size() == 0 ||
             ld.lensRadiusCurvature.size() != ld.lensAperture.size() ||
             ld.lensThickness.size() != ld.lensIOR.size()){
             AiMsgError("[ZOIC] Failed to read lens data file.");
@@ -1369,6 +1352,10 @@ node_update {
 
         // look for invalid numbers that would mess it all up bro
         cleanupLensData(&ld);
+
+        // precompute lens centers
+        // not 100% correct
+        // computeLensCenters(&ld);
 
         // calculate focal length by tracing a parallel ray through the lens system
         float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld);
@@ -1396,7 +1383,7 @@ node_update {
 
         // find how far the aperture is from the film plane
         ld.apertureDistance = 0.0;
-        for(int i = 0; i < ld.lensRadiusCurvature.size(); i++){
+        for(int i = 0; i < (int)ld.lensRadiusCurvature.size(); i++){
             ld.apertureDistance += ld.lensThickness[i];
             if(i == ld.apertureElement){
                 AiMsgInfo("[ZOIC] Aperture distance after lens shift = [%f]", ld.apertureDistance);
@@ -1424,7 +1411,91 @@ node_update {
                 }
             }
         }
+
+        // lookup table method
+        // Compute the ideal directions per origin point. Store these in a map of a map.
+        // Then query these, and depending on the value inbetween do some kind of linear interpolation with the next up value.
+        // otherwise it might be jaggy
+
+        /*
+        // PSEUDOCODE
+
+        number of samples = 64;
+        for every sample
+            r0 = i / samples * 2 * filmdiagonal
+            r1 = i+1 / samples * 2 * filmDiagonal
+
+            filmsamples = 16
+            rearsamples = 16
+
+            rearZ = last element Z
+            rearAperture = aperture Z
+
+            int numhit = 0
+            int numtraced = 0
+
+            for every film sample (i)
+                vec3 filmP = {lerp(i/filmsamples, r0, r1), 0, 0}
+                for (int x = - rearsamples; x <= rearsamples, ++x)
+                    for (int y = - rearsamples; y <= rearsamples; ++y)
+                        vec3 rearP = {(rearAperture / RearSamples), y * (rearAperture / RearSamples), rearZ}
+                        if tracefromfilm = true
+                            add rearP.x and rearP.y to vector
+
+        */
+
+        /* HOW IT SHOULD BE DONE
+
+        // Compute exit pupil lookup table
+        int NumSamples = 64;
+        for (int i = 0; i < NumSamples; ++i) {
+            float r0 = float(i) / NumSamples * 0.5f * m_diagonal;
+            float r1 = float(i + 1) / NumSamples * 0.5f * m_diagonal;
+            auto bounds = computeExitPupilBounds(r0, r1);
+            m_exitPupilBounds.emplace_back(bounds);
+        }
+
+        BoundingBox2f RealisticCamera::computeExitPupilBounds(float r0, float r1) const {
+            BoundingBox2f bounds;
+
+            const int FilmSamples = 16;
+            const int RearSamples = 16;
+
+            float rearZ = getRearElement().z;
+            float rearAperture = getRearElement().aperture;
+
+            int numHit = 0;
+            int numTraced = 0;
+            for (int i = 0; i <= FilmSamples; ++i) {
+                Vector3f filmP(nori::lerp(float(i) / FilmSamples, r0, r1), 0.f, 0.f);
+                for (int x = -RearSamples; x <= RearSamples; ++x) {
+                    for (int y = -RearSamples; y <= RearSamples; ++y) {
+                        Vector3f rearP(x * (rearAperture / RearSamples), y * (rearAperture / RearSamples), rearZ);
+                        Ray3f sceneRay;
+                        if (traceFromFilm<false, true>(Ray3f(filmP, (rearP - filmP).normalized()), sceneRay, [] (const Ray3f &) {} )) {
+                            bounds.expandBy(Vector2f(rearP.x(), rearP.y()));
+                            ++numHit;
+                        }
+                        ++numTraced;
+                    }
+                }
+            }
+
+            // Expand due to sampling error and clip to actual aperture
+            bounds.expandBy(rearAperture / RearSamples);
+            bounds.clip(BoundingBox2f(-rearAperture, rearAperture));
+
+            return bounds;
+        }
+
+        */
+
+
+
     }
+
+    AiMsgInfo("[ZOIC] Finished node update");
+
 }
 
 node_finish {
@@ -1447,6 +1518,8 @@ node_finish {
     AiCameraDestroy(node);
 
     png.close();
+
+    AiMsgInfo("[ZOIC] Finished node finish");
 }
 
 
@@ -1455,21 +1528,21 @@ camera_create_ray {
     const AtParamValue* params = AiNodeGetParams(node);
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
 
+
     if (counter == 100000){
         draw = true;
-        for (int i = 0; i < dd.coordinates.size() / 4; i++){
+        for (int i = 0; i < (int)dd.coordinates.size() / 4; i++){
             png.line((dd.coordinates[i * 4] * scale) + translateX,
                     (dd.coordinates[(i * 4) + 1] * scale) + translateY,
                     (dd.coordinates[(i * 4) + 2] * scale) + translateX,
                     (dd.coordinates[(i * 4) + 3] * scale) + translateY, 0.6, 0.6, 0.6);
         }
-        for (int i = 0; i < dd.points.size() / 2; i++){
+        for (int i = 0; i < (int)dd.points.size() / 2; i++){
             png.filledcircle((dd.points[i * 2] * scale) + translateX, (dd.points[(i * 2) + 1] * scale) + translateY, 2.0, 1.0, 1.0, 1.0);
         }
         dd.coordinates.clear();
         dd.points.clear();
         counter = 0;
-        //AiRenderAbort();
     }
 
 
@@ -1482,25 +1555,23 @@ camera_create_ray {
         p.y = input->sy * camera->tan_fov;
         p.z = 1.0;
 
-
-        AiMsgInfo("[ZOIC] input = [%f, %f]", input->sx, input->sy);
-
         // compute direction
         output->dir = AiV3Normalize(p - output->origin);
 
-        // now looking down -Z
-        output->dir.z *= -1.0;
+
 
         // DOF CALCULATIONS
         if (_useDof == true) {
 
             // Initialize point on lens
-            float lensU = 0.0f;
-            float lensV = 0.0f;
+            float lensU, lensV = 0.0;
 
             // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
             if (_useImage == false){
-                ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
+                AtVector2 lens = ConcentricSampleDiskImproved(input->lensx, input->lensy);
+                lensU = lens.x;
+                lensV = lens.y;
+
             } else { // sample bokeh image
                 camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
             }
@@ -1519,7 +1590,7 @@ camera_create_ray {
             // update arnold ray direction, normalize
             output->dir = AiV3Normalize(focusPoint - output->origin);
 
-            // Optical Vignetting (CAT EYE EFFECT) - just a hack!
+            // Emperical optical vignetting (cat eye effect)
             if (_opticalVignettingDistance > 0.0f){
                 // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
                 AtPoint opticalVignetPoint;
@@ -1535,15 +1606,31 @@ camera_create_ray {
                 float virtualApertureTrueRadius = camera->apertureRadius * _opticalVignettingRadius;
 
                 // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
-                if (ABS(pointHypotenuse) > virtualApertureTrueRadius){output->weight = 0.0f;}
+                if (ABS(pointHypotenuse) > virtualApertureTrueRadius){
+                    output->weight = 0.0f;
+                }
 
                 // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
                 // adding weight to opposite edges to get nice rim on the highlights
                 else if (ABS(pointHypotenuse) < virtualApertureTrueRadius && ABS(pointHypotenuse) > (virtualApertureTrueRadius - _highlightWidth)){
-                    output->weight *= _highlightStrength * (1.0 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) * sqrt(input->sx * input->sx + input->sy * input->sy);
+                    output->weight *= _highlightStrength *
+                                      (1.0 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) *
+                                      sqrt(input->sx * input->sx + input->sy * input->sy);
                 }
             }
         }
+
+        if (draw){
+            dd.coordinates.push_back(output->origin.z);
+            dd.coordinates.push_back(output->origin.y);
+            dd.coordinates.push_back(output->dir.z * 100000000.0);
+            dd.coordinates.push_back(output->dir.y * 100000000.0);
+        }
+
+        draw = false;
+        // now looking down -Z
+        output->dir.z *= -1.0;
+
     }
 
 
@@ -1551,7 +1638,7 @@ camera_create_ray {
         vec3 origin;
         origin.x = 0.0;
         origin.y = 0.0;
-        origin.z = ld.lensShift;// + 0.125;
+        origin.z = ld.lensShift;
 
         vec3 direction;
 
@@ -1560,11 +1647,12 @@ camera_create_ray {
         //origin.y = input->sy * (ld.filmDiagonal * 0.5);
         //origin.z = ld.lensShift;
 
-        // determine in which direction to shoot the rays
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
         float lensU, lensV = 0.0;
         if (_useImage == false){
-            ConcentricSampleDisk(input->lensx, input->lensy, &lensU, &lensV);
+            AtVector2 lens = ConcentricSampleDiskImproved(input->lensx, input->lensy);
+            lensU = lens.x;
+            lensV = lens.y;
         } else {
             // sample bokeh image
             camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
@@ -1584,14 +1672,23 @@ camera_create_ray {
             direction.z = ld.lensThickness[0];
         }
 
-        direction.x = 0.0; //tmp
+        //direction.x = 0.0; //tmp
 
-        //direction.x = 0.0;//input->sx * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
-        //direction.y = input->sy * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
-        //direction.z = ld.lensThickness[0];
+        direction.x = input->sx * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
+        direction.y = input->sy * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
+        direction.z = ld.lensThickness[0];
 
         traceThroughLensElements(&origin, &direction, &output->weight, &ld, &dd, draw);
 
+        /*
+        // count rays
+        if (traceRay){
+            ld.succesRays += 1;
+        } else {
+            ld.vignettedRays += 1;
+            output->weight = 0.0;
+        }
+        */
 
         output->origin.x = origin.x;
         output->origin.y = origin.y;
@@ -1601,9 +1698,12 @@ camera_create_ray {
         output->dir.y = direction.y;
         output->dir.z = direction.z;
 
+
+        //AiMsgInfo("[ZOIC] output->origin [%f %f %f]", output->origin.x, output->origin.y, output->origin.z);
+        //AiMsgInfo("[ZOIC] output->dir [%f %f %f]", output->dir.x, output->dir.y, output->dir.z);
+
         // flip ray direction
         output->dir *= -1.0;
-
         draw = false;
     }
 
@@ -1615,8 +1715,9 @@ camera_create_ray {
         output->weight *= 1.0f / (1.0f + e2);
     }
 
-
     counter += 1;
+    //AiMsgInfo("[ZOIC] Finished camera create ray");
+
 }
 
 

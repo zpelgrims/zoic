@@ -27,3 +27,5 @@ src/s_kallweit/realistic.cpp
 tests/images/testScene_distance.exr
 
 tests/images/testScene_spheres.exr
+
+src/zoic_new.cpp
