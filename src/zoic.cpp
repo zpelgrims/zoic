@@ -16,6 +16,7 @@
 
 // TODO
 
+// looks like scale of kolb is off by a large factor! Might have to downsize the whole system by 10
 // Get initial sampling coordinates right (with diagonal of sensor)
 // fix origin issue (just sliiiiightly off, but makes a difference to focus)
 // convert coordinate system in functions where i do the lineline intersection (x is z and z is x)
@@ -1266,7 +1267,7 @@ node_parameters {
     AiParameterFLT("focalDistance", 120.0f); // distance from lens to focal point
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); //bokeh shape image location
-    AiParameterBOOL("kolb", true);
+    AiParameterBOOL("kolb", false);
     AiParameterStr("lensDataPath", ""); // lens data file location
     AiParameterBOOL("kolbSamplingMethod", false);
     AiParameterBOOL("useDof", true);
@@ -1551,8 +1552,8 @@ camera_create_ray {
 
         // create point on lens
         AtPoint p;
-        p.x = input->sx * camera->tan_fov;
-        p.y = input->sy * camera->tan_fov;
+        p.x = 0.0;//input->sx * camera->tan_fov;
+        p.y = 0.0;//input->sy * camera->tan_fov;
         p.z = 1.0;
 
         // compute direction
@@ -1643,9 +1644,9 @@ camera_create_ray {
         vec3 direction;
 
         // determine origin of rays
-        //origin.x = input->sx * (ld.filmDiagonal * 0.5);
-        //origin.y = input->sy * (ld.filmDiagonal * 0.5);
-        //origin.z = ld.lensShift;
+        origin.x = input->sx * (ld.filmDiagonal * 0.5);
+        origin.y = input->sy * (ld.filmDiagonal * 0.5);
+        origin.z = ld.lensShift;
 
         // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
         float lensU, lensV = 0.0;
@@ -1674,9 +1675,9 @@ camera_create_ray {
 
         //direction.x = 0.0; //tmp
 
-        direction.x = input->sx * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
-        direction.y = input->sy * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
-        direction.z = ld.lensThickness[0];
+        //direction.x = input->sx * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
+        //direction.y = input->sy * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
+        //direction.z = ld.lensThickness[0];
 
         traceThroughLensElements(&origin, &direction, &output->weight, &ld, &dd, draw);
 
