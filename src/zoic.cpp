@@ -16,11 +16,9 @@
 
 // TODO
 
-// looks like scale of kolb is off by a large factor! Might have to downsize the whole system by 10
 // change to line plane intersection for pp and focus
 // Get initial sampling coordinates right (with diagonal of sensor)
 // fix origin issue (just sliiiiightly off, but makes a difference to focus)
-// Make sure all units are the same (kolb is in mm whilst thin lens is in cm..)
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // fix multithreading (might be the image drawing?)
 // change defines to enum
@@ -64,8 +62,8 @@
 #include <pngwriter.h>
 
 bool draw = false;
-float scale = 8.0;
-float translateX = 100.0;
+float scale = 100.0;
+float translateX = 1000.0;
 float translateY = 1500.0;
 pngwriter png(20000, 3000, 0.3,"/Volumes/ZENO_2016/projects/zoic/tests/images/lens_rays.png");
 
@@ -769,6 +767,12 @@ void cleanupLensData(Lensdata *ld){
             ld->lensIOR[i] = 1.0;
         }
     }
+
+    for (int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
+        ld->lensRadiusCurvature[i] *= 0.1;
+        ld->lensThickness[i] *= 0.1;
+        ld->lensAperture[i] *= 0.1;
+    }
 }
 
 
@@ -983,7 +987,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, DrawData *dd,
     AiMsgInfo("[ZOIC] Object distance = [%f]", objectDistance);
     AiMsgInfo("[ZOIC] Image distance = [%f]", imageDistance);
 
-    png.line((imageDistance * scale) + translateX, (9999.0 * scale) + translateY, (imageDistance * scale) + translateX, (-9999.0 * scale) + translateY, 0.64, 1.0, 0.0);
+    png.line((imageDistance * scale) + translateX, (99999.0 * scale) + translateY, (imageDistance * scale) + translateX, (-99999.0 * scale) + translateY, 0.64, 1.0, 0.0);
 
     return imageDistance;
 }
@@ -1302,6 +1306,7 @@ node_update {
         // these values seem to produce the same image as the other camera which is correct.. hey ho
         //ld.filmDiagonal = sqrt(_sensorWidth *_sensorWidth + _sensorHeight * _sensorHeight);
         ld.filmDiagonal = 24.0; //should be 44
+        ld.filmDiagonal = 2.40; //should be 44
 
         // check if file is supplied
         // string is const char* so have to do it the oldskool way
@@ -1341,7 +1346,7 @@ node_update {
         }
 
         // find by how much all lens elements should be scaled
-        ld.focalLengthRatio = _focalLength / kolbFocalLength;
+        ld.focalLengthRatio = (_focalLength / 10.0) / kolbFocalLength;
 
         // scale lens elements
         adjustFocalLength(&ld);
@@ -1350,7 +1355,7 @@ node_update {
         traceThroughLensElementsForFocalLength(&ld);
 
         // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
-        ld.lensShift = calculateImageDistance(_focalDistance * 10.0, &ld, &dd, false);
+        ld.lensShift = calculateImageDistance(_focalDistance, &ld, &dd, false);
 
         // find how far the aperture is from the film plane
         ld.apertureDistance = 0.0;
@@ -1605,13 +1610,13 @@ camera_create_ray {
 
         vec3 origin, direction;
 
-        origin.x = 0.0;
-        origin.y = 0.0;
-        origin.z = ld.lensShift;
-
-        //origin.x = input->sx * (ld.filmDiagonal * 0.5);
-        //origin.y = input->sy * (ld.filmDiagonal * 0.5);
+        //origin.x = 0.0;
+        //origin.y = 0.0;
         //origin.z = ld.lensShift;
+
+        origin.x = input->sx * (ld.filmDiagonal * 0.5);
+        origin.y = input->sy * (ld.filmDiagonal * 0.5);
+        origin.z = ld.lensShift;
 
         // sample disk with proper sample distribution
         float lensU, lensV = 0.0;
@@ -1637,7 +1642,7 @@ camera_create_ray {
             direction.z = ld.lensThickness[0];
         }
 
-        direction.x = 0.0; //tmp
+        //direction.x = 0.0; //tmp
 
         //direction.x = input->sx * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
         //direction.y = input->sy * ld.lensAperture[0];// * (ld.filmDiagonal / 5.0);
