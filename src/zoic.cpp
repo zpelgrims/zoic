@@ -47,15 +47,11 @@ C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/
 #include <fstream>
 #include <vector>
 #include <sstream>
+#include <iomanip>
 
-#include <pngwriter.h>
 
-
+std::ofstream myfile;
 bool draw = false;
-float scale = 100.0;
-float translateX = 500.0;
-float translateY = 600.0;
-pngwriter png(6000, 1200, 0.3,"/Volumes/ZENO_2016/projects/zoic/tests/images/lens_rays.png");
 int counter = 0;
 
 
@@ -572,6 +568,7 @@ struct Lensdata{
     double focalLengthRatio;
     float filmDiagonal;
     double lensShift;
+    double focalDistance;
 } ld;
 
 
@@ -735,6 +732,7 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     std::reverse(ld->lensAperture.begin(),ld->lensAperture.end());
 
 }
+
 
 
 void cleanupLensData(Lensdata *ld){
@@ -922,7 +920,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld){
     ray_origin_focus.y = 0.0;
     ray_origin_focus.z = objectDistance;
 
-    png.line((objectDistance * scale) + translateX, (1.2 * scale) + translateY, (objectDistance * scale) + translateX, (-1.2 * scale) + translateY, 0.64, 1.0, 0.0);
+    //png.line((objectDistance * scale) + translateX, (1.2 * scale) + translateY, (objectDistance * scale) + translateX, (-1.2 * scale) + translateY, 0.64, 1.0, 0.0);
 
     vec3 ray_direction_focus;
     ray_direction_focus.x = 0.0;
@@ -978,7 +976,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld){
     AiMsgInfo("[ZOIC] Object distance = [%.9f]", objectDistance);
     AiMsgInfo("[ZOIC] Image distance = [%.9f]", imageDistance);
 
-    png.line((imageDistance * scale) + translateX, (99999.0 * scale) + translateY, (imageDistance * scale) + translateX, (-99999.0 * scale) + translateY, 0.64, 1.0, 0.0);
+    //png.line((imageDistance * scale) + translateX, (99999.0 * scale) + translateY, (imageDistance * scale) + translateX, (-99999.0 * scale) + translateY, 0.64, 1.0, 0.0);
 
     return imageDistance;
 }
@@ -1019,10 +1017,15 @@ bool traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, Lensdata *l
         hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
 
         if(draw){
-            dd->coordinates.push_back(hit_point.z);
-            dd->coordinates.push_back(hit_point.y);
-            dd->coordinates.push_back(ray_origin->z);
-            dd->coordinates.push_back(ray_origin->y);
+            // x1, y1, x2, y2
+            myfile << std::setprecision(10) << ray_origin->z;
+            myfile << " ";
+            myfile << std::setprecision(10) << ray_origin->y;
+            myfile << " ";
+            myfile << std::setprecision(10) << hit_point.z;
+            myfile << " ";
+            myfile << std::setprecision(10) << hit_point.y;
+            myfile << " ";
         }
 
 
@@ -1037,10 +1040,15 @@ bool traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, Lensdata *l
             tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true);
 
             if (draw){
-                dd->coordinates.push_back(hit_point.z);
-                dd->coordinates.push_back(hit_point.y);
-                dd->coordinates.push_back(tmpRayDirection.z * 10000000.0);
-                dd->coordinates.push_back(tmpRayDirection.y * 10000000.0);
+                // x1, y1, x2, y2
+                myfile << std::setprecision(10) << hit_point.z;
+                myfile << " ";
+                myfile << std::setprecision(10) << hit_point.y;
+                myfile << " ";
+                myfile << std::setprecision(10) << tmpRayDirection.z * 10000000.0;
+                myfile << " ";
+                myfile << std::setprecision(10) << tmpRayDirection.y * 10000000.0;
+                myfile << " ";
             }
         }
 
@@ -1054,37 +1062,6 @@ bool traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, Lensdata *l
 
     return true;
 }
-
-
-
-
-void drawLenses(Lensdata *ld, DrawData *dd){
-    vec3 hit_point;
-    vec3 sphere_center;
-    vec3 rayOrigin = {0.0, 0.0, 0.0};
-    vec3 rayDirection;
-    int samples = 40;
-    std::vector<double> lensDrawCoords;
-
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-
-        float heightVariation = ld->lensAperture[i] / float(samples);
-
-        sphere_center.x = 0.0;
-        sphere_center.y = 0.0;
-        sphere_center.z = ld->lensCenter[i];
-
-        for(int j = 0; j < samples; j++){
-            rayDirection.x = 0.0;
-            rayDirection.y = (ld->lensAperture[i] / 2.0) - heightVariation * float(j);
-            rayDirection.z = ld->lensCenter[i] + ld->lensRadiusCurvature[i]; // summedthickness
-
-            hit_point = raySphereIntersection(rayDirection, rayOrigin, sphere_center, ld->lensRadiusCurvature[i], false, false);
-            png.filledcircle((hit_point.z * scale) + translateX, (hit_point.y * scale) + translateY, 3.0, 1.0, 1.0, 1.0);
-        }
-    }
-}
-
 
 
 
@@ -1182,6 +1159,32 @@ void adjustFocalLength(Lensdata *ld){
 }
 
 
+void writeToFile(Lensdata *ld){
+    myfile << "LENSES{";
+    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+        // lenscenter, radius, angle
+        myfile << std::setprecision(10) << ld->lensCenter[i];
+        myfile << " ";
+        myfile << std::setprecision(10) << ld->lensRadiusCurvature[i];
+        myfile << " ";
+        myfile << std::setprecision(10) << (std::asin((ld->lensAperture[i] * 0.5) / ld->lensRadiusCurvature[i])) * (180 / AI_PI);
+        myfile << " ";
+    }
+    myfile << "}\n";
+
+
+    myfile << "FOCUSDISTANCE{";
+    myfile << std::setprecision(10) << ld->focalDistance;
+    myfile << "}\n";
+
+    myfile << "IMAGEDISTANCE{";
+    myfile << std::setprecision(10) << ld->lensShift;
+    myfile << "}\n";
+
+    myfile << "RAYS{";
+}
+
+
 
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6f); // 35mm film
@@ -1207,8 +1210,8 @@ node_initialize {
     cameraData *camera = new cameraData();
     AiCameraInitialize(node, (void*)camera);
 
-    // draw axials
-    png.line((-9999 * scale) + translateX, (0.0 * scale) + translateY, (9999.0 * scale) + translateX, (0.0 * scale) + translateY, 1.0, 0.64, 0.64);
+    // create file to transfer data to python drawing module
+    myfile.open ("/Volumes/ZENO_2016/projects/zoic/src/draw.zoic");
 }
 
 node_update {
@@ -1323,6 +1326,10 @@ node_update {
         // precompute lens centers
         computeLensCenters(&ld);
 
+        ld.focalDistance = _focalDistance;
+
+        writeToFile(&ld);
+
         // search for ideal max height to shoot rays to on first lens element, by tracing test rays and seeing which one fails
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
         // and I don't think it does..
@@ -1358,27 +1365,25 @@ node_finish {
     AiMsgInfo("[ZOIC] Vignetted Percentage = [%f]", (float(ld.vignettedRays) / (float(ld.succesRays) + float(ld.vignettedRays))) * 100.0);
     AiMsgInfo("[ZOIC] Total internal reflection cases = [%d]", ld.totalInternalReflection);
 
-    // origin line
-    png.filledsquare(translateX - 1, (1.2 * scale) + translateY, translateX + 1, (-1.2 * scale) + translateY, 1.0, 1.0, 1.0);
 
-    AiMsgInfo("Ray drawing vector size: %lu", dd.coordinates.size());
-
-    for (int i = 0; i < (int)dd.coordinates.size() / 4; i++){
+    //for (int i = 0; i < (int)dd.coordinates.size() / 4; i++){
         //png.line((dd.coordinates[i * 4] * scale) + translateX,
         //         (dd.coordinates[(i * 4) + 1] * scale) + translateY,
         //         (dd.coordinates[(i * 4) + 2] * scale) + translateX,
         //         (dd.coordinates[(i * 4) + 3] * scale) + translateY, 0.6, 0.6, 0.6);
-    }
+    //}
 
-    dd.coordinates.clear();
 
-    AiMsgInfo("Rays drawing finished");
+    myfile << "}";
+    myfile.close();
 
-    drawLenses(&ld, &dd);
+    // execute drawing
+    std::string filename = "/Volumes/ZENO_2016/projects/zoic/src/draw.py";
+    std::string command = "python ";
+    command += filename;
+    system(command.c_str());
 
-    AiMsgInfo("Lens drawing finished");
-
-    png.close();
+    AiMsgInfo("Drawing finished");
 
     delete camera;
     AiCameraDestroy(node);

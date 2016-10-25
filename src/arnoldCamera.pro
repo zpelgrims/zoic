@@ -27,4 +27,6 @@ HEADERS += \
 
 DISTFILES += \
     /Volumes/ZENO_2016/projects/zoic/maya/ae/aiZoicTemplate.py \
-    /Volumes/ZENO_2016/projects/zoic/src/zoic.mtd
+    /Volumes/ZENO_2016/projects/zoic/src/zoic.mtd \
+    draw.py \
+    draw.zoic
