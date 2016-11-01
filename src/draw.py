@@ -1,80 +1,82 @@
 from PIL import Image, ImageDraw, ImageFont
 import math
 import re
-
-
-"""
-
-IDEAL FORMAT
-
-LENSES{lensCenter,radius,angle}
-FOCUSDISTANCE{focusDistance}
-IMAGEDISTANCE{imageDistance}
-RAYS{x1,y1,x2,y2}
-
-"""
-
-
-
-
+ 
 # GLOBAL VARS
-SIZE = (2500, 500)
-AAS = 1
-LINEWIDTH = 4
-TRANSLATEX = 100 * AAS
+SIZE = (3500, 750)
+AAS = 4
+LINEWIDTH = 15
+TRANSLATEX = 450 * AAS
 TRANSLATEY = (SIZE[1] * AAS) / 2
 PADDING = 10 * AAS
-SCALE = 45
+SCALE = 80
 # font = ImageFont.truetype('C:\Windows\Fonts\Consola.ttf', 16 * AAS)
-font = ImageFont.truetype('/Users/zpelgrims/Library/Fonts/Inconsolata.otf', 16 * AAS)
+# font = ImageFont.truetype('/Users/zpelgrims/Library/Fonts/Inconsolata.otf', 16 * AAS)
+font = ImageFont.truetype('/Users/kassiawordley/Library/Fonts/Arial.ttf', 16 * AAS)
 WHITE = (255, 255, 255)
 RED = (int(0.9 * 255), int(0.4 * 255), int(0.5 * 255))
-BLUE = (int(0.039 * 255), int(0.175 * 255), int(0.246 * 255))
+BLUE = (36, 71, 91)
 GREEN = (int(0.5 * 255), int(0.7 * 255), int(0.25 * 255))
 ORANGE = (int(0.8 * 255), int(0.4 * 255), int(0.15 * 255))
-
-
+GREY = (150, 150, 150)
+ 
+ 
 # DATA VARS
-FOCUSDISTANCE = 50 * AAS
-
-dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/draw.zoic', 'r')
+ 
+print "Reading data file"
+# dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/draw.zoic', 'r')
+# dataFile = open('C:\ilionData\Users\zeno.pelgrims\Documents\zoic_compile/draw.zoic', 'r')
+dataFile = open('/Users/kassiawordley/Desktop/zoic_kassia/draw.zoic', 'r')
+ 
 LENSES = dataFile.readline()
-
 LENSESSTRING = re.sub('[LENSES{}]', '', LENSES)
 LENSESSTRING = LENSESSTRING.rstrip()
-
 LENSESLIST = [float(n) for n in LENSESSTRING.split()]
-#for i in range (0, len(LENSESLIST)):
-#    LENSESLIST[i] = LENSESLIST[i] * SCALE
-print LENSESLIST
 
+IORSTRING = dataFile.readline()
+IORSTRING = re.sub('[IOR{}]', '', IORSTRING)
+IORLIST = [float(n) for n in IORSTRING.split()]
 
+APERTURESTRING = dataFile.readline()
+APERTURESTRING = re.sub('[APERTURE{}]', '', APERTURESTRING)
+APERTURELIST = [int(n) for n in APERTURESTRING.split()]
+
+APERTUREDISTANCESTRING = dataFile.readline()
+APERTUREDISTANCESTRING = re.sub('[APERTUREDISTANCE{}]', '', APERTUREDISTANCESTRING)
+APERTUREDISTANCELIST = [float(n) for n in APERTUREDISTANCESTRING.split()]
+
+ 
 FOCUSDISTANCESTRING = dataFile.readline()
 FOCUSDISTANCESTRING = re.sub('[FOCUSDISTANCE{}]', '', FOCUSDISTANCESTRING)
 FOCUSDISTANCELIST = [float(n) for n in FOCUSDISTANCESTRING.split()]
-#for i in range (0, len(FOCUSDISTANCELIST)):
-#    FOCUSDISTANCELIST[i] = FOCUSDISTANCELIST[i] * SCALE
-print FOCUSDISTANCELIST
-
+ 
 IMAGEDISTANCESTRING = dataFile.readline()
 IMAGEDISTANCESTRING = re.sub('[IMAGEDISTANCE{}]', '', IMAGEDISTANCESTRING)
 IMAGEDISTANCELIST = [float(n) for n in IMAGEDISTANCESTRING.split()]
-#for i in range (0, len(IMAGEDISTANCELIST)):
-#    IMAGEDISTANCELIST[i] = IMAGEDISTANCELIST[i] * SCALE
-print IMAGEDISTANCELIST
 
+IMAGERAYSSTRING = dataFile.readline()
+IMAGERAYSSTRING = re.sub('[IMAGERAYS{}]', '', IMAGERAYSSTRING)
+IMAGERAYSLIST = [float(n) for n in IMAGERAYSSTRING.split()]
+ 
 RAYSSTRING = dataFile.readline()
 RAYSSTRING = re.sub('[RAYS{}]', '', RAYSSTRING)
 RAYSLIST = [float(n) for n in RAYSSTRING.split()]
-#for i in range (0, len(RAYSLIST)):
-#    RAYSLIST[i] = RAYSLIST[i] * SCALE
-print RAYSLIST
-
+ 
 dataFile.close()
 
+list1 = []
+list2 = []
+lenscounter = 0
+ 
+def arc(draw, bbox, start, end, fill, width = LINEWIDTH, segments = 200):
+    global list1
+    global list2
+    global lenscounter
+    global IORLIST
+    global APERTURELIST
 
+    firstLastList = []
 
-def arc(draw, bbox, start, end, fill, width=LINEWIDTH, segments=200):
     # radians
     start *= math.pi / 180
     end *= math.pi / 180
@@ -95,56 +97,119 @@ def arc(draw, bbox, start, end, fill, width=LINEWIDTH, segments=200):
     cy = bbox[1] + ry
 
     # segment length
-    l = (rx+ry) * da / 2.0
+    l = (rx + ry) * da / 2.0
 
     for i in range(segments):
 
         # angle centre
-        a = start + (i+0.5) * da
+        a = start + (i + 0.5) * da
 
         # x,y centre
         x = cx + math.cos(a) * rx
         y = cy + math.sin(a) * ry
 
         # derivatives
-        dx = -math.sin(a) * rx / (rx+ry)
-        dy = math.cos(a) * ry / (rx+ry)
+        dx = -math.sin(a) * rx / (rx + ry)
+        dy = math.cos(a) * ry / (rx + ry)
 
-        draw.line([(x-dx*l,y-dy*l), (x+dx*l, y+dy*l)], fill=fill, width=width)
+        if lenscounter != APERTURELIST[0]:
+            draw.line([(x - dx * l, y - dy * l), (x + dx * l, y + dy * l)], fill=fill, width=width)
+
+        
+        if lenscounter == 0:
+            if i == 0:
+                list1.append((x - dx * l, y - dy * l))
+
+            if i == segments - 1:
+                list1.append((x - dx * l, y - dy * l))
 
 
+        if lenscounter % 2 == 0:
+            if i == 0:
+                list2.append((x - dx * l, y - dy * l))
+
+            if i == segments - 1:
+                list2.append((x - dx * l, y - dy * l))
+
+                if IORLIST[lenscounter] != 1.0 or lenscounter == 0:
+                    draw.line([list1[0], list2[0]], fill = fill, width = width)
+                    draw.line([list1[1], list2[1]], fill = fill, width = width)
+
+                list1 = []
+
+
+        elif lenscounter % 2 != 0:
+            if i == 0:
+                list1.append((x - dx * l, y - dy * l))
+
+            if i == segments - 1:
+                list1.append((x - dx * l, y - dy * l))
+
+
+                if IORLIST[lenscounter] != 1.0:
+                    draw.line([list1[0], list2[0]], fill = fill, width = width)
+                    draw.line([list1[1], list2[1]], fill = fill, width = width)
+                
+                list2 = []
+
+    lenscounter = lenscounter + 1
+    
+ 
+ 
+print "Creating image"
 img = Image.new('RGB', (SIZE[0] * AAS, SIZE[1] * AAS), BLUE)
 d = ImageDraw.Draw(img)
+ 
 
 # ORIGIN LINES
-d.line([-9999 + TRANSLATEX, 0 + TRANSLATEY, 9999 + TRANSLATEX, 0 + TRANSLATEY],  WHITE, LINEWIDTH)
-d.line([0 + TRANSLATEX, 9999 + TRANSLATEY, 0 + TRANSLATEX, -9999 + TRANSLATEY],  WHITE, LINEWIDTH)
-d.text([0 + TRANSLATEX + PADDING, 0 + TRANSLATEY + PADDING], "(0, 0)", WHITE, font)
+print "Drawing origin lines"
+d.line([-5000 + TRANSLATEX, 0 + TRANSLATEY, 15000 + TRANSLATEX, 0 + TRANSLATEY],  WHITE, 5)
+d.line([0 + TRANSLATEX, 9999 + TRANSLATEY, 0 + TRANSLATEX, -9999 + TRANSLATEY],  WHITE, 5)
+d.text([0 + TRANSLATEX + PADDING, 0 + TRANSLATEY + PADDING + 1000], "(0, 0)", WHITE, font)
 
+ 
+ 
 # FOCUS DISTANCE
-d.line([FOCUSDISTANCE * SCALE + TRANSLATEX, 9999 + TRANSLATEY, FOCUSDISTANCE * SCALE + TRANSLATEX, -9999 + TRANSLATEY],  ORANGE, LINEWIDTH)
-d.text([FOCUSDISTANCE * SCALE + TRANSLATEX + PADDING, 0 + TRANSLATEY + PADDING], "(" + str(FOCUSDISTANCE) + ", 0)", ORANGE, font)
+print "Drawing focus line"
+d.line([(FOCUSDISTANCELIST[0] * AAS) * SCALE + TRANSLATEX, 9999 + TRANSLATEY, (FOCUSDISTANCELIST[0] * AAS) * SCALE + TRANSLATEX, -9999 + TRANSLATEY],  ORANGE, LINEWIDTH)
+d.text([(FOCUSDISTANCELIST[0] * AAS) * SCALE + TRANSLATEX + PADDING, 0 + TRANSLATEY + PADDING + 1000], "(" + str(FOCUSDISTANCELIST[0]) + ", 0)", ORANGE, font)
+d.text([(FOCUSDISTANCELIST[0] * AAS) * SCALE + TRANSLATEX + PADDING, 0 + TRANSLATEY + PADDING + 1100], "FOCUSDISTANCE", ORANGE, font)
+ 
+# IMAGE DISTANCE
+print "Drawing image line"
+d.line([(IMAGEDISTANCELIST[0] * AAS) * SCALE + TRANSLATEX, 9999 + TRANSLATEY, (IMAGEDISTANCELIST[0] * AAS) * SCALE + TRANSLATEX, -9999 + TRANSLATEY],  ORANGE, LINEWIDTH)
+d.text([(IMAGEDISTANCELIST[0] * AAS) * SCALE + TRANSLATEX + PADDING, 0 + TRANSLATEY + PADDING + 1000], "(" + str(IMAGEDISTANCELIST[0]) + ", 0)", ORANGE, font)
+d.text([(IMAGEDISTANCELIST[0] * AAS) * SCALE + TRANSLATEX + PADDING, 0 + TRANSLATEY + PADDING + 1100], "IMAGEDISTANCE", ORANGE, font)
 
-for count in range (0, len(LENSESLIST) / 3):
-    #print LENSESLIST[count * 3]
-    #print LENSESLIST[(count * 3) + 1]
-    #print LENSESLIST[(count * 3) + 2]
-    arc(d, [ (LENSESLIST[count * 3] - LENSESLIST[(count * 3) + 1]) * SCALE + TRANSLATEX, (- LENSESLIST[(count * 3) + 1]) * SCALE + TRANSLATEY, (LENSESLIST[count*3] + LENSESLIST[(count * 3) + 1]) * SCALE + TRANSLATEX, (LENSESLIST[(count * 3) + 1]) * SCALE + TRANSLATEY], - LENSESLIST[(count * 3) + 2], LENSESLIST[(count * 3) + 2], RED)
 
+# IMAGERAYS
+print "Drawing image ray"
+for count in range (0, len(IMAGERAYSLIST) / 4):
+    d.line([IMAGERAYSLIST[(count * 4)] * AAS * SCALE + TRANSLATEX, IMAGERAYSLIST[(count * 4) + 1] * AAS * SCALE + TRANSLATEY, IMAGERAYSLIST[(count * 4) + 2] * AAS * SCALE + TRANSLATEX,  (IMAGERAYSLIST[(count * 4) + 3] * AAS * SCALE) + TRANSLATEY], ORANGE, 1)
 
+# RAYS
+print "Drawing rays"
 for count in range (0, len(RAYSLIST) / 4):
-    #print RAYSLIST[count * 4]
-    #print RAYSLIST[(count * 4) + 1]
-    #print RAYSLIST[(count * 4) + 2]
-    #print RAYSLIST[(count * 4) + 3]
-    d.line([RAYSLIST[count * 4] * SCALE + TRANSLATEX, RAYSLIST[(count * 4) + 1] * SCALE + TRANSLATEY, RAYSLIST[(count * 4) + 2] * SCALE * TRANSLATEX,  RAYSLIST[(count * 4) + 3] * SCALE * TRANSLATEY], WHITE, 1)
+    d.line([RAYSLIST[(count * 4)] * AAS * SCALE + TRANSLATEX, RAYSLIST[(count * 4) + 1] * AAS * SCALE + TRANSLATEY, RAYSLIST[(count * 4) + 2] * AAS * SCALE + TRANSLATEX,  (RAYSLIST[(count * 4) + 3] * AAS * SCALE) + TRANSLATEY], WHITE, 1)
 
-#sphereCenter = (300, 0)
-#sphereRadius = 800/2 * AAS # sphereRadius * AAS
-#arc(d, [sphereCenter[0] - sphereRadius + TRANSLATEX, sphereCenter[1] - sphereRadius + TRANSLATEY, sphereCenter[0] + sphereRadius + TRANSLATEX, sphereCenter[1] + sphereRadius + TRANSLATEY], -50, 50, RED)
+ 
+# LENS ELEMENTS
+print "Drawing lens elements"
+for count in range (0, len(LENSESLIST) / 3):
+    arc(d, [((LENSESLIST[count * 3] * AAS) - (LENSESLIST[(count * 3) + 1]) * AAS) * SCALE + TRANSLATEX, (- LENSESLIST[(count * 3) + 1]) * AAS * SCALE + TRANSLATEY, ((LENSESLIST[count*3] * AAS) + (LENSESLIST[(count * 3) + 1] * AAS)) * SCALE + TRANSLATEX, (LENSESLIST[(count * 3) + 1] * AAS) * SCALE + TRANSLATEY], - LENSESLIST[(count * 3) + 2], LENSESLIST[(count * 3) + 2], RED)
+ 
 
+# APERTURE
+print "Drawing aperture"
+APERTUREHEIGHT = 0.75
+MAXAPERTURE = 1.65
+d.line([(APERTUREDISTANCELIST[0] * AAS * SCALE + TRANSLATEX, MAXAPERTURE * AAS * SCALE + TRANSLATEY), (APERTUREDISTANCELIST[0] * AAS * SCALE + TRANSLATEX, APERTUREHEIGHT * AAS * SCALE + TRANSLATEY)], GREY, LINEWIDTH)
+d.line([(APERTUREDISTANCELIST[0] * AAS * SCALE + TRANSLATEX, - MAXAPERTURE * AAS * SCALE + TRANSLATEY), (APERTUREDISTANCELIST[0] * AAS * SCALE + TRANSLATEX, - APERTUREHEIGHT * AAS * SCALE + TRANSLATEY)], GREY, LINEWIDTH)
+
+
+print "Anti-aliasing image"
 img.thumbnail(SIZE, Image.ANTIALIAS)
-
-# img.save('C:\ilionData\Users\zeno.pelgrims\Documents\pillow_test\lensDrawing.png','png')
-img.save('/Volumes/ZENO_2016/projects/zoic/tests/images/lensDrawing.png','png')
-
+ 
+# img.save('C:\ilionData\Users\zeno.pelgrims\Documents\zoic_compile\lensDrawing.png','png')
+# img.save('/Volumes/ZENO_2016/projects/zoic/tests/images/lensDrawing.png','png')
+img.save('/Users/kassiawordley/Desktop/zoic_kassia/lensDrawing.png','png')
