@@ -1,5 +1,5 @@
 // ZOIC - Extended Arnold camera shader with options for:
-// Refracting through lens elements read from ground truth lens data   
+// Refracting through lens elements read from ground truth lens data
         // Physically plausible lens distortion and optical vignetting
 // Image based bokeh shapes
 // Emperical optical vignetting using the thin-lens equation
@@ -21,18 +21,15 @@
 // change defines to enum
 // use concentric mapping + rejection for image based bokeh? Not sure if possible
 // implement correct exposure based on film plane sample position
- 
- 
+
 /* COMPILE AT WORK:
 g++ -std=c++11 -O3 -I"C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/include" -L"C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin" -lai -DNO_OIIO --shared C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/zoic.cpp -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/zoic.dll
 C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/lights.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_lights.exr -set options.threads 1 -dp
 C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/distance.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -set options.skip_license_check on -l "C:/Program Files/Ilion/IlionMayaFramework/2015/modules/mtoa/1.2.7.2.2-4.2.13.6/shaders" -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_distance.exr -set options.threads 1 -dp
- 
 */
- 
- 
- 
- 
+
+
+
 #include <ai.h>
 #include <cstring>
 #include <iostream>
@@ -42,13 +39,11 @@ C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/
 #include <vector>
 #include <sstream>
 #include <iomanip>
- 
- 
+
 std::ofstream myfile;
 bool draw = false;
 int counter = 0;
- 
- 
+
 // AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
 // Figure out the right one to call at compile time, contributed by Gaetan Guidet.
 #if AI_VERSION_ARCH_NUM > 4
@@ -69,7 +64,6 @@ int counter = 0;
 #    endif
 #  endif
 #endif
- 
 #ifdef AITEXTURELOAD_PROTO2
 inline bool LoadTexture(const AtString path, void *pixelData){
     return AiTextureLoad(path, true, 0, pixelData);
@@ -86,18 +80,15 @@ inline bool LoadTexture(const AtString path, void *pixelData){
 }
 #  endif
 #endif
- 
- 
+
 #ifdef _DEBUG
 #  define DEBUG_ONLY(block) block
 #else
 #  define DEBUG_ONLY(block)
 #endif
- 
 // Arnold thingy
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
- 
- 
+
 #define _sensorWidth (params[0].FLT)
 #define _sensorHeight (params[1].FLT)
 #define _focalLength (params[2].FLT)
@@ -114,8 +105,7 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 #define _highlightWidth (params[13].FLT)
 #define _highlightStrength (params[14].FLT)
 #define _exposureControl (params[15].FLT)
- 
- 
+
 struct arrayCompare{
     const float *values;
     inline arrayCompare(const float *_values) :values(_values) {}
@@ -123,9 +113,8 @@ struct arrayCompare{
         return values[_lhs] > values[_rhs];
    }
 };
- 
- 
- 
+
+
 class imageData{
 private:
     int x, y;
@@ -135,22 +124,18 @@ private:
     float *cdfColumn;
     int *rowIndices;
     int *columnIndices;
- 
 public:
     imageData()
         : x(0), y(0), nchannels(0)
         , pixelData(0), cdfRow(0), cdfColumn(0)
         , rowIndices(0), columnIndices(0) {
     }
- 
     ~imageData(){
         invalidate();
     }
- 
     bool isValid() const{
         return (x * y * nchannels > 0 && nchannels >= 3);
     }
- 
     void invalidate(){
         if (pixelData){
             AiAddMemUsage(-x * y * nchannels * sizeof(float), "zoic");
@@ -179,41 +164,30 @@ public:
         }
         x = y = nchannels = 0;
     }
- 
     bool read(const char *bokeh_kernel_filename){
- 
         invalidate();
- 
         AtInt64 nbytes = 0;
- 
         AiMsgInfo("[ZOIC] Reading image using Arnold API: %s", bokeh_kernel_filename);
- 
         AtString path(bokeh_kernel_filename);
- 
         unsigned int iw, ih, nc;
         if (!AiTextureGetResolution(path, &iw, &ih) ||
             !AiTextureGetNumChannels(path, &nc)){
             return false;
         }
- 
         x = int(iw);
         y = int(ih);
         nchannels = int(nc);
- 
         nbytes = x * y * nchannels * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
         pixelData = (float*) AiMalloc(nbytes);
- 
         if (!LoadTexture(path, pixelData)){
             invalidate();
             return false;
         }
- 
         AiMsgInfo("[ZOIC] Image Width: %d", x);
         AiMsgInfo("[ZOIC] Image Height: %d", y);
         AiMsgInfo("[ZOIC] Image Channels: %d", nchannels);
         AiMsgInfo("[ZOIC] Total amount of pixels to process: %d", x * y);
- 
         DEBUG_ONLY({
             // print out raw pixel data
             int npixels = x * y;
@@ -233,91 +207,68 @@ public:
             AiMsgInfo("[ZOIC] ----------------------------------------------");
             AiMsgInfo("[ZOIC] ----------------------------------------------");
         })
- 
         bokehProbability();
- 
         return true;
     }
- 
     // Importance sampling
     void bokehProbability(){
         if (!isValid()){
             return;
         }
- 
         // initialize arrays
         AtInt64 nbytes = x * y * sizeof(float);
         AtInt64 totalTempBytes = 0;
- 
         AiAddMemUsage(nbytes, "zoic");
         float *pixelValues = (float*) AiMalloc(nbytes);
         totalTempBytes += nbytes;
- 
        AiAddMemUsage(nbytes, "zoic");
         float *normalizedPixelValues = (float*) AiMalloc(nbytes);
         totalTempBytes += nbytes;
- 
         int npixels = x * y;
         int o1 = (nchannels >= 2 ? 1 : 0);
         int o2 = (nchannels >= 3 ? 2 : o1);
        float totalValue = 0.0f;
- 
         // for every pixel
         for (int i=0, j=0; i < npixels; ++i, j+=nchannels){
             // store pixel value in array
             // calculate luminance [Y = 0.3 R + 0.59 G + 0.11 B]
             pixelValues[i] = pixelData[j] * 0.3f + pixelData[j+o1] * 0.59f + pixelData[j+o2] * 0.11f;
- 
             totalValue += pixelValues[i];
- 
             DEBUG_ONLY(std::cout << "Pixel Luminance: " << i << " -> " << pixelValues[i] << std::endl);
         }
- 
         DEBUG_ONLY({
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "DEBUG: Total Pixel Value: " << totalValue << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
- 
         // normalize pixel values so sum = 1
         float invTotalValue = 1.0f / totalValue;
         float totalNormalizedValue = 0.0f;
- 
         for(int i=0; i < npixels; ++i){
             normalizedPixelValues[i] = pixelValues[i] * invTotalValue;
- 
             totalNormalizedValue += normalizedPixelValues[i];
- 
             DEBUG_ONLY(std::cout << "Normalized Pixel Value: " << i << ": " << normalizedPixelValues[i] << std::endl);
         }
- 
         DEBUG_ONLY({
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "DEBUG: Total Normalized Pixel Value: " << totalNormalizedValue << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
- 
         // calculate sum for each row
         nbytes = y * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
         float *summedRowValues = (float*) AiMalloc(nbytes);
         totalTempBytes += nbytes;
- 
         for(int i=0, k=0; i < y; ++i){
- 
             summedRowValues[i] = 0.0f;
- 
             for(int j=0; j < x; ++j, ++k){
- 
                 summedRowValues[i] += normalizedPixelValues[k];
             }
- 
            DEBUG_ONLY(std::cout << "Summed Values row [" << i << "]: " << summedRowValues[i] << std::endl);
         }
- 
- 
+
         DEBUG_ONLY({
             // calculate sum of all row values, just to debug
             float totalNormalizedRowValue = 0.0f;
@@ -328,20 +279,16 @@ public:
             std::cout << "Debug: Summed Row Value: " << totalNormalizedRowValue << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
- 
- 
+
         // make array of indices
         nbytes = y * sizeof(int);
         AiAddMemUsage(nbytes, "zoic");
         rowIndices = (int*) AiMalloc(nbytes);
- 
         for(int i = 0; i < y; ++i){
             rowIndices[i] = i;
         }
- 
         std::sort(rowIndices, rowIndices + y, arrayCompare(summedRowValues));
- 
- 
+
         DEBUG_ONLY({
             // print values
             for(int i = 0; i < y; ++i){
@@ -350,32 +297,25 @@ public:
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
- 
- 
+
         // For every row, add the sum of all previous row (cumulative distribution function)
         nbytes = y * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
         cdfRow = (float*) AiMalloc(nbytes);
- 
         float prevVal = 0.0f;
- 
         for (int i = 0; i < y; ++i){
             cdfRow[i] = prevVal + summedRowValues[rowIndices[i]];
             prevVal = cdfRow[i];
- 
             DEBUG_ONLY(std::cout << "CDF row [" << rowIndices[i] << "]: " << cdfRow[i] << std::endl);
         }
- 
         DEBUG_ONLY({
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
- 
         nbytes = npixels * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
         float *normalizedValuesPerRow = (float*) AiMalloc(nbytes);
         totalTempBytes += nbytes;
- 
         // divide pixel values of each pixel by the sum of the pixel values of that row (Normalize)
         for (int r = 0, i = 0; r < y; ++r){
             for (int c = 0; c < x; ++c, ++i){
@@ -386,29 +326,23 @@ public:
                 else{
                     normalizedValuesPerRow[i] = 0;
                 }
- 
                 DEBUG_ONLY(std::cout << "Normalized Pixel value per row: " << i << ": " << normalizedValuesPerRow[i] << std::endl);
             }
         }
- 
         DEBUG_ONLY({
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
- 
         // sort column values from highest to lowest per row (probability density function)
         nbytes = npixels * sizeof(int);
         AiAddMemUsage(nbytes, "zoic");
         columnIndices = (int*) AiMalloc(nbytes);
- 
         for(int i = 0; i < npixels; i++){
             columnIndices[i] = i;
         }
- 
         for (int i = 0; i < npixels; i+=x){
             std::sort(columnIndices + i, columnIndices + i + x, arrayCompare(normalizedValuesPerRow));
         }
- 
         DEBUG_ONLY({
             // print values
             for(int i = 0; i < npixels; ++i){
@@ -417,66 +351,50 @@ public:
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
- 
         // For every column per row, add the sum of all previous columns (cumulative distribution function)
         nbytes = npixels * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
         cdfColumn = (float*) AiMalloc(nbytes);
- 
         for (int r = 0, i = 0; r < y; ++r){
             prevVal = 0.0f;
- 
             for (int c = 0; c < x; ++c, ++i){
                 cdfColumn[i] = prevVal + normalizedValuesPerRow[columnIndices[i]];
                 prevVal = cdfColumn[i];
- 
                 DEBUG_ONLY(std::cout << "CDF column [" <<  columnIndices[i] << "]: " << cdfColumn[i] << std::endl);
             }
         }
- 
         DEBUG_ONLY(std::cout << "----------------------------------------------" << std::endl);
- 
         // Release and untrack memory
         AiAddMemUsage(-totalTempBytes, "zoic");
- 
         AiFree(pixelValues);
         AiFree(normalizedPixelValues);
         AiFree(summedRowValues);
         AiFree(normalizedValuesPerRow);
     }
- 
     // Sample image
     void bokehSample(float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
- 
         if (!isValid()){
             AiMsgWarning("[ZOIC] Invalid bokeh image data.");
             *dx = 0.0f;
             *dy = 0.0f;
            return;
         }
- 
         // print random number between 0 and 1
         DEBUG_ONLY(std::cout << "RANDOM NUMBER ROW: " << randomNumberRow << std::endl);
- 
         // find upper bound of random number in the array
         float *pUpperBound = std::upper_bound(cdfRow, cdfRow + y, randomNumberRow);
         int r = 0;
- 
         if (pUpperBound >= cdfRow + y){
             r = y - 1;
- 
         } else{
             DEBUG_ONLY(std::cout << "UPPER BOUND: " << *pUpperBound << std::endl);
             r = int(pUpperBound - cdfRow);
         }
- 
- 
+
         // find actual pixel row
         int actualPixelRow = rowIndices[r];
- 
         // recalculate pixel row so that the center pixel is (0,0) - might run into problems with images of dimensions like 2x2, 4x4, 6x6, etc
         int recalulatedPixelRow = actualPixelRow - ((x - 1) / 2);
- 
         DEBUG_ONLY({
             // print values
             std::cout << "INDEX IN CDF ROW: " << r << std::endl;
@@ -487,30 +405,23 @@ public:
             // print random number between 0 and 1
             std::cout << "RANDOM NUMBER COLUMN: " << randomNumberColumn << std::endl;
         })
- 
         int startPixel = actualPixelRow * x;
- 
         DEBUG_ONLY(std::cout << "START PIXEL: " << startPixel << std::endl);
- 
- 
+
         // find upper bound of random number in the array
         float *pUpperBoundColumn = std::upper_bound(cdfColumn + startPixel, cdfColumn + startPixel + x, randomNumberColumn);
         int c = 0;
- 
         if (pUpperBoundColumn >= cdfColumn + startPixel + x){
             //AiMsgWarning("[zoic] %.9f larger than last biggest cdfColumn[%d][%d] = %.9f", randomNumberColumn, r, x-1, cdfColumn[startPixel+x-1]);
             c = startPixel + x - 1;
- 
         } else{
             DEBUG_ONLY(std::cout << "UPPER BOUND: " << *pUpperBoundColumn << std::endl);
             c = int(pUpperBoundColumn - cdfColumn);
         }
- 
         // find actual pixel column
         int actualPixelColumn = columnIndices[c];
         int relativePixelColumn = actualPixelColumn - startPixel;
         int recalulatedPixelColumn = relativePixelColumn - ((y - 1) / 2);
- 
         DEBUG_ONLY({
             // print values
             std::cout << "INDEX IN CDF COLUMN: " << c << std::endl;
@@ -520,35 +431,29 @@ public:
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
- 
         // to get the right image orientation, flip the x and y coordinates and then multiply the y values by -1 to flip the pixels vertically
        float flippedRow = float(recalulatedPixelColumn);
         float flippedColumn = recalulatedPixelRow * -1.0f;
- 
         // send values back
         *dx = (float)flippedRow / (float)x * 2.0;
         *dy = (float)flippedColumn / (float)y * 2.0;
     }
 };
- 
- 
- 
+
+
 struct cameraData{
     float fov;
     float tan_fov;
     float apertureRadius;
     imageData image;
- 
     cameraData()
         : fov(0.0f), tan_fov(0.0f), apertureRadius(0.0f){
     }
- 
     ~cameraData(){
     }
 };
- 
- 
- 
+
+
 struct Lensdata{
     std::vector<double> lensRadiusCurvature;
     std::vector<double> lensThickness;
@@ -567,110 +472,45 @@ struct Lensdata{
     double originShift;
     double focalDistance;
 } ld;
- 
- 
- 
-class vec3 {
-    public:
-        double x;
-        double y;
-        double z;
-};
- 
- 
- 
-double vec3dot(vec3 vector1, vec3 vector2){
-    return (vector1.x * vector2.x + vector1.y * vector2.y + vector1.z * vector2.z);
-}
- 
- 
- 
-vec3 vec3subtr(vec3 vector1, vec3 vector2){
-    vec3 subtraction;
-    subtraction.x = vector1.x - vector2.x;
-    subtraction.y = vector1.y - vector2.y;
-    subtraction.z = vector1.z - vector2.z;
-    return subtraction;
-}
- 
- 
- 
-vec3 vec3add(vec3 vector1, vec3 vector2){
-    vec3 add;
-    add.x = vector1.x + vector2.x;
-    add.y = vector1.y + vector2.y;
-    add.z = vector1.z + vector2.z;
-    return add;
-}
- 
- 
- 
-vec3 vec3normalize(vec3 vector1){
-    vec3 normalizedVector;
-    double length = std::sqrt(ABS((vector1.x * vector1.x) + (vector1.y * vector1.y) + (vector1.z * vector1.z)));
- 
-    if(length == 0.0){
-        length = 0.0000001;
-    }
-    if(vector1.x == 0.0){
-        vector1.x = 0.0000001;
-    }
-    if(vector1.y == 0.0){
-        vector1.y = 0.0000001;
-    }
-    if(vector1.z == 0.0){
-        vector1.z = 0.0000001;
-    }
- 
-    normalizedVector.x = vector1.x / length;
-    normalizedVector.y = vector1.y / length;
-    normalizedVector.z = vector1.z / length;
-    return normalizedVector;
-}
- 
- 
- 
+
+
 // Improved concentric mapping code by Dave Cline [peter shirley´s blog]
-AtVector2 ConcentricSampleDiskImproved(float ox, float oy) {
+inline void ConcentricSampleDiskImproved(float ox, float oy, float *lensU, float *lensV) {
     float phi, r;
     float a = 2.0 * ox - 1.0;
     float b = 2.0 * oy - 1.0;
+
     if (a * a > b * b) {
         r = a;
         phi = (AI_PI / 4.0) * (b / a);
     } else {
-       r = b;
+        r = b;
         phi = (AI_PI / 2.0) - (AI_PI / 4.0) * (a / b);
     }
- 
-    AtVector2 coords = {r * std::cos(phi),  r * std::sin(phi)};
-    return coords;
+
+    *lensU = r * std::cos(phi);
+    *lensV = r * std::sin(phi);
 }
- 
- 
- 
+
+
 // READ IN TABULAR LENS DATA
 void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
- 
     // reset vectors
     ld->lensAperture.clear();
     ld->lensIOR.clear();
     ld->lensRadiusCurvature.clear();
     ld->lensAperture.clear();
- 
     std::ifstream lensDataFile(lensDataFileName);
     std::string line;
     std::string token;
     std::stringstream iss;
     int lensDataCounter = 1;
     int commentCounter = 0;
- 
- 
+
     AiMsgInfo("[ZOIC] ##############################################");
     AiMsgInfo("[ZOIC] ############# READING LENS DATA ##############");
     AiMsgInfo("[ZOIC] ##############################################");
     AiMsgInfo("[ZOIC] Welcome to the nerd club :-D");
- 
     while (getline(lensDataFile, line))
     {
         if (line.length() == 0 || line[0] == '#'){
@@ -678,273 +518,185 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
         }
         else {
             iss << line;
- 
             // put values (converting from string to float) into the vectors
             while (getline(iss, token, '\t') ){
                 if (token == " "){
                    AiMsgError("[ZOIC] Please make sure your .dat file only contains TAB spacings.");
                 }
- 
                 if (lensDataCounter == 1){
                     ld->lensRadiusCurvature.push_back(std::stod(token));
                 }
- 
                 if (lensDataCounter == 2){
                     ld->lensThickness.push_back(std::stod(token));
                 }
- 
                 if (lensDataCounter == 3){
                     ld->lensIOR.push_back(std::stod(token));
                 }
- 
                 if (lensDataCounter == 4){
                     ld->lensAperture.push_back(std::stod(token));
                     lensDataCounter = 0;
                 }
- 
                 lensDataCounter += 1;
             }
- 
             iss.clear();
         }
     }
- 
     AiMsgInfo( "%-40s %12d", "[ZOIC] Comment lines ignored", commentCounter);
- 
     AiMsgInfo("[ZOIC] ##############################################");
     AiMsgInfo("[ZOIC] #   ROC       Thickness     IOR     Aperture #");
     AiMsgInfo("[ZOIC] ##############################################");
- 
     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         AiMsgInfo("[ZOIC] %10.4f  %10.4f  %10.4f  %10.4f", ld->lensRadiusCurvature[i], ld->lensThickness[i], ld->lensIOR[i], ld->lensAperture[i]);
     }
- 
     AiMsgInfo("[ZOIC] ##############################################");
     AiMsgInfo("[ZOIC] ########### END READING LENS DATA ############");
-    AiMsgInfo("[ZOIC] ##############################################");
- 
+   AiMsgInfo("[ZOIC] ##############################################");
     // reverse the datasets in the vector, since we will start with the rear-most lens element
     std::reverse(ld->lensRadiusCurvature.begin(),ld->lensRadiusCurvature.end());
     std::reverse(ld->lensThickness.begin(),ld->lensThickness.end());
     std::reverse(ld->lensIOR.begin(),ld->lensIOR.end());
     std::reverse(ld->lensAperture.begin(),ld->lensAperture.end());
 }
- 
- 
- 
+
+
 void cleanupLensData(Lensdata *ld){
     int apertureCount = 0;
     for (int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         // check if there is a 0.0 lensRadiusCurvature, which is the aperture.
         if (ld->lensRadiusCurvature[i] == 0.0){
-            ld->apertureElement = i;            
- 
+            ld->apertureElement = i;
+
             apertureCount++;
- 
             if(apertureCount > 1){
                 AiMsgError("[ZOIC] Multiple apertures found. Provide lens description with 1 aperture.");
                 AiRenderAbort();
             }
- 
             AiMsgInfo("[ZOIC] Adjusted ROC[%d] [%.4f] to [99999.0]", i, ld->lensRadiusCurvature[i]);
             ld->lensRadiusCurvature[i] = 99999.0;
         }
- 
         if (ld->lensIOR[i] == 0.0){
             AiMsgInfo("[ZOIC] Changed IOR[%d] [%.4f] to [1.0000]", i, ld->lensIOR[i]);
             ld->lensIOR[i] = 1.0;
-        }        
+        }
     }
- 
     AiMsgInfo( "%-40s %12d", "[ZOIC] Aperture is lens element number", ld->apertureElement);
- 
     // scale from mm to cm
     for (int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         ld->lensRadiusCurvature[i] *= 0.1;
         ld->lensThickness[i] *= 0.1;
         ld->lensAperture[i] *= 0.1;
     }
- 
+    // move lenses so last lens is at origin
     double summedThickness = 0.0;
- 
     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         summedThickness += ld->lensThickness[i];
     }
- 
     ld->lensThickness[0] -= summedThickness;
 }
- 
- 
- 
+
+
 void computeLensCenters(Lensdata *ld){
     ld->lensCenter.clear();
     double summedThickness;
- 
     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         if(i == 0){
             summedThickness = ld->lensThickness[0];
         } else {
             summedThickness += ld->lensThickness[i];
         }
- 
         ld->lensCenter.push_back(summedThickness - ld->lensRadiusCurvature[i]);
     }
 }
- 
- 
- 
-vec3 raySphereIntersection(vec3 ray_direction, vec3 ray_origin, vec3 sphere_center, double sphere_radius, bool reverse, bool tracingRealRays){
-    vec3 norm_ray_direction = vec3normalize(ray_direction);
-    vec3 L = vec3subtr(sphere_center, ray_origin);
- 
+
+
+inline AtVector raySphereIntersection(AtVector ray_direction, AtVector ray_origin, AtVector sphere_center, double sphere_radius, bool reverse, bool tracingRealRays){
+    ray_direction = AiV3Normalize(ray_direction);
+    AtVector L = sphere_center - ray_origin;
    // project the directionvector onto the distancevector
-    double tca = vec3dot(L, norm_ray_direction);
+    double tca = AiV3Dot(L, ray_direction);
     double radius2 = sphere_radius * sphere_radius;
-    double d2 = vec3dot(L, L) - tca * tca;
- 
+    double d2 = AiV3Dot(L, L) - tca * tca;
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
-    // this is just some arbitrary value that I will use to check for errors
+    // some arbitrary value that I use to check for errors
     if (tracingRealRays == true && d2 > radius2){return {0.0, 0.0, 0.0};}
- 
     double thc = std::sqrt(ABS(radius2 - d2));
- 
-    vec3 hit_point;
- 
     if(!reverse){
-        hit_point.x = ray_origin.x + norm_ray_direction.x * (tca + thc * std::copysign(1.0, sphere_radius));
-        hit_point.y = ray_origin.y + norm_ray_direction.y * (tca + thc * std::copysign(1.0, sphere_radius));
-        hit_point.z = ray_origin.z + norm_ray_direction.z * (tca + thc * std::copysign(1.0, sphere_radius));
-        return hit_point;
+        return ray_origin + ray_direction * (tca + thc * std::copysign(1.0, sphere_radius));
     } else{
-        hit_point.x = ray_origin.x + norm_ray_direction.x * (tca - thc * std::copysign(1.0, sphere_radius));
-        hit_point.y = ray_origin.y + norm_ray_direction.y * (tca - thc * std::copysign(1.0, sphere_radius));
-        hit_point.z = ray_origin.z + norm_ray_direction.z * (tca - thc * std::copysign(1.0, sphere_radius));
-        return hit_point;
+        return ray_origin + ray_direction * (tca - thc * std::copysign(1.0, sphere_radius));
     }
 }
- 
- 
- 
-vec3 intersectionNormal(vec3 hit_point, vec3 sphere_center, double sphere_radius){
-    vec3 normalized = vec3normalize(vec3subtr(sphere_center, hit_point));
-    normalized.x *= std::copysign(1.0, sphere_radius);
-    normalized.y *= std::copysign(1.0, sphere_radius);
-    normalized.z *= std::copysign(1.0, sphere_radius);
-    return normalized;
+
+
+inline AtVector intersectionNormal(AtVector hit_point, AtVector sphere_center, double sphere_radius){
+    return AiV3Normalize(sphere_center - hit_point) * std::copysign(1.0, sphere_radius);
 }
- 
- 
- 
-vec3 calculateTransmissionVector(double ior1, double ior2, vec3 incidentVector, vec3 normalVector, bool tracingRealRays){
- 
-    // VECTORS NEED TO BE NORMALIZED BEFORE USE!
-    incidentVector = vec3normalize(incidentVector);
-    normalVector = vec3normalize(normalVector);
- 
+
+
+inline AtVector calculateTransmissionVector(double ior1, double ior2, AtVector incidentVector, AtVector normalVector, bool tracingRealRays){
+    incidentVector = AiV3Normalize(incidentVector);
+    normalVector = AiV3Normalize(normalVector);
     double eta;
-    if (ior2 == 1.0){
-        eta = ior1;
-    } else{
-        eta = ior1 / ior2;
-    }
- 
-    double c1 = - vec3dot(incidentVector, normalVector);
+    ior2 == 1.0 ? eta = ior1 : eta = ior1 / ior2;
+    double c1 = - AiV3Dot(incidentVector, normalVector);
     double cs2 = eta * eta * (1.0 - c1 * c1);
- 
     // total internal reflection, can only occur when ior1 > ior2
     if( tracingRealRays && ior1 > ior2 && cs2 > 1.0){
         ++ld.totalInternalReflection;
-        // this is just some arbitrary value that I will use to check for errors
+        // arbitrary value that I use to check for errors
         return {0.0, 0.0, 0.0};
     }
- 
-    vec3 transmissionVector;
-    transmissionVector.x = (incidentVector.x * eta) + (normalVector.x * ((eta * c1) - std::sqrt(ABS(1.0 - cs2))));
-    transmissionVector.y = (incidentVector.y * eta) + (normalVector.y * ((eta * c1) - std::sqrt(ABS(1.0 - cs2))));
-    transmissionVector.z = (incidentVector.z * eta) + (normalVector.z * ((eta * c1) - std::sqrt(ABS(1.0 - cs2))));
- 
-    return transmissionVector;
-}
- 
- 
- 
-AtVector2 lineLineIntersection(vec3 line1_origin, vec3 line1_direction, vec3 line2_origin, vec3 line2_direction){
-    // Get A,B,C of first line - points : ps1 to pe1
-    double A1 = line1_direction.y - line1_origin.y;
-    double B1 = line1_origin.z - line1_direction.z;
-    double C1 = A1 * line1_origin.z + B1 * line1_origin.y;
- 
-    // Get A,B,C of second line - points : ps2 to pe2
-    double A2 = line2_direction.y - line2_origin.y;
-    double B2 = line2_origin.z - line2_direction.z;
-    double C2 = A2 * line2_origin.z + B2 * line2_origin.y;
- 
-    // Get delta and check if the lines are parallel
-    double delta = A1 * B2 - A2 * B1;
- 
-    // now return the Vector2 intersection point
-    AtVector2 intersectionPoint;
-    intersectionPoint.x = (B2 * C1 - B1 * C2) / delta;
-    intersectionPoint.y = (A1 * C2 - A2 * C1) / delta;
- 
-    return intersectionPoint;
+    return (incidentVector * eta) + (normalVector * ((eta * c1) - std::sqrt(ABS(1.0 - cs2))));
 }
 
 
-vec3 linePlaneIntersection(vec3 rayOrigin, vec3 rayDirection) {
+AtVector2 lineLineIntersection(AtVector line1_origin, AtVector line1_direction, AtVector line2_origin, AtVector line2_direction){
+    float A1 = line1_direction.y - line1_origin.y;
+    float B1 = line1_origin.z - line1_direction.z;
+    float C1 = A1 * line1_origin.z + B1 * line1_origin.y;
+    float A2 = line2_direction.y - line2_origin.y;
+    float B2 = line2_origin.z - line2_direction.z;
+    float C2 = A2 * line2_origin.z + B2 * line2_origin.y;
+    float delta = A1 * B2 - A2 * B1;
+    return {(B2 * C1 - B1 * C2) / delta, (A1 * C2 - A2 * C1) / delta};
+}
+
+
+AtVector linePlaneIntersection(AtVector rayOrigin, AtVector rayDirection) {
     // intersection with y = 0
-    vec3 coord = {100.0, 0.0, 100.0};
-    vec3 planeNormal = {0.0, 1.0, 0.0};
+    AtVector coord = {100.0, 0.0, 100.0};
+    AtVector planeNormal = {0.0, 1.0, 0.0};
+    rayDirection = AiV3Normalize(rayDirection);
+    coord = AiV3Normalize(coord);
 
-    rayDirection = vec3normalize(rayDirection);
-    coord = vec3normalize(coord);
-
-    double x = (vec3dot(coord, planeNormal) - vec3dot(planeNormal, rayOrigin)) / vec3dot(planeNormal, rayDirection);
-
-    vec3 contact;
-    contact.x = rayOrigin.x + (rayDirection.x * x);
-    contact.y = rayOrigin.y + (rayDirection.y * x);
-    contact.z = rayOrigin.z + (rayDirection.z * x);
-
-    return contact;
+    double x = (AiV3Dot(coord, planeNormal) - AiV3Dot(planeNormal, rayOrigin)) / AiV3Dot(planeNormal, rayDirection);
+    return rayOrigin + (rayDirection * x);
 }
- 
 
- 
 double calculateImageDistance(double objectDistance, Lensdata *ld, bool draw){
- 
     double imageDistance;
-    vec3 ray_origin_focus;
+    AtVector ray_origin_focus;
     ray_origin_focus.x = 0.0;
     ray_origin_focus.y = 0.0;
     ray_origin_focus.z = objectDistance;
- 
-    vec3 ray_direction_focus;
+    AtVector ray_direction_focus;
     ray_direction_focus.x = 0.0;
     ray_direction_focus.y = (ld->lensAperture[ld->lensAperture.size() - 1] / 2.0) * 0.01;
     ray_direction_focus.z = (- objectDistance * 1.1);
- 
     double summedThickness_focus = 0.0;
- 
-    // go through every lens element
     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         if(i==0){
             for(int k = 0; k < (int)ld->lensRadiusCurvature.size(); k++){
                 summedThickness_focus += ld->lensThickness[k];
             }
         }
- 
         i == 0 ? summedThickness_focus = summedThickness_focus : summedThickness_focus -= ld->lensThickness[ld->lensRadiusCurvature.size() - i];
- 
-        vec3 sphere_center;
+        AtVector sphere_center;
         sphere_center.x = 0.0;
         sphere_center.y = 0.0;
         sphere_center.z = summedThickness_focus - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i];
- 
-        vec3 hit_point = raySphereIntersection(ray_direction_focus, ray_origin_focus, sphere_center, ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], true, false);
- 
-        vec3 hit_point_normal = intersectionNormal(hit_point, sphere_center, - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i]);
- 
+        AtVector hit_point = raySphereIntersection(ray_direction_focus, ray_origin_focus, sphere_center, ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], true, false);
+        AtVector hit_point_normal = intersectionNormal(hit_point, sphere_center, - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i]);
         if(draw){
             myfile << std::fixed << std::setprecision(10) << ray_origin_focus.z;
             myfile << " ";
@@ -955,30 +707,23 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, bool draw){
             myfile << std::fixed << std::setprecision(10) << hit_point.y;
             myfile << " ";
         }
- 
         if(i==0){
-            ray_direction_focus = calculateTransmissionVector(1.0, ld->lensIOR[ld->lensRadiusCurvature.size() - 1 - i], ray_direction_focus, hit_point_normal, false);
+            ray_direction_focus = calculateTransmissionVector(1.0, ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal, false);
         } else {
             ray_direction_focus = calculateTransmissionVector(ld->lensIOR[ld->lensRadiusCurvature.size() - i], ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal, false);
         }
- 
-        // set hitpoint to be the new origin
-        ray_origin_focus = hit_point;
- 
         // shoot off rays after last refraction
         if(i == (int)ld->lensRadiusCurvature.size() - 1){
-            ray_direction_focus = calculateTransmissionVector(ld->lensIOR[ld->lensRadiusCurvature.size() - 1 - i], 1.0, ray_direction_focus, hit_point_normal, false);
+            // NOT ONE CALCULATION TOO MUCH HERE????
+            // ray_direction_focus = calculateTransmissionVector(ld->lensIOR[ld->lensRadiusCurvature.size() - 1 - i], 1.0, ray_direction_focus, hit_point_normal, false);
+
             // find intersection point
-            vec3 lineDirection = {0.0, 
-                                 ray_origin_focus.y + ray_direction_focus.y * 1000000.0,
-                                 ray_origin_focus.z + ray_direction_focus.z * 1000000.0};
- 
-            imageDistance = lineLineIntersection({0.0, 0.0, -99999.0}, {0.0, 0.0, 99999.0}, hit_point, {0.0, ray_origin_focus.y * -10000.0, ray_origin_focus.z * 10000.0}).x;
+            imageDistance = linePlaneIntersection(hit_point, ray_direction_focus).z;
 
             if(draw){
-                myfile << std::fixed << std::setprecision(10) << ray_origin_focus.z * 10000.0;
+                myfile << std::fixed << std::setprecision(10) << hit_point.z + ray_direction_focus.z * 100000.0;
                 myfile << " ";
-                myfile << std::fixed << std::setprecision(10) << ray_origin_focus.y * -10000.0;
+                myfile << std::fixed << std::setprecision(10) << hit_point.y + ray_direction_focus.y * 100000.0;
                 myfile << " ";
                 myfile << std::fixed << std::setprecision(10) << hit_point.z;
                 myfile << " ";
@@ -986,21 +731,21 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, bool draw){
                 myfile << " ";
             }
         }
+
+        // set hitpoint to be the new origin
+        ray_origin_focus = hit_point;
     }
- 
-    AiMsgInfo( "%-40s %12.8f", "[ZOIC] Object distance", objectDistance);
-    AiMsgInfo( "%-40s %12.8f", "[ZOIC] Image distance", imageDistance);
- 
+    AiMsgInfo( "%-40s %12.8f", "[ZOIC] Object distance [cm]", objectDistance);
+    AiMsgInfo( "%-40s %12.8f", "[ZOIC] Image distance [cm]", imageDistance);
     return imageDistance;
 }
 
 
-bool traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, Lensdata *ld, bool draw){
-
-   vec3 hit_point;
-   vec3 hit_point_normal;
-   vec3 sphere_center;
-   vec3 tmpRayDirection;
+bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, Lensdata *ld, bool draw){
+   AtVector hit_point;
+   AtVector hit_point_normal;
+   AtVector sphere_center;
+   AtVector tmpRayDirection;
 
    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         sphere_center.x = 0.0;
@@ -1028,7 +773,6 @@ bool traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, Lensdata *l
        hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
 
        if(draw){
-           // x1, y1, x2, y2
            myfile << std::fixed << std::setprecision(10) << ray_origin->z;
            myfile << " ";
            myfile << std::fixed << std::setprecision(10) << ray_origin->y;
@@ -1039,8 +783,6 @@ bool traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, Lensdata *l
            myfile << " ";
        }
 
-
-       // set hitpoint to be the new origin
        *ray_origin = hit_point;
 
        // if not last lens element
@@ -1051,14 +793,13 @@ bool traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, Lensdata *l
            tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true);
 
            if (draw){
-               // x1, y1, x2, y2
                myfile << std::fixed << std::setprecision(10) << hit_point.z;
                myfile << " ";
                myfile << std::fixed << std::setprecision(10) << hit_point.y;
                myfile << " ";
-               myfile << std::fixed << std::setprecision(10) << tmpRayDirection.z * 10000.0;
+               myfile << std::fixed << std::setprecision(10) << hit_point.z + tmpRayDirection.z * 10000.0;
                myfile << " ";
-               myfile << std::fixed << std::setprecision(10) << tmpRayDirection.y * 10000.0;
+               myfile << std::fixed << std::setprecision(10) << hit_point.y + tmpRayDirection.y * 10000.0;
                myfile << " ";
            }
        }
@@ -1070,13 +811,12 @@ bool traceThroughLensElements(vec3 *ray_origin, vec3 *ray_direction, Lensdata *l
 
        *ray_direction = tmpRayDirection;
    }
+
     return true;
 }
- 
 
 
 double traceThroughLensElementsForFocalLength(Lensdata *ld){
-
    double tracedFocalLength;
    double focalPointDistance;
    double principlePlaneDistance;
@@ -1084,21 +824,21 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
 
    float rayOriginHeight = ld->lensAperture[0] * 0.1;
 
-   vec3 ray_origin_fp = {0.0, rayOriginHeight, 0.0};
-   vec3 ray_direction_fp = {0.0, 0.0, 99999.0};
+   AtVector ray_origin_fp = {0.0, rayOriginHeight, 0.0};
+   AtVector ray_direction_fp = {0.0, 0.0, 99999.0};
 
    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
        // need to keep the summedthickness method since the sphere centers get computed only later on
        i == 0 ? summedThickness_fp = ld->lensThickness[0] : summedThickness_fp += ld->lensThickness[i];
 
-       vec3 sphere_center;
+       AtVector sphere_center;
        sphere_center.x = 0.0;
        sphere_center.y = 0.0;
        sphere_center.z = summedThickness_fp - ld->lensRadiusCurvature[i];
 
-       vec3 hit_point = raySphereIntersection(ray_direction_fp, ray_origin_fp, sphere_center, ld->lensRadiusCurvature[i], false, false);
+       AtVector hit_point = raySphereIntersection(ray_direction_fp, ray_origin_fp, sphere_center, ld->lensRadiusCurvature[i], false, false);
 
-       vec3 hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
+       AtVector hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
 
        if(i != (int)ld->lensRadiusCurvature.size() - 1){
            ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], ray_direction_fp, hit_point_normal, true);
@@ -1106,44 +846,39 @@ double traceThroughLensElementsForFocalLength(Lensdata *ld){
            ray_direction_fp = calculateTransmissionVector(ld->lensIOR[i], 1.0, ray_direction_fp, hit_point_normal, true);
 
            // original parallel ray start and end
-           vec3 pp_line1start = {0.0, rayOriginHeight, 0.0};
-           vec3 pp_line1end = {0.0, rayOriginHeight, 999999.0};
+           AtVector pp_line1start = {0.0, rayOriginHeight, 0.0};
+           AtVector pp_line1end = {0.0, rayOriginHeight, 999999.0};
 
            // direction ray end
-           vec3 pp_line2end = {0.0, ray_origin_fp.y + (ray_direction_fp.y * 100000.0), ray_origin_fp.z + (ray_direction_fp.z * 100000.0)};
+           AtVector pp_line2end;
+           pp_line2end.x = 0.0;
+           pp_line2end.y = ray_origin_fp.y + (ray_direction_fp.y * 100000.0);
+           pp_line2end.z = ray_origin_fp.z + (ray_direction_fp.z * 100000.0);
 
            principlePlaneDistance = lineLineIntersection(pp_line1start, pp_line1end, ray_origin_fp, pp_line2end).x;
+           AiMsgInfo( "%-40s %12.8f", "[ZOIC] Principle Plane distance [cm]", principlePlaneDistance);
 
-           AiMsgInfo( "%-40s %12.8f", "[ZOIC] Principle Plane distance", principlePlaneDistance);
-
-           // find intersection point
-           vec3 axialStart = {0.0, 0.0, 0.0};
-           vec3 axialEnd = {0.0, 0.0, 999999.0};
-           vec3 lineDirection = {0.0, ray_origin_fp.y + ray_direction_fp.y * 100000.0, ray_origin_fp.z + ray_direction_fp.z * 100000.0};
-
-           focalPointDistance = lineLineIntersection(axialStart, axialEnd, ray_origin_fp, lineDirection).x;
-           AiMsgInfo( "%-40s %12.8f", "[ZOIC] Focal point distance", focalPointDistance);
+           focalPointDistance = linePlaneIntersection(ray_origin_fp, ray_direction_fp).z;
+           AiMsgInfo( "%-40s %12.8f", "[ZOIC] Focal point distance [cm]", focalPointDistance);
        }
 
-       // set hitpoint to be the new origin
        ray_origin_fp = hit_point;
    }
 
    tracedFocalLength = focalPointDistance - principlePlaneDistance;
-   AiMsgInfo( "%-40s %12.8f", "[ZOIC] Raytraced Focal Length", tracedFocalLength);
+   AiMsgInfo( "%-40s %12.8f", "[ZOIC] Raytraced Focal Length [cm]", tracedFocalLength);
 
    return tracedFocalLength;
-
 }
 
 
 
-bool traceThroughLensElementsForApertureSize(vec3 ray_origin, vec3 ray_direction, Lensdata *ld){
-   vec3 hit_point_normal;
-   vec3 sphere_center;
+bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld){
+   AtVector hit_point_normal;
+   AtVector sphere_center = {0.0, 0.0, 0.0};
 
    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-       sphere_center = {0.0, 0.0, ld->lensCenter[i]};
+       sphere_center.z = ld->lensCenter[i];
 
        ray_origin = raySphereIntersection(ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
 
@@ -1155,8 +890,8 @@ bool traceThroughLensElementsForApertureSize(vec3 ray_origin, vec3 ray_direction
        hit_point_normal = intersectionNormal(ray_origin, sphere_center, ld->lensRadiusCurvature[i]);
        ray_direction = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true);
    }
-   return true;
 
+   return true;
 }
 
 
@@ -1168,40 +903,64 @@ void adjustFocalLength(Lensdata *ld){
        ld->lensThickness[i] *= ld->focalLengthRatio;
        ld->lensAperture[i] *= ld->focalLengthRatio;
    }
-
 }
 
 
 
 
 void writeToFile(Lensdata *ld){
-   myfile << "LENSES{";
-   for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
-       // lenscenter, radius, angle
-       myfile << std::fixed << std::setprecision(10) << ld->lensCenter[i];
-       myfile << " ";
-       myfile << std::fixed << std::setprecision(10) << ld->lensRadiusCurvature[i];
-       myfile << " ";
-       myfile << std::fixed << std::setprecision(10) << (std::asin((ld->lensAperture[i] * 0.5) / ld->lensRadiusCurvature[i])) * (180 / AI_PI);
-       myfile << " ";
-   }
-   myfile << "}\n";
+    myfile << "LENSES{";
+    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+        // lenscenter, radius, angle
+        myfile << std::fixed << std::setprecision(10) << ld->lensCenter[i];
+        myfile << " ";
+        myfile << std::fixed << std::setprecision(10) << ld->lensRadiusCurvature[i];
+        myfile << " ";
+        myfile << std::fixed << std::setprecision(10) << (std::asin((ld->lensAperture[i] * 0.5) / ld->lensRadiusCurvature[i])) * (180 / AI_PI);
+        myfile << " ";
+    }
+    myfile << "}\n";
 
-   myfile << "APERTURE{";
-   myfile << std::fixed << std::setprecision(10) << ld->apertureElement;
-   myfile << "}\n";
+    myfile << "IOR{";
+    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+        myfile << std::fixed << std::setprecision(10) << ld->lensIOR[i];
+        myfile << " ";
+    }
+    myfile << "}\n";
 
-   myfile << "APERTUREDISTANCE{";
-   myfile << std::fixed << std::setprecision(10) << ld->apertureDistance;
-   myfile << "}\n";
+    myfile << "APERTUREELEMENT{";
+    myfile << std::fixed << std::setprecision(10) << ld->apertureElement;
+    myfile << "}\n";
 
-   myfile << "FOCUSDISTANCE{";
-   myfile << std::fixed << std::setprecision(10) << ld->focalDistance;
-   myfile << "}\n";
+    myfile << "APERTUREDISTANCE{";
+    myfile << std::fixed << std::setprecision(10) << ld->apertureDistance;
+    myfile << "}\n";
 
-   myfile << "IMAGEDISTANCE{";
-   myfile << std::fixed << std::setprecision(10) << ld->originShift;
-   myfile << "}\n"; 
+    myfile << "APERTURE{";
+    myfile << std::fixed << std::setprecision(10) << ld->userApertureRadius;
+    myfile << "}\n";
+
+    myfile << "APERTUREMAX{";
+    double maxAperture = 0.0;
+    for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+        if (ld->lensAperture[i] > maxAperture){
+            maxAperture = ld->lensAperture[i];
+        }
+    }
+    myfile << std::fixed << std::setprecision(10) << maxAperture;
+    myfile << "}\n";
+
+    myfile << "FOCUSDISTANCE{";
+    myfile << std::fixed << std::setprecision(10) << ld->focalDistance;
+    myfile << "}\n";
+
+    myfile << "IMAGEDISTANCE{";
+    myfile << std::fixed << std::setprecision(10) << ld->originShift;
+    myfile << "}\n";
+
+    myfile << "SENSORHEIGHT{";
+    myfile << std::fixed << std::setprecision(10) << 1.7;
+    myfile << "}\n";
 
 }
 
@@ -1213,7 +972,7 @@ node_parameters {
    AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
    AiParameterFLT("focalLength", 10.0f); // distance between sensor and lens in cm
    AiParameterFLT("fStop", 3.4f);
-   AiParameterFLT("focalDistance", 160.0f); // distance from lens to focal point
+   AiParameterFLT("focalDistance", 100.0f); // distance from lens to focal point
    AiParameterBOOL("useImage", false);
    AiParameterStr("bokehPath", ""); //bokeh shape image location
    AiParameterBOOL("kolb", true);
@@ -1244,8 +1003,8 @@ node_update {
 
    // create file to transfer data to python drawing module
    // myfile.open ("/Volumes/ZENO_2016/projects/zoic/src/draw.zoic");
-   //myfile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.zoic", std::ofstream::out | std::ofstream::trunc);
-    myfile.open ("/Users/kassiawordley/Desktop/zoic_kassia/draw.zoic", std::ofstream::out | std::ofstream::trunc);
+   myfile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.zoic", std::ofstream::out | std::ofstream::trunc);
+    //myfile.open ("/Users/kassiawordley/Desktop/zoic_kassia/draw.zoic", std::ofstream::out | std::ofstream::trunc);
 
    if(!_kolb){
        //theta = 2arctan*(sensorSize/focalLength)
@@ -1287,7 +1046,7 @@ node_update {
        // Update shaderData variables
        ld.xres = static_cast<float>(AiNodeGetInt(options,"xres"));
        ld.yres = static_cast<float>(AiNodeGetInt(options,"yres"));
-   
+
        // not sure if this is the right way to do it.. probably more to it than this!
        // these values seem to produce the same image as the other camera which is correct.. hey ho
        ld.filmDiagonal = std::sqrt(_sensorWidth *_sensorWidth + _sensorHeight * _sensorHeight);
@@ -1319,7 +1078,7 @@ node_update {
        float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld);
 
        ld.userApertureRadius = kolbFocalLength / (2.0 * _fStop);
-       AiMsgInfo( "%-40s %12.8f", "[ZOIC] User aperture radius", ld.userApertureRadius);
+       AiMsgInfo( "%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
 
        // clamp aperture if fstop is wider than max aperture given by lens description
        if (ld.userApertureRadius > ld.lensAperture[ld.apertureElement]){
@@ -1345,7 +1104,7 @@ node_update {
        for(int i = 0; i < (int)ld.lensRadiusCurvature.size(); i++){
            ld.apertureDistance += ld.lensThickness[i];
            if(i == ld.apertureElement){
-               AiMsgInfo( "%-40s %12.8f", "[ZOIC] Aperture distance", ld.apertureDistance);
+               AiMsgInfo( "%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
                break;
            }
        }
@@ -1371,10 +1130,11 @@ node_update {
 
        if(_kolbSamplingMethod == 1){
            int sampleCount = 1024;
-           vec3 sampleOrigin = {0.0, 0.0, ld.originShift};
+           AtVector sampleOrigin = {0.0, 0.0, 0.0};
+           sampleOrigin.z = ld.originShift;
            for (int i = 0; i < sampleCount; i++){
                float heightVariation = ld.lensAperture[0] / float(sampleCount);
-               vec3 sampleDirection = {0.0, heightVariation * float(i), - float(ld.lensThickness[0])};
+               AtVector sampleDirection = {0.0, heightVariation * float(i), - float(ld.lensThickness[0])};
 
                if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
                    AiMsgInfo("[ZOIC] Positive failure at sample [%d] out of [%d]", i, sampleCount);
@@ -1408,8 +1168,8 @@ node_finish {
 
    // execute python drawing
    // std::string filename = "/Volumes/ZENO_2016/projects/zoic/src/draw.py";
-   // std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.py";
-   std::string filename = "/Users/kassiawordley/Desktop/zoic_kassia/draw.py";
+   std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.py";
+   // std::string filename = "/Users/kassiawordley/Desktop/zoic_kassia/draw.py";
    std::string command = "python ";
    command += filename;
    system(command.c_str());
@@ -1453,9 +1213,7 @@ camera_create_ray {
 
            // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
            if (_useImage == false){
-               AtVector2 lens = ConcentricSampleDiskImproved(input->lensx, input->lensy);
-               lensU = lens.x;
-               lensV = lens.y;
+               ConcentricSampleDiskImproved(input->lensx, input->lensy, &lensU, &lensV);
 
            } else { // sample bokeh image
                camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
@@ -1500,7 +1258,7 @@ camera_create_ray {
                else if (ABS(pointHypotenuse) < virtualApertureTrueRadius && ABS(pointHypotenuse) > (virtualApertureTrueRadius - _highlightWidth)){
                    output->weight *= _highlightStrength *
                                      (1.0 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) *
-                                     std::sqrt(input->sx * input->sx + input->sy * input->sy);
+                                    std::sqrt(input->sx * input->sx + input->sy * input->sy);
                }
            }
        }
@@ -1524,19 +1282,22 @@ camera_create_ray {
 
 
    if(_kolb){
-       vec3 origin, direction;
+       AtVector origin, direction;
 
        // arbitrary values but they are the same as the thin lens so.. dunno man
        origin.x = input->sx * 1.7;//(ld.filmDiagonal * 0.5);
        origin.y = input->sy * 1.7;//(ld.filmDiagonal * 0.5);
        origin.z = ld.originShift;
 
+       origin.z = -12.58; // working value for 100cm focus
+
+       //origin.x = 0.0;
+       //origin.y = 0.0;
+
        // sample disk with proper sample distribution
        float lensU, lensV = 0.0;
        if (_useImage == false){
-           AtVector2 lens = ConcentricSampleDiskImproved(input->lensx, input->lensy);
-           lensU = lens.x;
-           lensV = lens.y;
+           ConcentricSampleDiskImproved(input->lensx, input->lensy, &lensU, &lensV);
        } else { // sample bokeh image
            camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
        }
