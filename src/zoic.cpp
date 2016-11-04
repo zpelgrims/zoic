@@ -12,7 +12,7 @@
 // (C) Zeno Pelgrims, www.zenopelgrims.com
 
 // TODO
-// focus still doesn´t work, how the hell is this possible?!
+// focus still doesn´t work
 // fix the difference between thin lens and kolb fstop result
 // implement LUT
 // make visualisation for all parameters
@@ -123,7 +123,7 @@ private:
     float *cdfRow;
     float *cdfColumn;
     int *rowIndices;
-    int *columnIndices;
+   int *columnIndices;
 public:
     imageData()
         : x(0), y(0), nchannels(0)
@@ -493,7 +493,7 @@ inline void ConcentricSampleDiskImproved(float ox, float oy, float *lensU, float
 }
 
 
-// READ IN TABULAR LENS DATA
+
 void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     // reset vectors
     ld->lensAperture.clear();
@@ -550,7 +550,7 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     }
     AiMsgInfo("[ZOIC] ##############################################");
     AiMsgInfo("[ZOIC] ########### END READING LENS DATA ############");
-   AiMsgInfo("[ZOIC] ##############################################");
+    AiMsgInfo("[ZOIC] ##############################################");
     // reverse the datasets in the vector, since we will start with the rear-most lens element
     std::reverse(ld->lensRadiusCurvature.begin(),ld->lensRadiusCurvature.end());
     std::reverse(ld->lensThickness.begin(),ld->lensThickness.end());
@@ -615,7 +615,7 @@ inline AtVector raySphereIntersection(AtVector ray_direction, AtVector ray_origi
    // project the directionvector onto the distancevector
     double tca = AiV3Dot(L, ray_direction);
     double radius2 = sphere_radius * sphere_radius;
-    double d2 = AiV3Dot(L, L) - tca * tca;
+   double d2 = AiV3Dot(L, L) - tca * tca;
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
     // some arbitrary value that I use to check for errors
     if (tracingRealRays == true && d2 > radius2){return {0.0, 0.0, 0.0};}
@@ -681,7 +681,7 @@ double calculateImageDistance(double objectDistance, Lensdata *ld, bool draw){
     ray_origin_focus.z = objectDistance;
     AtVector ray_direction_focus;
     ray_direction_focus.x = 0.0;
-    ray_direction_focus.y = (ld->lensAperture[ld->lensAperture.size() - 1] / 2.0) * 0.01;
+    ray_direction_focus.y = (ld->lensAperture[ld->lensAperture.size() - 1] / 2.0) * 0.3;
     ray_direction_focus.z = (- objectDistance * 1.1);
     double summedThickness_focus = 0.0;
     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
@@ -968,22 +968,22 @@ void writeToFile(Lensdata *ld){
 
 
 node_parameters {
-   AiParameterFLT("sensorWidth", 3.6f); // 35mm film
-   AiParameterFLT("sensorHeight", 2.4f); // 35 mm film
-   AiParameterFLT("focalLength", 10.0f); // distance between sensor and lens in cm
-   AiParameterFLT("fStop", 3.4f);
-   AiParameterFLT("focalDistance", 100.0f); // distance from lens to focal point
+   AiParameterFLT("sensorWidth", 3.6); // 35mm film
+   AiParameterFLT("sensorHeight", 2.4); // 35 mm film
+   AiParameterFLT("focalLength", 5.0); // distance between sensor and lens in cm
+   AiParameterFLT("fStop", 3.4);
+   AiParameterFLT("focalDistance", 100.0); // distance from lens to focal point
    AiParameterBOOL("useImage", false);
    AiParameterStr("bokehPath", ""); //bokeh shape image location
    AiParameterBOOL("kolb", true);
    AiParameterStr("lensDataPath", ""); // lens data file location
    AiParameterBOOL("kolbSamplingMethod", true);
    AiParameterBOOL("useDof", true);
-   AiParameterFLT("opticalVignettingDistance", 0.0f); //distance of the opticalVignetting virtual aperture
-   AiParameterFLT("opticalVignettingRadius", 0.0f); // 1.0 - .. range float, to multiply with the actual aperture radius
-   AiParameterFLT("highlightWidth", 0.2f);
-   AiParameterFLT("highlightStrength", 10.0f);
-   AiParameterFLT("exposureControl", 0.0f);
+   AiParameterFLT("opticalVignettingDistance", 0.0); //distance of the opticalVignetting virtual aperture
+   AiParameterFLT("opticalVignettingRadius", 0.0); // 1.0 - .. range float, to multiply with the actual aperture radius
+   AiParameterFLT("highlightWidth", 0.2);
+   AiParameterFLT("highlightStrength", 10.0);
+   AiParameterFLT("exposureControl", 0.0);
 
 }
 
@@ -1023,7 +1023,7 @@ node_update {
            AiMsgError("[ZOIC] Couldn't open bokeh image!");
            AiRenderAbort();
       }
-   }
+  }
 
 
    if (_kolb){
@@ -1077,6 +1077,16 @@ node_update {
        // calculate focal length by tracing a parallel ray through the lens system
        float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld);
 
+       // find by how much all lens elements should be scaled
+       ld.focalLengthRatio = _focalLength / kolbFocalLength;
+
+       // scale lens elements
+       adjustFocalLength(&ld);
+
+       // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
+       kolbFocalLength = traceThroughLensElementsForFocalLength(&ld);
+
+       // user specified aperture radius from fstop
        ld.userApertureRadius = kolbFocalLength / (2.0 * _fStop);
        AiMsgInfo( "%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
 
@@ -1086,15 +1096,6 @@ node_update {
            AiMsgWarning("[ZOIC] Clamping aperture radius from [%.9f] to [%.9f]", ld.userApertureRadius, ld.lensAperture[ld.apertureElement]);
            ld.userApertureRadius = ld.lensAperture[ld.apertureElement];
        }
-
-       // find by how much all lens elements should be scaled
-       ld.focalLengthRatio = _focalLength / kolbFocalLength;
-
-       // scale lens elements
-       adjustFocalLength(&ld);
-
-       // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
-       traceThroughLensElementsForFocalLength(&ld);
 
        // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
        ld.originShift = calculateImageDistance(_focalDistance, &ld, false);
@@ -1114,10 +1115,10 @@ node_update {
 
        ld.focalDistance = _focalDistance;
 
-
+       // write to file for lens drawing
        writeToFile(&ld);
        myfile << "IMAGERAYS{";
-       calculateImageDistance(_focalDistance, &ld, true);
+       calculateImageDistance(ld.focalDistance, &ld, true);
        myfile << "}";
        myfile << "\n";
        myfile << "RAYS{";
@@ -1127,7 +1128,6 @@ node_update {
        // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
        // and I don't think it does..
        // use lookup table instead!
-
        if(_kolbSamplingMethod == 1){
            int sampleCount = 1024;
            AtVector sampleOrigin = {0.0, 0.0, 0.0};
@@ -1174,7 +1174,7 @@ node_finish {
    command += filename;
    system(command.c_str());
 
-   AiMsgInfo("Drawing finished");
+   AiMsgInfo("[ZOIC] Drawing finished");
 
    delete camera;
    AiCameraDestroy(node);
@@ -1282,17 +1282,13 @@ camera_create_ray {
 
 
    if(_kolb){
-       AtVector origin, direction;
-
        // arbitrary values but they are the same as the thin lens so.. dunno man
-       origin.x = input->sx * 1.7;//(ld.filmDiagonal * 0.5);
-       origin.y = input->sy * 1.7;//(ld.filmDiagonal * 0.5);
-       origin.z = ld.originShift;
-
-       origin.z = -12.58; // working value for 100cm focus
-
-       //origin.x = 0.0;
-       //origin.y = 0.0;
+       output->origin.x = input->sx * 1.7;//(ld.filmDiagonal * 0.5);
+       output->origin.y = input->sy * 1.7;//(ld.filmDiagonal * 0.5);
+       output->origin.z = ld.originShift;
+       //output->origin.z = -12.58; // working value for 100cm focus
+       output->origin.x = 0.0;
+       output->origin.y = 0.0;
 
        // sample disk with proper sample distribution
        float lensU, lensV = 0.0;
@@ -1306,26 +1302,23 @@ camera_create_ray {
        // sampling first element is "ground truth" but wastes a lot of rays
        // sampling optimal aperture is efficient, but might not make a whole image
        if (_kolbSamplingMethod == 0){ // using noisy ground truth
-           direction.x = lensU * ld.lensAperture[0];
-           direction.y = lensV * ld.lensAperture[0];
-           direction.z = -ld.lensThickness[0];
+           output->dir.x = lensU * ld.lensAperture[0];
+           output->dir.y = lensV * ld.lensAperture[0];
+           output->dir.z = -ld.lensThickness[0];
        } else if (_kolbSamplingMethod == 1){ // using binary aperture search
-           direction.x = lensU * ld.optimalAperture;
-           direction.y = lensV * ld.optimalAperture;
-           direction.z = -ld.lensThickness[0];
+           output->dir.x = lensU * ld.optimalAperture;
+           output->dir.y = lensV * ld.optimalAperture;
+           output->dir.z = -ld.lensThickness[0];
        }
 
-       //direction.x = 0.0; //tmp for nicer 2d drawing
+       output->dir.x = 0.0; //tmp for nicer 2d drawing
 
-       if(!traceThroughLensElements(&origin, &direction, &ld, draw)){
+       if(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw)){
            ++ld.vignettedRays;
            output->weight = 0.0;
        } else {
            ++ld.succesRays;
        }
-
-       output->origin = {(float)origin.x, (float)origin.y, (float)origin.z};
-       output->dir = {(float)direction.x, (float)direction.y, (float)direction.z};
 
        // flip ray direction
        output->dir *= -1.0;

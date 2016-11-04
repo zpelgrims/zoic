@@ -137,7 +137,7 @@ def arc(draw, bbox, start, end, fill, width = LINEWIDTH, segments = 200):
             if i == segments - 1:
                 list2.append((x - dx * l, y - dy * l))
 
-               if IORLIST[lenscounter] != 1.0 or lenscounter == 0:
+                if IORLIST[lenscounter] != 1.0 or lenscounter == 0:
                     draw.line([list1[0], list2[0]], fill = fill, width = width)
                     draw.line([list1[1], list2[1]], fill = fill, width = width)
 
@@ -194,7 +194,7 @@ for count in range (0, len(RAYSLIST) / 4):
 # LENS ELEMENTS
 print "---- Drawing lens elements"
 for count in range (0, len(LENSESLIST) / 3):
-   arc(d, [((LENSESLIST[count * 3] * AAS) - (LENSESLIST[(count * 3) + 1]) * AAS) * SCALE + TRANSLATEX, (- LENSESLIST[(count * 3) + 1]) * AAS * SCALE + TRANSLATEY, ((LENSESLIST[count*3] * AAS) + (LENSESLIST[(count * 3) + 1] * AAS)) * SCALE + TRANSLATEX, (LENSESLIST[(count * 3) + 1] * AAS) * SCALE + TRANSLATEY], - LENSESLIST[(count * 3) + 2], LENSESLIST[(count * 3) + 2], RED)
+    arc(d, [((LENSESLIST[count * 3] * AAS) - (LENSESLIST[(count * 3) + 1]) * AAS) * SCALE + TRANSLATEX, (- LENSESLIST[(count * 3) + 1]) * AAS * SCALE + TRANSLATEY, ((LENSESLIST[count*3] * AAS) + (LENSESLIST[(count * 3) + 1] * AAS)) * SCALE + TRANSLATEX, (LENSESLIST[(count * 3) + 1] * AAS) * SCALE + TRANSLATEY], - LENSESLIST[(count * 3) + 2], LENSESLIST[(count * 3) + 2], RED)
 
 # APERTURE
 print "---- Drawing aperture"
