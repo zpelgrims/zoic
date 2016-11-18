@@ -7,23 +7,16 @@ TEMPLATE = lib
 DEFINES += ARNOLDCAMERA_LIBRARY
 
 INCLUDEPATH += \
-    /Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/include \
-    /Volumes/ZENO_2016/projects/nori-master/include \
-    /Volumes/ZENO_2016/projects/Eigen \
-    /Volumes/ZENO_2016/projects/nori-master/ext \
+    /Volumes/ZENO_2016/misc/Arnold-4.2.14.3-darwin/include \
 
 LIBS += \
-    -L/Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/bin \
+    -L/Volumes/ZENO_2016/misc/Arnold-4.2.14.3-darwin/bin \
 
 LIBS += \
-    /Volumes/ZENO_2016/projects/qt_zoic_old/Arnold-4.2.14.3-darwin/bin/libai.dylib \
+    /Volumes/ZENO_2016/misc/Arnold-4.2.14.3-darwin/bin/libai.dylib \
 
 SOURCES += \
     zoic.cpp \
-    s_kallweit/realistic.cpp
-
-HEADERS += \
-    s_kallweit/realistic.h
 
 DISTFILES += \
     /Volumes/ZENO_2016/projects/zoic/maya/ae/aiZoicTemplate.py \

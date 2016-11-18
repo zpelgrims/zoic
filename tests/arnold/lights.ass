@@ -26,7 +26,7 @@ zoic
 {
  name perspShape
  bokehPath "tests/images/shapes/bokeh_18.jpg"
- lensDataPath "/Users/zpelgrims/Downloads/lens/dgauss.100mm.dat"
+ lensDataPath "/Volumes/ZENO_2016/projects/zoic/tests/lens_designs/dgauss.100mm.dat"
  matrix
  0.312334925 0 -0.949972034 0
  0.153605282 -0.986840844 0.0505028479 0
