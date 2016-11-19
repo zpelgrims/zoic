@@ -1,59 +1,11 @@
 # zoic
-<<<<<<< HEAD
-Extended camera shader for the ever-awesome Arnold renderer.
 
-## Requirements
-
-- arnold
-- qmake or [SCons](http://scons.org)
-
-
-## Build
-
-### With qmake
-Edit the 'src/arnoldCamera.pro' file to setup the arnold headers and libraries path. Then:
-```
-cd src
-qmake
-make
-```
-
-### With SCons
-```
-scons with-arnold=/path/to/arnold
-```
-- if it complains about missing 'excons' module, you most probably didn't initialize the submodules
-```
-git submodule update --init
-```
-That will add the provided directory's 'include' subdirectory to the header path and 'lib' subdirectory to the library path.
-You may also be more explicit using
-```
-scons [other options] with-oiio-inc=/path/to/oiio/include with-oiio-lib=/path/to/oiio/lib
-```
-- on windows, you may want to adjust the visual studio compiler version using mscver= flag (9.0 by default)
-```
-scons [other options] mscver=12.0 
-```
-
-**The flags passed to scons command are cached in a file name 'excons.cache' so that you don't need to reset them for subsequent builds. The missing flags will be fetched from the cache and the provided ones will replace the cache content.**
-
-## Packaging
-
-```
-scons [other options] package=1 (package-type=zip|tgz)
-```
-
-- The package name will be 'zoic-[version]_[platform].[type]'
-- The package type defaults to zip on windows, tgz otherwise
-=======
 Extended Arnold camera shader with options for:
 	
 	Raytraced lens model
 	Optical Vignetting
 	Image based bokeh shapes
-
->>>>>>> kolb_lens_model
+	
 
 ## Install
 
