@@ -1,4 +1,5 @@
 # zoic
+<<<<<<< HEAD
 Extended camera shader for the ever-awesome Arnold renderer.
 
 ## Requirements
@@ -45,6 +46,14 @@ scons [other options] package=1 (package-type=zip|tgz)
 
 - The package name will be 'zoic-[version]_[platform].[type]'
 - The package type defaults to zip on windows, tgz otherwise
+=======
+Extended Arnold camera shader with options for:
+	
+	Raytraced lens model
+	Optical Vignetting
+	Image based bokeh shapes
+
+>>>>>>> kolb_lens_model
 
 ## Install
 

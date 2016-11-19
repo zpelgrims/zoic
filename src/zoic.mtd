@@ -1,66 +1,115 @@
 # zoic                    0x00070007
 [node zoic]
-    desc                         STRING     "Extended camera shader with added options for mage based bokeh shapes and optical vignetting."
-    maya.name                    STRING     "camera"
-    maya.id                      INT        0x00070007
-    maya.translator              STRING     "zoic"
+        desc STRING "Extended camera shader with added options for mage based bokeh shapes and optical vignetting."
+        maya.name               STRING  "camera"
+        maya.id                     INT     0x00070007
+        maya.translator         STRING  "zoic"
 
-    [attr sensorWidth]
-        maya.name                STRING     "aiSensorWidth"
-        min                      FLOAT      0.1
-        max                      FLOAT      10
-        default                  FLOAT      3.6
-        linkable                 BOOL       false
-        desc                     STRING     "Width of the sensor in centimeters. Default value is the width of a full frame sensor."
 
-    [attr sensorHeight]
-        maya.name                STRING     "aiSensorHeight"
-        min                      FLOAT      0.1
-        max                      FLOAT      10
-        default                  FLOAT      2.4
-        linkable                 BOOL       false
-        desc                     STRING     "Height of the sensor in centimeters. Default value is the height of a full frame sensor."
+        [attr sensorWidth]
+        maya.name           STRING  "aiSensorWidth"
+        min                        FLOAT   0.1
+        max                       FLOAT   10
+        default                  FLOAT   3.6
+        linkable                BOOL FALSE
+        desc STRING "Width of the sensor in centimeters. Default value is the width of a full frame sensor."
 
-    [attr focalLength]
-        maya.name                STRING     "aiFocalLength"
-        min                      FLOAT      1
-        softmin                  FLOAT      8
-        softmax                  FLOAT      200
-        max                      FLOAT      1000
-        default                  FLOAT      35
-        desc                     STRING     "Distance between the lens and the point at which the light converges in millimeters."
 
-    [attr useDof]
-        maya.name                STRING     "aiUseDof"
-        default                  BOOL       true
-        desc                     STRING     "Enable Depth of Field"
-        linkable                 BOOL       false
+        [attr sensorHeight]
+        maya.name           STRING  "aiSensorHeight"
+        min             FLOAT   0.1
+        max             FLOAT   10
+        default             FLOAT   2.4
+        linkable BOOL FALSE
+        desc STRING "Height of the sensor in centimeters. Default value is the height of a full frame sensor."
 
-    [attr fStop]
-        maya.name                STRING     "aiFStop"
-        min                      FLOAT      0.01
-        softmin                  FLOAT      0.7
-        softmax                  FLOAT      32.0
-        max                      FLOAT      100.0
-        default                  FLOAT      2.8
-        desc                     STRING     "Ratio of the distance from the lens to the point where the focused light converges (the focal length) over the diameter of the aperture."
 
-    [attr focalDistance]
-        maya.name                STRING     "aiFocalDistance"
-        min                      FLOAT      0.001
-        max                      FLOAT      99999
-        default                  FLOAT      115
-        desc                     STRING     "Distance between lens and object in focus in millimeters."
+        [attr focalLength]
+        maya.name           STRING  "aiFocalLength"
+        min             FLOAT   1
+        softmin         FLOAT 8
+        softmax         FLOAT 200
+        max             FLOAT   1000
+        default             FLOAT   35
+        desc STRING "Distance between the lens and the point at which the light converges in millimeters."
 
-    [attr opticalVignetting]
-        maya.name                STRING     "aiOpticalVignetting"
-        min                      FLOAT      0.0
-        softmax                  FLOAT      50.0
-        max                      FLOAT      1000.0
-        default                  FLOAT      0
-        desc                     STRING     "Sometimes referred to as the cat-eye effect, this is a lens imperfection that is not caused by the glass but by the outer edge of the lens, also known as the exit aperture. When the main aperture is fully open, light coming into the camera from steep angles will be blocked partially by the edge of the lens. This creates cat-eye like bokeh shapes near the edges of an image. It should be noted that this lens effect is purely mechanical and can not be confused with lens distortion."
 
-    [attr highlightWidth]
+        [attr fStop]
+        maya.name           STRING      "aiFStop"
+        min                        FLOAT        0.01
+        softmin                  FLOAT        0.7
+        softmax                 FLOAT        32.0
+        max                       FLOAT        100.0
+        default                  FLOAT         2.8
+        desc                     STRING       "Ratio of the distance from the lens to the point where the focused light converges (the focal length) over the diameter of the aperture."
+
+
+        [attr focalDistance]
+        maya.name           STRING  "aiFocalDistance"
+        min                       FLOAT   0.001
+        max                      FLOAT   99999
+        default                 FLOAT   120
+        desc                    STRING "Distance between lens and object in focus in millimeters."
+
+
+        [attr useImage]
+        maya.name           STRING  "aiUseImage"
+        default                  BOOL   false
+        desc                     STRING "Enable Image based bokeh"
+
+
+        [attr bokehPath]
+        maya.name           STRING  "aiBokehPath"
+        default                  STRING   ""
+        desc                     STRING "Path to bokeh image. No need to convert to .tx"
+
+
+        [attr kolb]
+        maya.name          STRING  "aiKolb"
+        default                 BOOL   true
+        desc                    STRING "Use a raytraced lens model"
+        linkable                BOOL FALSE
+
+
+                               [attr lensDataPath]
+        maya.name           STRING  "aiLensDataPath"
+        default                  STRING   ""
+        desc                     STRING "Path to lens data file"
+
+
+                               [attr kolbSamplingMethod]
+        maya.name          STRING  "aiKolbSamplingMethod"
+        default                 BOOL   true
+        desc                    STRING "Aperture or full first lens element sampling"
+        linkable                BOOL FALSE
+
+
+        [attr useDof]
+        maya.name          STRING  "aiUseDof"
+        default                 BOOL   true
+        desc                    STRING "Enable Depth of Field"
+        linkable                BOOL FALSE
+
+
+        [attr opticalVignettingDistance]
+        maya.name           STRING  "aiOpticalVignettingDistance"
+        min                       FLOAT   0.0
+        softmax                FLOAT 50.0
+        max                      FLOAT   1000.0
+        default                  FLOAT   0
+        desc                     STRING "Sometimes referred to as the cat-eye effect, this is a lens imperfection that is not caused by the glass but by the outer edge of the lens, also known as the exit aperture. When the main aperture is fully open, light coming into the camera from steep angles will be blocked partially by the edge of the lens. This creates cat-eye like bokeh shapes near the edges of an image. It should be noted that this lens effect is purely mechanical and can not be confused with lens distortion."
+
+
+        [attr opticalVignettingRadius]
+        maya.name           STRING  "aiOpticalVignettingRadius"
+        min                       FLOAT   1.0
+        softmax                FLOAT 2.0
+        max                      FLOAT   5.0
+        default                  FLOAT   1.0
+        desc                     STRING "A multiplier on the actual aperture radius to determine the size of the virtual aperture."
+
+
+        [attr highlightWidth]
         maya.name                STRING     "aiHighlightWidth"
         min                      FLOAT      0.0
         softmax                  FLOAT      0.2
@@ -68,7 +117,8 @@
         default                  FLOAT      0.0
         desc                     STRING     "Width of the highlight on the inner side of the bokeh in relationship to the origin in image space. This is a percentage of the lens radius."
 
-    [attr highlightStrength]
+
+        [attr highlightStrength]
         maya.name                STRING     "aiHighlightStrength"
         min                      FLOAT      0.0
         softmax                  FLOAT      20.0
@@ -76,18 +126,8 @@
         default                  FLOAT      0.0
         desc                     STRING     "Strength of the highlight on the inner side of the bokeh in relationship to the origin in image space. This is a multiplier on the weight of the rays."
 
-    [attr useImage]
-        maya.name                STRING     "aiUseImage"
-        default                  BOOL       false
-        desc                     STRING     "Enable Image based bokeh"
 
-    [attr bokehPath]
-        maya.name                STRING     "aiBokehPath"
-        c4d.gui_type             INT        0
-        default                  STRING     ""
-        desc                     STRING     "Path to bokeh image. No need to convert to .tx"
-
-    [attr exposureControl]
+        [attr exposureControl]
         maya.name                STRING     "aiExposureControl"
         min                      FLOAT      -100.0
         softmin                  FLOAT      -5.0
@@ -95,4 +135,3 @@
         max                      FLOAT      100.0
         default                  FLOAT      0.0
         desc                     STRING     "Multiplier on the ray weight."
-

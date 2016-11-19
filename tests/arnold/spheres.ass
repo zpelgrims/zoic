@@ -8,8 +8,8 @@ options
 {
  AA_samples 10
  outputs "RGBA RGBA defaultArnoldFilter@gaussian_filter defaultArnoldDriver@driver_png.RGBA"
- xres 1920
- yres 1080
+ xres 500
+ yres 500
  enable_fast_opacity on
  auto_transparency_threshold 0.649999976
  texture_max_memory_MB 2048
@@ -44,7 +44,7 @@ zoic
  opticalVignetting 0
  highlightWidth 0
  highlightStrength 0
- useImage on
+ useImage off
  bokehPath "tests/images/shapes/bokeh_27.jpg"
  exposureControl 0
  matrix
