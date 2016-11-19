@@ -17,12 +17,8 @@ tests/*
 Sconstruct
 excons/
 
-
-src/s_kallweit/realistic.h
-
-src/s_kallweit/dgauss.100mm.dat
-
-src/s_kallweit/realistic.cpp
+build/*
+s_kallweit/*
 
 tests/images/testScene_distance.exr
 
