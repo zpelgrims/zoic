@@ -4,8 +4,6 @@ tests/*.exr
 *.exr
 *.png
 *.ass
-excons.cache
-*.dblite
 *.pyc
 release/
 debug/
@@ -27,5 +25,3 @@ s_kallweit/*
 tests/images/testScene_distance.exr
 
 tests/images/testScene_spheres.exr
-
-src/zoic_new.cpp
