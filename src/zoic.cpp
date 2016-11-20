@@ -16,10 +16,9 @@
 // Find answer to: Should I scale the film plane along with the focal length?
 // Support lens files with extra information (abbe number, kind of glass)
 // fix the difference between thin lens and kolb fstop result
-// implement LUT
+// implement LUT for aperture size
 // make visualisation for all parameters
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
-// change defines to enum
 // implement correct exposure based on film plane sample position
  
  
@@ -81,7 +80,8 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 inline bool LoadTexture(const AtString path, void *pixelData){
      return AiTextureLoad(path, true, 0, pixelData);
 }
- 
+
+
 struct arrayCompare{
      const float *values;
      inline arrayCompare(const float *_values) :values(_values) {}
@@ -498,120 +498,6 @@ inline void concentricDiskSample(float ox, float oy, float *lensU, float *lensV)
      *lensU = r * std::cos(phi);
      *lensV = r * std::sin(phi);
 }
- 
- 
-/*
-void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
-     std::ifstream lensDataFile(lensDataFileName);
-     std::string line, token;
-     std::stringstream iss;
-     int lensDataCounter = 0;
-     int commentCounter = 0;
-     int tabCounter = 0;
-    
-     AiMsgInfo("[ZOIC] ##############################################");
-     AiMsgInfo("[ZOIC] ############# READING LENS DATA ##############");
-     AiMsgInfo("[ZOIC] ##############################################");
-     AiMsgInfo("[ZOIC] Welcome to the lens nerd club :-D");
- 
-     while (getline(lensDataFile, line)){
-         if (line.empty() || line.front() == '#'){
-             ++commentCounter;
-             continue;
-         }
- 
-         iss << line;
-         while (getline(iss, token, '\t') ){
-             if (token == " "){
-                AiMsgError("[ZOIC] Please make sure your .dat file only contains TAB spacings.");
-             }
- 
-             tabCounter = 0;
-             for(int i = 0; i < line.size(); i++){
-                if(line[i] == '\t'){
-                    ++tabCounter;
-                }
-             }
- 
-             // simplest case: RADIUS OF CURVATURE // THICKNESS // IOR // APERTURE
-             if (tabCounter == 3){
-                 if (lensDataCounter == 0){
-                     ld->lensRadiusCurvature.push_back(std::stod(token));
-                 } else if (lensDataCounter == 1){
-                     ld->lensThickness.push_back(std::stod(token));
-                 } else if (lensDataCounter == 2){
-                     ld->lensIOR.push_back(std::stod(token));
-                 } else if (lensDataCounter == 3){
-                     ld->lensAperture.push_back(std::stod(token));
-                     lensDataCounter = -1;
-                 }
-             }
- 
-             // more advanced case: RADIUS OF CURVATURE // THICKNESS // MATERIAL // IOR // V-NUMBER // APERTURE
-             if (tabCounter == 5){
-                if (lensDataCounter == 0){
-                     ld->lensRadiusCurvature.push_back(std::stod(token));
-                 } else if (lensDataCounter == 1){
-                     ld->lensThickness.push_back(std::stod(token));
-                 } else if (lensDataCounter == 2){
-                     ld->lensMaterial.push_back(token);
-                 } else if (lensDataCounter == 3){
-                    ld->lensIOR.push_back(std::stod(token));
-                 } else if (lensDataCounter == 4){
-                    ld->lensAbbe.push_back(std::stod(token));
-                 } else if (lensDataCounter == 5){
-                     ld->lensAperture.push_back(std::stod(token));
-                     lensDataCounter = -1;
-                 }
-             }
- 
-             ++lensDataCounter;
-         }
- 
-         iss.clear();
-     }
- 
-     AiMsgInfo( "%-40s %12d", "[ZOIC] Comment lines ignored", commentCounter);
-     AiMsgInfo( "%-40s %12d", "[ZOIC] Tabs found per data line", tabCounter);
- 
-     if (tabCounter == 3){
-         AiMsgInfo("[ZOIC] ##############################################");
-         AiMsgInfo("[ZOIC] #   ROC       Thickness     IOR     Aperture #");
-         AiMsgInfo("[ZOIC] ##############################################");
- 
-         for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-             AiMsgInfo("[ZOIC] %10.4f  %10.4f  %10.4f  %10.4f", ld->lensRadiusCurvature[i], ld->lensThickness[i], ld->lensIOR[i], ld->lensAperture[i]);
-         }
-     }
- 
-    if (tabCounter == 5){
-        AiMsgInfo("[ZOIC] ####################################################################");
-        AiMsgInfo("[ZOIC] #   ROC     Thickness      Material     IOR      Abbe     Aperture #");
-        AiMsgInfo("[ZOIC] ####################################################################");
- 
-        for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-            AiMsgInfo("[ZOIC] %10.4f  %10.4f  %10s  %10.4f  %10.4f  %10.4f", ld->lensRadiusCurvature[i], ld->lensThickness[i], ld->lensMaterial[i].c_str(), ld->lensIOR[i], ld->lensAbbe[i], ld->lensAperture[i]);
-        }
-    }
- 
- 
-   AiMsgInfo("[ZOIC] ##############################################");
-    AiMsgInfo("[ZOIC] ########### END READING LENS DATA ############");
-    AiMsgInfo("[ZOIC] ##############################################");
- 
- 
-    // reverse the datasets in the vector, since we will start with the rear-most lens element
-    std::reverse(ld->lensRadiusCurvature.begin(),ld->lensRadiusCurvature.end());
-    std::reverse(ld->lensThickness.begin(),ld->lensThickness.end());
-    std::reverse(ld->lensIOR.begin(),ld->lensIOR.end());
-    std::reverse(ld->lensAperture.begin(),ld->lensAperture.end());
- 
-    if (tabCounter == 5){
-        std::reverse(ld->lensMaterial.begin(),ld->lensMaterial.end());
-        std::reverse(ld->lensAbbe.begin(),ld->lensAbbe.end());
-    }
-}
-*/
  
  
 void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
@@ -1044,6 +930,73 @@ void adjustFocalLength(Lensdata *ld){
         ld->lensAperture[i] *= ld->focalLengthRatio;
     }
 }
+
+/*
+
+class BoundingBox2f{
+    public:
+        AtPoint min;
+        AtPoint max;
+};
+
+
+// code modified from Simon Kallweit's Kolb implementation in the Nori renderer
+BoundingBox2f computeExitPupilBounds(Lensdata *ld, float r0, float r1) const {
+    // bbox looks like: vector2f(vec3(minx, miny, minz), vec3(maxx, maxy, maxz))
+    BoundingBox2f bounds;
+
+    const int FilmSamples = 16;
+    const int RearSamples = 16;
+
+    float rearZ = ld->lensThickness[0];
+    float rearAperture = ld->lensAperture[0];
+
+    int numHit = 0;
+    int numTraced = 0;
+    for (int i = 0; i <= FilmSamples; ++i) {
+        AtVector filmP = {AiV3Lerp(float(i) / FilmSamples, r0, r1), 0.0, 0.0};
+        for (int x = -RearSamples; x <= RearSamples; ++x) {
+            for (int y = -RearSamples; y <= RearSamples; ++y) {
+                AtVector rearP = {x * (rearAperture / RearSamples), y * (rearAperture / RearSamples), rearZ};
+                //Ray3f sceneRay;
+                if (traceThroughLensElementsForApertureSize()){
+                if ( traceFromFilm( {filmP, AiV3Normalize(rearP - filmP)} ) ) {
+                    bounds.expandBy(Vector2f(rearP.x(), rearP.y()));
+                    ++numHit;
+                }
+                ++numTraced;
+            }
+        }
+    }
+
+    // Expand due to sampling error and clip to actual aperture
+    bounds.expandBy(rearAperture / RearSamples);
+    bounds.clip(BoundingBox2f(-rearAperture, rearAperture));
+
+    return bounds;
+}
+
+// code modified from Simon Kallweit's Kolb implementation in the Nori renderer
+void sampleExitPupil(const AtVector &filmP, const AtVector &apertureSample, AtVector &rearP, float &area) const {
+    // Find pupil bounds for given distance to optical axis and sample a point
+    float r = std::sqrt(sqr(filmP.x()) + sqr(filmP.y()));
+    int index = std::floor(r / (0.5f * m_diagonal) * m_exitPupilBounds.size());
+    index = std::min(index, int(m_exitPupilBounds.size()) - 1);
+    const auto &bounds = m_exitPupilBounds[index];
+    Point2f p = bounds.min + apertureSample.cwiseProduct(bounds.max - bounds.min);
+    area = bounds.getVolume();
+
+    // Transform pupil bounds to align with position on film
+    float sinTheta = (r == 0.f) ? 0.f : filmP.y() / r;
+    float cosTheta = (r == 0.f) ? 1.f : filmP.x() / r;
+    rearP = Point3f(
+        cosTheta * p.x() - sinTheta * p.y(),
+        sinTheta * p.x() + cosTheta * p.y(),
+        getRearElement().z
+    );
+}
+
+*/
  
  
  
