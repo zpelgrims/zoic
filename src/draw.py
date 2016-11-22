@@ -11,8 +11,8 @@ TRANSLATEX = 3800 * AAS
 TRANSLATEY = (SIZE[1] * AAS) / 2
 PADDING = 10 * AAS
 SCALE = 35
-font = ImageFont.truetype('C:\Windows\Fonts\Consola.ttf', 16 * AAS)
-# font = ImageFont.truetype('/Users/zpelgrims/Library/Fonts/Inconsolata.otf', 16 * AAS)
+# font = ImageFont.truetype('C:\Windows\Fonts\Consola.ttf', 16 * AAS)
+font = ImageFont.truetype('/Users/zpelgrims/Library/Fonts/Inconsolata.otf', 16 * AAS)
 WHITE = (255, 255, 255)
 RED = (int(0.9 * 255), int(0.4 * 255), int(0.5 * 255))
 BLUE = (36, 71, 91)
@@ -24,8 +24,8 @@ DARKGREY = (120, 120, 120)
  
 # DATA VARS
 print "PYTHON: Reading data file"
-# dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/draw.zoic', 'r')
-dataFile = open('C:\ilionData\Users\zeno.pelgrims\Documents\zoic_compile/draw.zoic', 'r')
+dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/draw.zoic', 'r')
+# dataFile = open('C:\ilionData\Users\zeno.pelgrims\Documents\zoic_compile/draw.zoic', 'r')
  
 LENSMODEL = dataFile.readline()
 LENSMODELSTRING = LENSMODEL[10:-2]
@@ -226,5 +226,5 @@ print "PYTHON: ---- Anti-aliasing image"
 img.thumbnail(SIZE, Image.ANTIALIAS)
  
 print "PYTHON: Saving image"
-img.save('C:\ilionData\Users\zeno.pelgrims\Documents\zoic_compile\lensDrawing.png','png')
-# img.save('/Volumes/ZENO_2016/projects/zoic/tests/images/lensDrawing.png','png')
+# img.save('C:\ilionData\Users\zeno.pelgrims\Documents\zoic_compile\lensDrawing.png','png')
+img.save('/Volumes/ZENO_2016/projects/zoic/tests/images/lensDrawing.png','png')
