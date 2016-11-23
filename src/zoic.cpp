@@ -62,6 +62,7 @@ C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/
 #include <vector>
 #include <sstream>
 #include <iomanip>
+#include <random>
  
 #ifdef _DEBUGIMAGESAMPLING
 #  define DEBUG_ONLY(block) block
@@ -1096,6 +1097,15 @@ void DrawProgressBar(int len, double percent) {
     std::cout << "[" << progress << "] " << (static_cast<int>(100 * percent)) << "%" << std::endl;
     flush(std::cout); // Required.
 }
+
+
+
+void sampleTriangle(float u, float v, AtPoint2 vertexA, AtPoint2 vertexB, AtPoint2 vertexC, AtPoint2 *newPoint){
+    float tmp = std::sqrt(u);
+    float x = 1.0 - tmp;
+    float y = v * tmp;
+    *newPoint = {((1.0 - x - y) * vertexA) + (x * vertexB) + (y * vertexC)};
+}
  
  
  
@@ -1377,8 +1387,8 @@ node_update {
                             AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, rotatedPoint.y - sampleOrigin.y, - float(ld.lensThickness[0])};
 
                             if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
-                                //maxAperturesPerDirection.push_back(lensSpacing * float(ls - 1));
-                                maxAperturesPerDirection.push_back(rotatedPoint);
+                                //maxAperturesPerDirection.push_back(lensSpacing * float(ls - 1)); // length from origin to failure
+                                maxAperturesPerDirection.push_back(rotatedPoint); // gives exact coordinates
                                 break;
                             }
                         }
@@ -1389,19 +1399,17 @@ node_update {
                 }
             }
         
-
-            // right now in vector is the maximum length in whatever direction, but ideally it should be exact lens coordinates
                 
             // print out data structure
-            for(auto it : ld.apertureMap){
+            for(auto &it : ld.apertureMap){
                 std::cout << "sampleOrigin.x = [" << std::fixed << std::setprecision(5) << it.first << "] :: " << std::endl;
                 std::map<float, std::vector<AtPoint2>> &internal_map = it.second;
 
-                for (auto it2 : internal_map) {
+                for (auto &it2 : internal_map) {
                     std::cout << "\t sampleOrigin.y = [" << std::fixed << std::setprecision(5) << it2.first << "] :: ";
                     std::vector<AtPoint2> &internal_vector = it2.second;
 
-                    for (auto it3 : internal_vector){
+                    for (auto &it3 : internal_vector){
                         std::cout << std::fixed << std::setprecision(5) << "[" << it3.x << ", " << it3.y << "]" << ", ";
                     }
 
@@ -1409,49 +1417,55 @@ node_update {
                 }
             }
 
+
+            // how to retrieve lower bound values
+            std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
+            it = ld.apertureMap.lower_bound(0.1);
+            float value1 = it->first;
+
+            std::map<float, std::vector<AtPoint2>>::iterator it2;
+            std::map<float, std::vector<AtPoint2>> internal_map = it->second;
+            it2 = internal_map.lower_bound(0.1);
+            float value2 = it2->first;
+
+            float xvalueAtCertainAngle = it2->second[0].x;
+            float yvalueAtCertainAngle = it2->second[0].y;
+
         }
 
 
+        // sample point on triangle
 
+        /* write points to file
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<> dis(0.0, 1.0);
+
+        std::ofstream myfile;
+        myfile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingList.zoic", std::ofstream::out | std::ofstream::trunc);
+
+        for(int i = 0; i < 5000; i++){
+            float u = dis(gen);
+            float v = dis(gen);
+
+            float tmp = std::sqrt(u);
+            float x = 1.0 - tmp;
+            float y = v * tmp;        
+
+            AtPoint2 vertexA = {0.0, 0.0};
+            AtPoint2 vertexB = {0.0, 2.0};
+            AtPoint2 vertexC = {0.5, 0.0};
+
+            AtPoint2 randomPoint = {((1.0 - x - y) * vertexA) + (x * vertexB) + (y * vertexC)};
+            myfile << randomPoint.x << ", " << randomPoint.y << ", ";
+        }
+
+        myfile.close();
+        */
 
         
+
         // query this datastructure like: std::cout << apertureMap[floatvalue][floatvalue][vectorposition] << std::endl;
-
-        // rotate a vector like this:
-        /*
-            float angle = -45.0;
-
-            std::vector<float> originalVector;
-            originalVector.push_back(0.0);
-            originalVector.push_back(1.0);
-
-            float theta = angle * 0.0174533;
-
-            std::vector<float> rotatedVector;
-            rotatedVector.push_back(originalVector[0] * std::cos(theta) - originalVector[1] * std::sin(theta));
-            rotatedVector.push_back(originalVector[0] * std::sin(theta) + originalVector[1] * std::cos(theta));
-
-            std::cout << rotatedVector[0] << " " << rotatedVector[1] << std::endl;
-        */
-
-        // returns a random point on the triangle, but not sure how to set vertices
-        // start with random sampling but find something better soon :)
-        /*
-            std::random_device rd;
-            std::mt19937 gen(rd());
-            std::uniform_real_distribution<> dis(0, 1);
-
-            for(int i = 0; i < 2024; i++){
-                float u = dis(gen);
-                float v = dis(gen);
-
-                float tmp = std::sqrt(u);
-                float x = 1.0 - tmp;
-                float y = v * tmp;
-                std::cout << x << ", " << y << ", ";
-            }
-        */
-
 
 
 
@@ -1638,6 +1652,11 @@ camera_create_ray {
             output->dir.x = lensU * low->second;
             output->dir.y = lensV * low->second;
             */
+
+
+
+
+
         }
  
         // looks cleaner in 2d when rays are aligned on axis
