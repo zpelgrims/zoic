@@ -484,25 +484,26 @@ struct cameraData{
  
  
 struct Lensdata{
-     std::vector<float> lensRadiusCurvature;
-     std::vector<float> lensThickness;
-     std::vector<float> lensIOR;
-     std::vector<float> lensAperture;
-     std::vector<float> lensAbbe;
-     std::vector<std::string> lensMaterial;
-     std::vector<float> lensCenter;
-     float userApertureRadius;
-     int apertureElement;
-     int vignettedRays, succesRays, drawRays;
-     int totalInternalReflection;
-     float apertureDistance;
-     float xres, yres;
-     float optimalAperture;
-     float focalLengthRatio;
-     float filmDiagonal;
-     float originShift;
-     float focalDistance;
-     std::map<float, float> apertureMap;
+    std::vector<float> lensRadiusCurvature;
+    std::vector<float> lensThickness;
+    std::vector<float> lensIOR;
+    std::vector<float> lensAperture;
+    std::vector<float> lensAbbe;
+    std::vector<std::string> lensMaterial;
+    std::vector<float> lensCenter;
+    float userApertureRadius;
+    int apertureElement;
+    int vignettedRays, succesRays, drawRays;
+    int totalInternalReflection;
+    float apertureDistance;
+    float xres, yres;
+    float optimalAperture;
+    float focalLengthRatio;
+    float filmDiagonal;
+    float originShift;
+    float focalDistance;
+    //std::map<float, float> apertureMap; 
+    std::map<float, std::map<float, std::vector<AtPoint2>>> apertureMap;
 } ld;
  
  
@@ -1079,6 +1080,22 @@ void writeToFile(Lensdata *ld){
      myfile << std::fixed << std::setprecision(10) << 1.7;
      myfile << "}\n";
 }
+
+
+void DrawProgressBar(int len, double percent) {
+    std::cout << "\b"; // Erase the entire current line.
+    std::cout << "\r"; // Move to the beginning of the current line.
+    std::string progress;
+    for (int i = 0; i < len; ++i) {
+        if (i < static_cast<int>(len * percent)) {
+            progress += "=";
+        } else {
+            progress += " ";
+        }
+    }
+    std::cout << "[" << progress << "] " << (static_cast<int>(100 * percent)) << "%" << std::endl;
+    flush(std::cout); // Required.
+}
  
  
  
@@ -1271,15 +1288,15 @@ node_update {
 
         */
  
+        
         /*
-
         // still way too approximate, many rays are vignetted
         if(_kolbSamplingMethod == 1){
             // lookup table method
-            int filmSamples = 512;
-            int lensSamples = 1024;
+            int filmSamples = 4;
+            int lensSamples = 256;
 
-            float filmHeight = 5.0f;
+            float filmHeight = 3.6f;
 
             float filmSpacing = filmHeight / float(filmSamples);
             float lensSpacing = ld.lensAperture[0] / float(lensSamples);
@@ -1305,22 +1322,17 @@ node_update {
                 it++;
             }
         }
-
         */
+
+        
 
         // TRIANGLE SAMPLING METHOD
         // hopefully this will allow for more rays to be sent inside the actual precalculated aperture, meaning less vignetted rays which are evil time and noise wise
 
-        // pre calculate lut every x amount of distance on the film
-        // shoot rays in 8+ directions, return at what distance the ray fails to trace
         // expand slightly to correct for error due to non-smoothed corners
         // choose random number between 0 and 8+
         // uniformly sample the corresponding triangle slice of the aperture ngon
-
-        // I will need to store:
-        // a std::map<float, std::map<float, std::vector<float>>> associates with n amount of values, from 0 to 8+
         // i think i could use an unordered map since I will always do lookups based on value, but do that later on when I´m improving code
-        // 
 
 
         // data structure works, now just to get right values in there!
@@ -1341,69 +1353,64 @@ node_update {
 
             float lensSpacing = ld.lensAperture[0] / float(lensSamples); //do I need to pick the whole aperture or it´s radius?
 
-            std::map<float, std::map<float, std::vector<float>>> apertureMap;
-            std::vector<float> maxAperturesPerDirection;
+            std::vector<AtPoint2> maxAperturesPerDirection;
 
+            AtPoint2 tmpPoint;
+            AtPoint2 rotatedPoint;
 
             for(int i = 0; i < filmSamplesX; i++){
-
                 for(int j = 0; j < filmSamplesY; j++){
-
                     AtVector sampleOrigin = {filmSpacingX * float(i), filmSpacingY * float(j), ld.originShift};
 
                     for(int sd = 0; sd < samplingDirections; sd++){
-
                         float theta = (samplingDirectionSpacing * float(sd)) * 0.0174533; // degrees to radians
 
-                        for(int ls = 0; ls < lensSamples; ls++){
-                              
-                            // create a vector as I would with the lens spacing coordinates, in one axis
-                            AtPoint2 tmpPoint;
+                        for(int ls = 0; ls < lensSamples; ls++){  
+                            // vector with lens spacing coordinates on one axis
                             tmpPoint.x = 0.0;
                             tmpPoint.y = lensSpacing * float(ls);
 
                             // rotate that vector around origin
-                            AtPoint2 rotatedPoint;
                             rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
                             rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
-                            // this is obviously still wrong, need to incorporate the directions and the xy samples
                             AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, rotatedPoint.y - sampleOrigin.y, - float(ld.lensThickness[0])};
 
                             if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
-                                maxAperturesPerDirection.push_back(lensSpacing * float(ls - 1));
+                                //maxAperturesPerDirection.push_back(lensSpacing * float(ls - 1));
+                                maxAperturesPerDirection.push_back(rotatedPoint);
                                 break;
                             }
                         }
-
                     }
 
-                    apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
+                    ld.apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
                     maxAperturesPerDirection.clear();
                 }
             }
         
 
+            // right now in vector is the maximum length in whatever direction, but ideally it should be exact lens coordinates
                 
             // print out data structure
-            for(auto it:apertureMap){
+            for(auto it : ld.apertureMap){
                 std::cout << "sampleOrigin.x = [" << std::fixed << std::setprecision(5) << it.first << "] :: " << std::endl;
-                std::map<float, std::vector<float>> &internal_map = it.second;
-                for (auto it2: internal_map) {
+                std::map<float, std::vector<AtPoint2>> &internal_map = it.second;
+
+                for (auto it2 : internal_map) {
                     std::cout << "\t sampleOrigin.y = [" << std::fixed << std::setprecision(5) << it2.first << "] :: ";
-                    std::vector<float> &internal_vector = it2.second;
-                    for (auto it3: internal_vector){
-                        std::cout << std::fixed << std::setprecision(5) << it3 << ", ";
+                    std::vector<AtPoint2> &internal_vector = it2.second;
+
+                    for (auto it3 : internal_vector){
+                        std::cout << std::fixed << std::setprecision(5) << "[" << it3.x << ", " << it3.y << "]" << ", ";
                     }
 
                 std::cout << std::endl;
-
                 }
             }
-            
-
 
         }
+
 
 
 
@@ -1624,12 +1631,13 @@ camera_create_ray {
             //output->dir.y = lensV * ld.optimalAperture;
             output->dir.z = -ld.lensThickness[0];
 
-
+            /*
             float distanceToFilmOrigin = std::sqrt(input->sx * input->sx + input->sy * input->sy);
             std::map<float, float>::iterator low;
             low = ld.apertureMap.lower_bound(distanceToFilmOrigin);
             output->dir.x = lensU * low->second;
             output->dir.y = lensV * low->second;
+            */
         }
  
         // looks cleaner in 2d when rays are aligned on axis
