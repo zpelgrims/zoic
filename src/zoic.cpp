@@ -1654,14 +1654,17 @@ camera_create_ray {
             float value2 = it2->first;
 
             // choose which triangle out of 8 to sample
-            float randomNumber = rand() % 7;  
+            float randomNumber = rand() % 8;  
 
             // construct vertices
             // find maximum coordinates of that triangle, for the defined x y coords
             AtPoint2 vertexA = {0.0, 0.0};
             AtPoint2 vertexB = {it2->second[randomNumber].x, it2->second[randomNumber].y};
-            AtPoint2 vertexC = {it2->second[randomNumber - 1].x, it2->second[randomNumber - 1].y};
-
+            if(randomNumber == 0){
+                AtPoint2 vertexC = {it2->second[7].x, it2->second[7].y};
+            } else {
+                AtPoint2 vertexC = {it2->second[randomNumber - 1].x, it2->second[randomNumber - 1].y};
+            }
 
             AtPoint2 newPoint;
             sampleTriangle(input->lensx, 
