@@ -1100,7 +1100,7 @@ void DrawProgressBar(int len, double percent) {
 
 
 
-void sampleTriangle(float u, float v, AtPoint2 vertexA, AtPoint2 vertexB, AtPoint2 vertexC, AtPoint2 *newPoint){
+inline void sampleTriangle(float u, float v, AtPoint2 vertexA, AtPoint2 vertexB, AtPoint2 vertexC, AtPoint2 *newPoint){
     float tmp = std::sqrt(u);
     float x = 1.0 - tmp;
     float y = v * tmp;
@@ -1348,8 +1348,8 @@ node_update {
         // data structure works, now just to get right values in there!
 
         if(_kolbSamplingMethod == 1){
-            int filmSamplesX = 4;
-            int filmSamplesY = 4;
+            int filmSamplesX = 100;
+            int filmSamplesY = 100;
             int lensSamples = 256;
             int samplingDirections = 8;
 
@@ -1399,7 +1399,7 @@ node_update {
                 }
             }
         
-                
+            /*
             // print out data structure
             for(auto &it : ld.apertureMap){
                 std::cout << "sampleOrigin.x = [" << std::fixed << std::setprecision(5) << it.first << "] :: " << std::endl;
@@ -1416,27 +1416,15 @@ node_update {
                 std::cout << std::endl;
                 }
             }
+            */
 
 
-            // how to retrieve lower bound values
-            std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
-            it = ld.apertureMap.lower_bound(0.1);
-            float value1 = it->first;
-
-            std::map<float, std::vector<AtPoint2>>::iterator it2;
-            std::map<float, std::vector<AtPoint2>> internal_map = it->second;
-            it2 = internal_map.lower_bound(0.1);
-            float value2 = it2->first;
-
-            float xvalueAtCertainAngle = it2->second[0].x;
-            float yvalueAtCertainAngle = it2->second[0].y;
-
+            
         }
 
 
-        // sample point on triangle
 
-        /* write points to file
+        /* write triangle sample points to file, keep for docs
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_real_distribution<> dis(0.0, 1.0);
@@ -1512,7 +1500,7 @@ node_finish {
  
  
 camera_create_ray {
-    AiRenderAbort();
+    //AiRenderAbort();
 
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
@@ -1654,8 +1642,38 @@ camera_create_ray {
             */
 
 
+            // find lowest bound x value
+            std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
+            it = ld.apertureMap.lower_bound(output->origin.x);
+            float value1 = it->first;
+
+            // find lowest bound y value
+            std::map<float, std::vector<AtPoint2>>::iterator it2;
+            std::map<float, std::vector<AtPoint2>> internal_map = it->second;
+            it2 = internal_map.lower_bound(output->origin.y);
+            float value2 = it2->first;
+
+            // choose which triangle out of 8 to sample
+            float randomNumber = rand() % 7;  
+
+            // construct vertices
+            // find maximum coordinates of that triangle, for the defined x y coords
+            AtPoint2 vertexA = {0.0, 0.0};
+            AtPoint2 vertexB = {it2->second[randomNumber].x, it2->second[randomNumber].y};
+            AtPoint2 vertexC = {it2->second[randomNumber - 1].x, it2->second[randomNumber - 1].y};
 
 
+            AtPoint2 newPoint;
+            sampleTriangle(input->lensx, 
+                           input->lensy, 
+                           {0.0, 0.0}, 
+                           {it2->second[randomNumber].x, it2->second[randomNumber].y}, 
+                           {it2->second[randomNumber - 1].x, it2->second[randomNumber - 1].y}, 
+                           &newPoint);
+
+            output->dir.x = newPoint.x; //possibly not correct, might have to subtract origin or something
+            output->dir.y = newPoint.y; //possibly not correct, might have to subtract origin or something
+            output->dir.z = -ld.lensThickness[0];
 
         }
  
