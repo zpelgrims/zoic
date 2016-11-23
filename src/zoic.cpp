@@ -22,7 +22,7 @@
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // implement correct exposure based on film plane sample position
  
- 
+
  
 /* COMPILE AT WORK:
 
@@ -1251,6 +1251,8 @@ node_update {
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
         // and I don't think it does..
         // use lookup table instead!
+
+        /*
         if(_kolbSamplingMethod == 1){
             int sampleCount = 1024;
             AtVector sampleOrigin = {0.0, 0.0, ld.originShift};
@@ -1266,8 +1268,10 @@ node_update {
                 }
             }
         }
+
+        */
  
-        
+        /*
 
         // still way too approximate, many rays are vignetted
         if(_kolbSamplingMethod == 1){
@@ -1302,7 +1306,7 @@ node_update {
             }
         }
 
-
+        */
 
         // TRIANGLE SAMPLING METHOD
         // hopefully this will allow for more rays to be sent inside the actual precalculated aperture, meaning less vignetted rays which are evil time and noise wise
@@ -1319,8 +1323,11 @@ node_update {
         // 
 
 
+        // data structure works, now just to get right values in there!
+
         if(_kolbSamplingMethod == 1){
-            int filmSamplesX, filmSamplesY = 16;
+            int filmSamplesX = 4;
+            int filmSamplesY = 4;
             int lensSamples = 256;
             int samplingDirections = 8;
 
@@ -1338,7 +1345,6 @@ node_update {
             std::vector<float> maxAperturesPerDirection;
 
 
-
             for(int i = 0; i < filmSamplesX; i++){
 
                 for(int j = 0; j < filmSamplesY; j++){
@@ -1347,28 +1353,59 @@ node_update {
 
                     for(int sd = 0; sd < samplingDirections; sd++){
 
+                        float theta = (samplingDirectionSpacing * float(sd)) * 0.0174533; // degrees to radians
+
                         for(int ls = 0; ls < lensSamples; ls++){
-                            // strategy:
+                              
                             // create a vector as I would with the lens spacing coordinates, in one axis
-                            // then rotate that vector around origin
+                            AtPoint2 tmpPoint;
+                            tmpPoint.x = 0.0;
+                            tmpPoint.y = lensSpacing * float(ls);
+
+                            // rotate that vector around origin
+                            AtPoint2 rotatedPoint;
+                            rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+                            rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
                             // this is obviously still wrong, need to incorporate the directions and the xy samples
-                            AtVector sampleDirection = {0.0, (lensSpacing * float(ls)) - sampleOrigin.y, - float(ld.lensThickness[0])};
+                            AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, rotatedPoint.y - sampleOrigin.y, - float(ld.lensThickness[0])};
 
                             if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
-                                //ld.apertureMap.insert(std::make_pair(sampleOrigin.y, lensSpacing * float(j - 1)));
-
                                 maxAperturesPerDirection.push_back(lensSpacing * float(ls - 1));
                                 break;
                             }
                         }
+
                     }
 
-                    apertureMap["filmSampleXPosition"].insert(std::make_pair("filmSampleYPosition", maxAperturesPerDirection));
+                    apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
+                    maxAperturesPerDirection.clear();
+                }
+            }
+        
+
+                
+            // print out data structure
+            for(auto it:apertureMap){
+                std::cout << "sampleOrigin.x = [" << std::fixed << std::setprecision(5) << it.first << "] :: " << std::endl;
+                std::map<float, std::vector<float>> &internal_map = it.second;
+                for (auto it2: internal_map) {
+                    std::cout << "\t sampleOrigin.y = [" << std::fixed << std::setprecision(5) << it2.first << "] :: ";
+                    std::vector<float> &internal_vector = it2.second;
+                    for (auto it3: internal_vector){
+                        std::cout << std::fixed << std::setprecision(5) << it3 << ", ";
+                    }
+
+                std::cout << std::endl;
 
                 }
             }
+            
+
+
         }
+
+
 
         
         // query this datastructure like: std::cout << apertureMap[floatvalue][floatvalue][vectorposition] << std::endl;
@@ -1454,7 +1491,7 @@ node_finish {
  
  
 camera_create_ray {
-    //AiRenderAbort();
+    AiRenderAbort();
 
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
