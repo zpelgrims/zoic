@@ -80,6 +80,10 @@ C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/
 std::ofstream myfile;
 bool draw = false;
 int counter = 0;
+
+std::ofstream trianglefile;
+
+
  
 // Arnold methods
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
@@ -959,14 +963,14 @@ void adjustFocalLength(Lensdata *ld){
 }
 
 
-
+/*
 class BoundingBox2f{
     public:
         AtPoint min;
         AtPoint max;
 };
 
-/*
+
 // code modified from Simon Kallweit's Kolb implementation in the Nori renderer
 BoundingBox2f computeExitPupilBounds(Lensdata *ld, float r0, float r1) const {
     // bbox looks like: vector2f(vec3(minx, miny, minz), vec3(maxx, maxy, maxz))
@@ -1113,8 +1117,8 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0); // distance between sensor and lens in cm
-    AiParameterFLT("fStop", 3.4);
-    AiParameterFLT("focalDistance", 120.0); // distance from lens to focal point
+    AiParameterFLT("fStop", 6.4);
+    AiParameterFLT("focalDistance", 100.0); // distance from lens to focal point
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); // bokeh shape image location
     AiParameterBOOL("kolb", true);
@@ -1239,7 +1243,7 @@ node_update {
         ld.focalLengthRatio = _focalLength / kolbFocalLength;
  
         // scale lens elements
-        adjustFocalLength(&ld);
+        //adjustFocalLength(&ld);
  
         // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
         kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, true);
@@ -1271,21 +1275,17 @@ node_update {
         // precompute lens centers
         computeLensCenters(&ld);
  
-
-        
-
+        /*
         // search for ideal max height to shoot rays to on first lens element, by tracing test rays and seeing which one fails
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
         // and I don't think it does..
         // use lookup table instead!
-
-        /*
         if(_kolbSamplingMethod == 1){
             int sampleCount = 1024;
             AtVector sampleOrigin = {0.0, 0.0, ld.originShift};
             for (int i = 0; i < sampleCount; i++){
                 float heightVariation = ld.lensAperture[0] / float(sampleCount);
-                AtVector sampleDirection = {0.0, heightVariation * float(i), - float(ld.lensThickness[0])};
+                AtVector sampleDirection = {0.0, heightVariation * float(i), float(- ld.lensThickness[0])};
  
                 if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
                     AiMsgInfo("[ZOIC] Positive failure at sample [%d] out of [%d]", i, sampleCount);
@@ -1295,8 +1295,8 @@ node_update {
                 }
             }
         }
-
         */
+        
  
         
         /*
@@ -1344,33 +1344,36 @@ node_update {
         // uniformly sample the corresponding triangle slice of the aperture ngon
         // i think i could use an unordered map since I will always do lookups based on value, but do that later on when I´m improving code
 
-
+        
         // data structure works, now just to get right values in there!
 
         if(_kolbSamplingMethod == 1){
-            int filmSamplesX = 100;
-            int filmSamplesY = 100;
-            int lensSamples = 256;
+            // optimise these vars
+            int filmSamplesX = 64;
+            int filmSamplesY = 64;
+            int lensSamples = 512;
             int samplingDirections = 8;
 
-            float filmWidth = 3.6;
-            float filmHeight = 2.4;
+            float filmWidth = 2.0;
+            float filmHeight = 2.0;
 
             float filmSpacingX = filmWidth / float(filmSamplesX);
             float filmSpacingY = filmHeight / float(filmSamplesY);
 
             float samplingDirectionSpacing = 360.0 / float(samplingDirections);
 
-            float lensSpacing = ld.lensAperture[0] / float(lensSamples); //do I need to pick the whole aperture or it´s radius?
+            float lensSpacing = ld.lensAperture[0] / float(lensSamples); // do I need to pick the whole aperture or it´s radius?
 
             std::vector<AtPoint2> maxAperturesPerDirection;
 
             AtPoint2 tmpPoint;
             AtPoint2 rotatedPoint;
 
-            for(int i = 0; i < filmSamplesX; i++){
-                for(int j = 0; j < filmSamplesY; j++){
-                    AtVector sampleOrigin = {filmSpacingX * float(i), filmSpacingY * float(j), ld.originShift};
+            for(int i = 0; i < filmSamplesX + 1; i++){
+                for(int j = 0; j < filmSamplesY + 1; j++){
+                    // i think in theory it should look like this, but gives me segfaults
+                    AtVector sampleOrigin = {float((filmSpacingX * float(i) * 2.0) - filmWidth / 2.0), float((filmSpacingY * float(j) * 2.0) - filmHeight / 2.0), ld.originShift};
+                    //AtVector sampleOrigin = {filmSpacingX * float(i), filmSpacingY * float(j), ld.originShift};
 
                     for(int sd = 0; sd < samplingDirections; sd++){
                         float theta = (samplingDirectionSpacing * float(sd)) * 0.0174533; // degrees to radians
@@ -1398,6 +1401,8 @@ node_update {
                     maxAperturesPerDirection.clear();
                 }
             }
+
+            
         
             /*
             // print out data structure
@@ -1451,11 +1456,9 @@ node_update {
         myfile.close();
         */
 
-        
+        trianglefile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingList.zoic", std::ofstream::out | std::ofstream::trunc);
 
         // query this datastructure like: std::cout << apertureMap[floatvalue][floatvalue][vectorposition] << std::endl;
-
-
 
          DRAW_ONLY({
              // write to file for lens drawing
@@ -1491,6 +1494,8 @@ node_finish {
  
         AiMsgInfo("[ZOIC] Drawing finished");
     })
+
+    trianglefile.close();
  
     delete camera;
     AiCameraDestroy(node);
@@ -1498,7 +1503,9 @@ node_finish {
 }
  
  
- 
+int randomNumberCounter = 0;
+int randomNumber = 0;
+
 camera_create_ray {
     //AiRenderAbort();
 
@@ -1607,12 +1614,14 @@ camera_create_ray {
         output->origin.y = input->sy * 1.7;
         output->origin.z = ld.originShift;
  
+        /*
          DRAW_ONLY({
              // looks cleaner in 2d when rays are aligned on axis
              output->origin.x = 0.0;
              output->origin.y = 0.0;
          })
- 
+        */
+
         // sample disk with proper sample distribution
         float lensU, lensV = 0.0;
         if (_useImage == false){
@@ -1624,14 +1633,15 @@ camera_create_ray {
         // pick between different sampling methods (change to enum)
         // sampling first element is "ground truth" but wastes a lot of rays
         // sampling optimal aperture is efficient, but might not make a whole image
-        if (_kolbSamplingMethod == 0){ // using noisy ground truth
-            output->dir.x = lensU * ld.lensAperture[0];
-            output->dir.y = lensV * ld.lensAperture[0];
-            output->dir.z = -ld.lensThickness[0];
-        } else if (_kolbSamplingMethod == 1){ // using binary aperture search
-            //output->dir.x = lensU * ld.optimalAperture;
-            //output->dir.y = lensV * ld.optimalAperture;
-            output->dir.z = -ld.lensThickness[0];
+        if (_kolbSamplingMethod == false){ // using noisy ground truth
+            // not sure if all the rays are actually hitting the first lens element here, modify drawing function and check?
+            output->dir.x = (lensU * ld.lensAperture[0]) - output->origin.x;
+            output->dir.y = (lensV * ld.lensAperture[0]) - output->origin.y;
+            output->dir.z = - ld.lensThickness[0];
+        } else { // using binary aperture search
+            //output->dir.x = (lensU * ld.optimalAperture) - output->origin.x;
+            //output->dir.y = (lensV * ld.optimalAperture) - output->origin.y;
+            //output->dir.z = - ld.lensThickness[0];
 
             /*
             float distanceToFilmOrigin = std::sqrt(input->sx * input->sx + input->sy * input->sy);
@@ -1641,6 +1651,9 @@ camera_create_ray {
             output->dir.y = lensV * low->second;
             */
 
+            
+
+            // origin goes -1, 1 instead of 0, 1 (fixed by abs?)
 
             // find lowest bound x value
             std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
@@ -1648,40 +1661,56 @@ camera_create_ray {
             float value1 = it->first;
 
             // find lowest bound y value
-            std::map<float, std::vector<AtPoint2>>::iterator it2;
             std::map<float, std::vector<AtPoint2>> internal_map = it->second;
+            std::map<float, std::vector<AtPoint2>>::iterator it2;
             it2 = internal_map.lower_bound(output->origin.y);
             float value2 = it2->first;
 
-            // choose which triangle out of 8 to sample
-            float randomNumber = rand() % 8;  
+            //AiMsgWarning("origin.x, value 1 x :: [%f, %f]\norigin.y, value 2 y :: [%f, %f]", output->origin.x, value1,output->origin.y, value2);
 
-            // construct vertices
+            // choose which triangle out of 8 to sample
+            // for some reason this seems to fail the process
+            // can do one but can´t iterate through...
+            if(randomNumberCounter == 7){
+                randomNumberCounter = 0;
+                ++randomNumber;
+                if (randomNumber == 8){
+                    randomNumber = 0;
+                }
+            }
+            ++randomNumberCounter;
+
+            randomNumber = 5;
+
+
+            // construct triangle vertices
             // find maximum coordinates of that triangle, for the defined x y coords
             AtPoint2 vertexA = {0.0, 0.0};
-            AtPoint2 vertexB = {it2->second[randomNumber].x, it2->second[randomNumber].y};
+            AtPoint2 vertexB = {ld.apertureMap[value1][value2][randomNumber].x, ld.apertureMap[value1][value2][randomNumber].y};
+
+            AtPoint2 vertexC;
             if(randomNumber == 0){
-                AtPoint2 vertexC = {it2->second[7].x, it2->second[7].y};
+                vertexC = {ld.apertureMap[value1][value2][7].x, ld.apertureMap[value1][value2][7].y};
             } else {
-                AtPoint2 vertexC = {it2->second[randomNumber - 1].x, it2->second[randomNumber - 1].y};
+                vertexC = {ld.apertureMap[value1][value2][randomNumber - 1].x, ld.apertureMap[value1][value2][randomNumber - 1].y};
             }
 
-            AtPoint2 newPoint;
-            sampleTriangle(input->lensx, 
-                           input->lensy, 
-                           {0.0, 0.0}, 
-                           {it2->second[randomNumber].x, it2->second[randomNumber].y}, 
-                           {it2->second[randomNumber - 1].x, it2->second[randomNumber - 1].y}, 
-                           &newPoint);
+            AtPoint2 pointOnLens;
+            sampleTriangle(input->lensx, input->lensy, vertexA, vertexB, vertexC, &pointOnLens);
 
-            output->dir.x = newPoint.x; //possibly not correct, might have to subtract origin or something
-            output->dir.y = newPoint.y; //possibly not correct, might have to subtract origin or something
+            //trianglefile << newPoint.x << ", " << newPoint.y << ", ";
+
+            // dir = lenspoint - filmpoint
+            output->dir.x = pointOnLens.x - output->origin.x;
+            output->dir.y = pointOnLens.y - output->origin.y;
             output->dir.z = -ld.lensThickness[0];
+
+            
 
         }
  
         // looks cleaner in 2d when rays are aligned on axis
-        DRAW_ONLY(output->dir.x = 0.0;)
+        //DRAW_ONLY(output->dir.x = 0.0;)
  
         if(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw)){
             ++ld.vignettedRays;
