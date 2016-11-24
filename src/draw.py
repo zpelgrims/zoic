@@ -188,7 +188,13 @@ d.text([0 + TRANSLATEX + PADDING, 0 + TRANSLATEY + PADDING + 1100], "ORIGIN", DA
 # TEMPORARY FOCUS LINE, REMOVE!
 d.line([(100 * AAS * SCALE + TRANSLATEX, 9999 * AAS * SCALE + TRANSLATEY), (100 * AAS * SCALE + TRANSLATEX, - 9999 * AAS * SCALE + TRANSLATEY)], ORANGE, 1)
  
+
+# RAYS
+print "PYTHON: ---- Drawing rays"
+for count in range (0, len(RAYSLIST) / 4):
+    d.line([RAYSLIST[(count * 4)] * AAS * SCALE + TRANSLATEX, RAYSLIST[(count * 4) + 1] * AAS * SCALE + TRANSLATEY, RAYSLIST[(count * 4) + 2] * AAS * SCALE + TRANSLATEX,  (RAYSLIST[(count * 4) + 3] * AAS * SCALE) + TRANSLATEY], WHITE, 1)
  
+
 if LENSMODELSTRING == "KOLB":
  
                 # FOCUS DISTANCE
@@ -217,11 +223,7 @@ if LENSMODELSTRING == "KOLB":
                 print "PYTHON: ---- Drawing sensor"
                 d.line([(IMAGEDISTANCELIST[0] * AAS * SCALE + TRANSLATEX, SENSORHEIGHTLIST[0] * AAS * SCALE + TRANSLATEY), (IMAGEDISTANCELIST[0] * AAS * SCALE + TRANSLATEX, - SENSORHEIGHTLIST[0] * AAS * SCALE + TRANSLATEY)], ORANGE, LINEWIDTH * 3)
  
-# RAYS
-print "PYTHON: ---- Drawing rays"
-for count in range (0, len(RAYSLIST) / 4):
-    d.line([RAYSLIST[(count * 4)] * AAS * SCALE + TRANSLATEX, RAYSLIST[(count * 4) + 1] * AAS * SCALE + TRANSLATEY, RAYSLIST[(count * 4) + 2] * AAS * SCALE + TRANSLATEX,  (RAYSLIST[(count * 4) + 3] * AAS * SCALE) + TRANSLATEY], WHITE, 1)
- 
+
 print "PYTHON: ---- Anti-aliasing image"
 img.thumbnail(SIZE, Image.ANTIALIAS)
  

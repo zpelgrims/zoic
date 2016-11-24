@@ -13,7 +13,6 @@
  
 // TODO
 // make sure it works with other lens profiles
-// Change functions so they modify variables instead of return one
 // Find answer to: Should I scale the film plane along with the focal length?
 // Support lens files with extra information (abbe number, kind of glass)
 // fix the difference between thin lens and kolb fstop result
@@ -509,6 +508,7 @@ struct Lensdata{
     float focalDistance;
     //std::map<float, float> apertureMap; 
     std::map<float, std::map<float, std::vector<AtPoint2>>> apertureMap;
+    std::map<float, float> apertureMapEarly;
 } ld;
  
  
@@ -1087,22 +1087,6 @@ void writeToFile(Lensdata *ld){
 }
 
 
-void DrawProgressBar(int len, double percent) {
-    std::cout << "\b"; // Erase the entire current line.
-    std::cout << "\r"; // Move to the beginning of the current line.
-    std::string progress;
-    for (int i = 0; i < len; ++i) {
-        if (i < static_cast<int>(len * percent)) {
-            progress += "=";
-        } else {
-            progress += " ";
-        }
-    }
-    std::cout << "[" << progress << "] " << (static_cast<int>(100 * percent)) << "%" << std::endl;
-    flush(std::cout); // Required.
-}
-
-
 
 inline void sampleTriangle(float u, float v, AtPoint2 vertexA, AtPoint2 vertexB, AtPoint2 vertexC, AtPoint2 *newPoint){
     float tmp = std::sqrt(u);
@@ -1117,13 +1101,13 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0); // distance between sensor and lens in cm
-    AiParameterFLT("fStop", 6.4);
+    AiParameterFLT("fStop", 1.2);
     AiParameterFLT("focalDistance", 100.0); // distance from lens to focal point
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); // bokeh shape image location
     AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", ""); // lens data file location
-    AiParameterBOOL("kolbSamplingMethod", true);
+    AiParameterBOOL("kolbSamplingMethod", false);
     AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 0.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 0.0); // 1.0 - .. range float, to multiply with the actual aperture radius
@@ -1275,7 +1259,7 @@ node_update {
         // precompute lens centers
         computeLensCenters(&ld);
  
-        /*
+        
         // search for ideal max height to shoot rays to on first lens element, by tracing test rays and seeing which one fails
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
         // and I don't think it does..
@@ -1295,46 +1279,10 @@ node_update {
                 }
             }
         }
-        */
         
- 
         
+
         /*
-        // still way too approximate, many rays are vignetted
-        if(_kolbSamplingMethod == 1){
-            // lookup table method
-            int filmSamples = 4;
-            int lensSamples = 256;
-
-            float filmHeight = 3.6f;
-
-            float filmSpacing = filmHeight / float(filmSamples);
-            float lensSpacing = ld.lensAperture[0] / float(lensSamples);
-
-            for(int i = 0; i < filmSamples; i++){
-                AtVector sampleOrigin = {0.0, filmSpacing * float(i), ld.originShift};
-                
-                for(int j = 0; j < lensSamples; j++){
-                    AtVector sampleDirection = {0.0, (lensSpacing * float(j)) - sampleOrigin.y, - float(ld.lensThickness[0])};
-
-                    if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
-                        AiMsgInfo("[ZOIC] Positive failure at sample [%d] out of [%d]", j, lensSamples);
-                        ld.apertureMap.insert(std::make_pair(sampleOrigin.y, lensSpacing * float(j - 1)));
-                        break;
-                    }
-                }
-            }
-
-            // print out map
-            std::map<float, float>::iterator it = ld.apertureMap.begin();
-            while(it != ld.apertureMap.end()){
-                std::cout << std::fixed << std::setprecision(5) << it->first << " :: " << it->second << std::endl;
-                it++;
-            }
-        }
-        */
-
-        
 
         // TRIANGLE SAMPLING METHOD
         // hopefully this will allow for more rays to be sent inside the actual precalculated aperture, meaning less vignetted rays which are evil time and noise wise
@@ -1362,7 +1310,7 @@ node_update {
 
             float samplingDirectionSpacing = 360.0 / float(samplingDirections);
 
-            float lensSpacing = ld.lensAperture[0] / float(lensSamples); // do I need to pick the whole aperture or it´s radius?
+            float lensSpacing = (ld.lensAperture[0] * 0.5) / float(lensSamples); // do I need to pick the whole aperture or it´s radius?
 
             std::vector<AtPoint2> maxAperturesPerDirection;
 
@@ -1401,8 +1349,8 @@ node_update {
                     maxAperturesPerDirection.clear();
                 }
             }
-
             
+            */
         
             /*
             // print out data structure
@@ -1425,7 +1373,7 @@ node_update {
 
 
             
-        }
+        //}
 
 
 
@@ -1458,7 +1406,6 @@ node_update {
 
         trianglefile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingList.zoic", std::ofstream::out | std::ofstream::trunc);
 
-        // query this datastructure like: std::cout << apertureMap[floatvalue][floatvalue][vectorposition] << std::endl;
 
          DRAW_ONLY({
              // write to file for lens drawing
@@ -1639,22 +1586,12 @@ camera_create_ray {
             output->dir.y = (lensV * ld.lensAperture[0]) - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
         } else { // using binary aperture search
-            //output->dir.x = (lensU * ld.optimalAperture) - output->origin.x;
-            //output->dir.y = (lensV * ld.optimalAperture) - output->origin.y;
-            //output->dir.z = - ld.lensThickness[0];
-
-            /*
-            float distanceToFilmOrigin = std::sqrt(input->sx * input->sx + input->sy * input->sy);
-            std::map<float, float>::iterator low;
-            low = ld.apertureMap.lower_bound(distanceToFilmOrigin);
-            output->dir.x = lensU * low->second;
-            output->dir.y = lensV * low->second;
-            */
-
+            output->dir.x = (lensU * ld.optimalAperture) - (output->origin.x * 0.5); // this strangely seems to work just fine..
+            output->dir.y = (lensV * ld.optimalAperture) - (output->origin.y * 0.5); // this strangely seems to work just fine..
+            output->dir.z = - ld.lensThickness[0];
             
 
-            // origin goes -1, 1 instead of 0, 1 (fixed by abs?)
-
+            /*
             // find lowest bound x value
             std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
             it = ld.apertureMap.lower_bound(output->origin.x);
@@ -1680,9 +1617,6 @@ camera_create_ray {
             }
             ++randomNumberCounter;
 
-            randomNumber = 5;
-
-
             // construct triangle vertices
             // find maximum coordinates of that triangle, for the defined x y coords
             AtPoint2 vertexA = {0.0, 0.0};
@@ -1698,14 +1632,13 @@ camera_create_ray {
             AtPoint2 pointOnLens;
             sampleTriangle(input->lensx, input->lensy, vertexA, vertexB, vertexC, &pointOnLens);
 
-            //trianglefile << newPoint.x << ", " << newPoint.y << ", ";
+            // trianglefile << pointOnLens.x << ", " << pointOnLens.y << ", ";
 
             // dir = lenspoint - filmpoint
             output->dir.x = pointOnLens.x - output->origin.x;
             output->dir.y = pointOnLens.y - output->origin.y;
-            output->dir.z = -ld.lensThickness[0];
-
-            
+            output->dir.z = - ld.lensThickness[0];
+            */
 
         }
  
