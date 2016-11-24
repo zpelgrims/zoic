@@ -12,14 +12,16 @@
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
  
 // TODO
-// make sure it works with other lens profiles
+
+// Make it work with other lens profiles
 // Find answer to: Should I scale the film plane along with the focal length?
-// Support lens files with extra information (abbe number, kind of glass)
-// fix the difference between thin lens and kolb fstop result
-// implement LUT for aperture size
-// make visualisation for all parameters
+// Calculate correct origin coordinates, not just some random float chucked in
+// Implement LUT for aperture size
+// With super wide apertures, more rays are vignetted and the picture gets darker, fix this. It shouldn´t get darker in the middle
+// Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // implement correct exposure based on film plane sample position
+// Support lens files with extra information (abbe number, kind of glass)
  
 
  
@@ -37,6 +39,7 @@ C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/
 LIGHTS NO DRAW:
 NAIVE:
 C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/lights.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_lights_naiveSampling.exr -dp
+
 GOOD SAMPLING:
 C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/lights.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_lights_goodSampling.exr -dp
 
@@ -505,10 +508,8 @@ struct Lensdata{
     float focalLengthRatio;
     float filmDiagonal;
     float originShift;
-    float focalDistance;
-    //std::map<float, float> apertureMap; 
+    float focalDistance; 
     std::map<float, std::map<float, std::vector<AtPoint2>>> apertureMap;
-    std::map<float, float> apertureMapEarly;
 } ld;
  
  
@@ -528,6 +529,15 @@ inline void concentricDiskSample(float ox, float oy, float *lensU, float *lensV)
  
      *lensU = r * std::cos(phi);
      *lensV = r * std::sin(phi);
+}
+
+
+// PBRT style triangle sampling based on its barycentric coordinates
+inline void sampleTriangle(float u, float v, AtPoint2 vertexA, AtPoint2 vertexB, AtPoint2 vertexC, AtPoint2 *newPoint){
+    float tmp = std::sqrt(u);
+    float x = 1.0 - tmp;
+    float y = v * tmp;
+    *newPoint = {((1.0 - x - y) * vertexA) + (x * vertexB) + (y * vertexC)};
 }
  
  
@@ -667,17 +677,11 @@ void cleanupLensData(Lensdata *ld){
  
 void computeLensCenters(Lensdata *ld){
     // precomputes the lens centers so they can just be called at every ray creation
- 
     ld->lensCenter.clear();
     float summedThickness;
  
     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        if(i == 0){
-            summedThickness = ld->lensThickness[0];
-        } else {
-            summedThickness += ld->lensThickness[i];
-        }
- 
+        i == 0 ? summedThickness = ld->lensThickness[0] : summedThickness += ld->lensThickness[i];
         ld->lensCenter.push_back(summedThickness - ld->lensRadiusCurvature[i]);
     }
 }
@@ -721,11 +725,11 @@ inline AtVector calculateTransmissionVector(float ior1, float ior2, AtVector inc
     float cs2 = eta * eta * (1.0 - c1 * c1);
  
     // total internal reflection, can only occur when ior1 > ior2
-    if( tracingRealRays && ior1 > ior2 && cs2 > 1.0){
-        ++ld.totalInternalReflection;
+    //if( tracingRealRays && ior1 > ior2 && cs2 > 1.0){
+    //    ++ld.totalInternalReflection;
         // arbitrary value that I use to check for errors
-        return {0.0, 0.0, 0.0};
-    }
+    //    return {0.0, 0.0, 0.0};
+    //}
  
     return (incidentVector * eta) + (normalVector * ((eta * c1) - std::sqrt(ABS(1.0 - cs2))));
 }
@@ -856,9 +860,9 @@ bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, Len
         }
  
         // check for total internal reflection case
-        if (tmpRayDirection.x == 0.0 && tmpRayDirection.y == 0.0 && tmpRayDirection.z == 0.0){
-            return false;
-        }
+        //if (tmpRayDirection.x == 0.0 && tmpRayDirection.y == 0.0 && tmpRayDirection.z == 0.0){
+        //    return false;
+        //}
  
         *ray_direction = tmpRayDirection;
     }
@@ -961,73 +965,6 @@ void adjustFocalLength(Lensdata *ld){
         ld->lensAperture[i] *= ld->focalLengthRatio;
     }
 }
-
-
-/*
-class BoundingBox2f{
-    public:
-        AtPoint min;
-        AtPoint max;
-};
-
-
-// code modified from Simon Kallweit's Kolb implementation in the Nori renderer
-BoundingBox2f computeExitPupilBounds(Lensdata *ld, float r0, float r1) const {
-    // bbox looks like: vector2f(vec3(minx, miny, minz), vec3(maxx, maxy, maxz))
-    BoundingBox2f bounds;
-
-    const int FilmSamples = 16;
-    const int RearSamples = 16;
-
-    float rearZ = ld->lensThickness[0];
-    float rearAperture = ld->lensAperture[0];
-
-    int numHit = 0;
-    int numTraced = 0;
-    for (int i = 0; i <= FilmSamples; ++i) {
-        AtVector filmP = {AiV3Lerp(float(i) / FilmSamples, r0, r1), 0.0, 0.0};
-        for (int x = -RearSamples; x <= RearSamples; ++x) {
-            for (int y = -RearSamples; y <= RearSamples; ++y) {
-                AtVector rearP = {x * (rearAperture / RearSamples), y * (rearAperture / RearSamples), rearZ};
-                //Ray3f sceneRay;
-                if (traceThroughLensElementsForApertureSize()){
-                if ( traceFromFilm( {filmP, AiV3Normalize(rearP - filmP)} ) ) {
-                    bounds.expandBy(Vector2f(rearP.x(), rearP.y()));
-                    ++numHit;
-                }
-                ++numTraced;
-            }
-        }
-    }
-
-    // Expand due to sampling error and clip to actual aperture
-    bounds.expandBy(rearAperture / RearSamples);
-    bounds.clip(BoundingBox2f(-rearAperture, rearAperture));
-
-    return bounds;
-}
-
-// code modified from Simon Kallweit's Kolb implementation in the Nori renderer
-void sampleExitPupil(const AtVector &filmP, const AtVector &apertureSample, AtVector &rearP, float &area) const {
-    // Find pupil bounds for given distance to optical axis and sample a point
-    float r = std::sqrt(sqr(filmP.x()) + sqr(filmP.y()));
-    int index = std::floor(r / (0.5f * m_diagonal) * m_exitPupilBounds.size());
-    index = std::min(index, int(m_exitPupilBounds.size()) - 1);
-    const auto &bounds = m_exitPupilBounds[index];
-    Point2f p = bounds.min + apertureSample.cwiseProduct(bounds.max - bounds.min);
-    area = bounds.getVolume();
-
-    // Transform pupil bounds to align with position on film
-    float sinTheta = (r == 0.f) ? 0.f : filmP.y() / r;
-    float cosTheta = (r == 0.f) ? 1.f : filmP.x() / r;
-    rearP = Point3f(
-        cosTheta * p.x() - sinTheta * p.y(),
-        sinTheta * p.x() + cosTheta * p.y(),
-        getRearElement().z
-    );
-}
-
-*/
  
  
  
@@ -1085,15 +1022,6 @@ void writeToFile(Lensdata *ld){
      myfile << std::fixed << std::setprecision(10) << 1.7;
      myfile << "}\n";
 }
-
-
-
-inline void sampleTriangle(float u, float v, AtPoint2 vertexA, AtPoint2 vertexB, AtPoint2 vertexC, AtPoint2 *newPoint){
-    float tmp = std::sqrt(u);
-    float x = 1.0 - tmp;
-    float y = v * tmp;
-    *newPoint = {((1.0 - x - y) * vertexA) + (x * vertexB) + (y * vertexC)};
-}
  
  
  
@@ -1101,13 +1029,13 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0); // distance between sensor and lens in cm
-    AiParameterFLT("fStop", 1.2);
+    AiParameterFLT("fStop", 3.4);
     AiParameterFLT("focalDistance", 100.0); // distance from lens to focal point
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); // bokeh shape image location
     AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", ""); // lens data file location
-    AiParameterBOOL("kolbSamplingMethod", false);
+    AiParameterBOOL("kolbSamplingMethod", true);
     AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 0.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 0.0); // 1.0 - .. range float, to multiply with the actual aperture radius
@@ -1454,8 +1382,6 @@ int randomNumberCounter = 0;
 int randomNumber = 0;
 
 camera_create_ray {
-    //AiRenderAbort();
-
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
@@ -1557,8 +1483,8 @@ camera_create_ray {
  
     if(_kolb){
         // arbitrary values but they are the same as the thin lens so.. dunno man
-        output->origin.x = input->sx * 1.7;
-        output->origin.y = input->sy * 1.7;
+        output->origin.x = input->sx * 1.8;
+        output->origin.y = input->sy * 1.8;
         output->origin.z = ld.originShift;
  
         /*
