@@ -15,9 +15,9 @@
 
 // Make it work with other lens profiles
 // Find answer to: Should I scale the film plane along with the focal length?
-// Calculate correct origin coordinates, not just some random float chucked in
 // Implement LUT for aperture size
 // With super wide apertures, more rays are vignetted and the picture gets darker, fix this. It shouldn´t get darker in the middle
+    // this will come with the LUT fix i think
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // implement correct exposure based on film plane sample position
@@ -42,7 +42,6 @@ C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/
 
 GOOD SAMPLING:
 C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/lights.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_lights_goodSampling.exr -dp
-
 
 DISTANCE DRAW:
 C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/distance.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -set options.skip_license_check on -l "C:/Program Files/Ilion/IlionMayaFramework/2015/modules/mtoa/1.2.7.2.2-4.2.13.6/shaders" -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_distance.exr -set options.threads 1 -dp
@@ -519,7 +518,7 @@ inline void concentricDiskSample(float ox, float oy, float *lensU, float *lensV)
      float a = 2.0 * ox - 1.0;
      float b = 2.0 * oy - 1.0;
  
-     if (a * a > b * b) {
+     if (SQR(a) > SQR(b)) {
          r = a;
          phi = (AI_PI / 4.0) * (b / a);
      } else {
@@ -692,8 +691,8 @@ inline bool raySphereIntersection(AtVector *hit_point, AtVector ray_direction, A
     AtVector L = sphere_center - ray_origin;
  
     float tca = AiV3Dot(L, ray_direction);
-    float radius2 = sphere_radius * sphere_radius;
-    float d2 = AiV3Dot(L, L) - tca * tca;
+    float radius2 = SQR(sphere_radius);
+    float d2 = AiV3Dot(L, L) - SQR(tca);
  
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
     // some arbitrary value that I use to check for errors
@@ -704,9 +703,9 @@ inline bool raySphereIntersection(AtVector *hit_point, AtVector ray_direction, A
     float thc = std::sqrt(ABS(radius2 - d2));
  
     if(!reverse){
-        *hit_point = ray_origin + ray_direction * (tca + thc * std::copysign(1.0, sphere_radius));
+        *hit_point = ray_origin + ray_direction * (tca + thc * SGN(sphere_radius));
     } else {
-        *hit_point = ray_origin + ray_direction * (tca - thc * std::copysign(1.0, sphere_radius));
+        *hit_point = ray_origin + ray_direction * (tca - thc * SGN(sphere_radius));
     }
 
     return true;
@@ -714,7 +713,7 @@ inline bool raySphereIntersection(AtVector *hit_point, AtVector ray_direction, A
  
  
 inline bool intersectionNormal(AtVector hit_point, AtVector sphere_center, float sphere_radius, AtVector *hit_point_normal){
-    *hit_point_normal = AiV3Normalize(sphere_center - hit_point) * std::copysign(1.0, sphere_radius);
+    *hit_point_normal = AiV3Normalize(sphere_center - hit_point) * SGN(sphere_radius);
     return true;
 }
  
@@ -727,7 +726,7 @@ inline bool calculateTransmissionVector(AtVector *ray_direction, float ior1, flo
     ior2 == 1.0 ? eta = ior1 : eta = ior1 / ior2;
  
     float c1 = - AiV3Dot(incidentVector, normalVector);
-    float cs2 = eta * eta * (1.0 - c1 * c1);
+    float cs2 = SQR(eta) * (1.0 - SQR(c1));
  
     // total internal reflection, can only occur when ior1 > ior2
     if( tracingRealRays && ior1 > ior2 && cs2 > 1.0){
@@ -736,6 +735,7 @@ inline bool calculateTransmissionVector(AtVector *ray_direction, float ior1, flo
     }
  
     *ray_direction = (incidentVector * eta) + (normalVector * ((eta * c1) - std::sqrt(ABS(1.0 - cs2))));
+
     return true;
 }
  
@@ -811,7 +811,7 @@ float calculateImageDistance(float objectDistance, Lensdata *ld){
 }
  
  
-bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, Lensdata *ld, bool draw){
+inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, Lensdata *ld, bool draw){
     AtVector hit_point;
     AtVector hit_point_normal;
     AtVector sphere_center;
