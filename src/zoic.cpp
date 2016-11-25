@@ -1049,14 +1049,17 @@ void testApertures(Lensdata *ld){
 
     int filmSamples = 5;
     int apertureSamples = 10000;
+
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(0.0, 1.0);
 
-    for (int i = - filmSamples; i < filmSamples; i++){
-        for (int j = -filmSamples; j < filmSamples; j++){
-            origin.x = (i / float(filmSamples)) * (3.6 * 0.5);
-            origin.y = (j / float(filmSamples)) * (3.6 * 0.5);
+    //for (int i = - filmSamples; i < filmSamples; i++){
+    //    for (int j = -filmSamples; j < filmSamples; j++){
+            //origin.x = (i / float(filmSamples)) * (3.6 * 0.5);
+            //origin.y = (j / float(filmSamples)) * (3.6 * 0.5);
+            origin.x = (-0.9) * (3.6 * 0.5);
+            origin.y = (-0.9) * (3.6 * 0.5);
             origin.z = ld->originShift;
         
             float lensU, lensV = 0.0;
@@ -1068,15 +1071,15 @@ void testApertures(Lensdata *ld){
                 direction.y = (lensV * ld->lensAperture[0]) - origin.y;
                 direction.z = - ld->lensThickness[0];
 
-                if(traceThroughLensElements(&origin, &direction, ld, draw)){
+                if(traceThroughLensElements(&origin, &direction, ld, draw) == true){
                     // draw lensu, lensv
-                    testAperturesFile << lensU << " " << lensV << " ";
+                    testAperturesFile << direction.x << " " << direction.y << " ";
             
                 }
             }
-            testAperturesFile << std::endl;
-        }
-    }
+            //testAperturesFile << std::endl;
+    //    }
+    //}
 
     testAperturesFile.close();
 }
@@ -1244,8 +1247,8 @@ node_update {
  
         // precompute lens centers
         computeLensCenters(&ld);
- 
-        /*
+
+        
         // search for ideal max height to shoot rays to on first lens element, by tracing test rays and seeing which one fails
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
         // and I don't think it does..
@@ -1266,7 +1269,7 @@ node_update {
             }
         }
         
-        */
+        
 
         /*
 
@@ -1395,7 +1398,8 @@ node_update {
 
         trianglefile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingList.zoic", std::ofstream::out | std::ofstream::trunc);
 
-        testApertures(&ld);
+
+        // testApertures(&ld);
 
          DRAW_ONLY({
              // write to file for lens drawing
@@ -1442,18 +1446,11 @@ node_finish {
  
 int randomNumberCounter = 0;
 int randomNumber = 0;
-int printCounter = 0;
 
 camera_create_ray {
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
-
-    //if(printCounter == 100000){
-        //std::cout << std::fixed << std::setprecision(5) << input->lensx << ", " << input->lensy << std::endl;
-    //    printCounter = 0;
-    //}
-    //++printCounter;
 
     DRAW_ONLY({
         // tmp draw counters
