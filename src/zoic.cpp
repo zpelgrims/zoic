@@ -687,7 +687,7 @@ void computeLensCenters(Lensdata *ld){
 }
  
  
-inline AtVector raySphereIntersection(AtVector ray_direction, AtVector ray_origin, AtVector sphere_center, float sphere_radius, bool reverse, bool tracingRealRays){
+inline bool raySphereIntersection(AtVector *hit_point, AtVector ray_direction, AtVector ray_origin, AtVector sphere_center, float sphere_radius, bool reverse, bool tracingRealRays){
     ray_direction = AiV3Normalize(ray_direction);
     AtVector L = sphere_center - ray_origin;
  
@@ -697,24 +697,29 @@ inline AtVector raySphereIntersection(AtVector ray_direction, AtVector ray_origi
  
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
     // some arbitrary value that I use to check for errors
-    if (tracingRealRays == true && d2 > radius2){return {0.0, 0.0, 0.0};}
+    if (tracingRealRays == true && d2 > radius2){
+        return false;
+    }
  
     float thc = std::sqrt(ABS(radius2 - d2));
  
     if(!reverse){
-        return ray_origin + ray_direction * (tca + thc * std::copysign(1.0, sphere_radius));
+        *hit_point = ray_origin + ray_direction * (tca + thc * std::copysign(1.0, sphere_radius));
     } else {
-        return ray_origin + ray_direction * (tca - thc * std::copysign(1.0, sphere_radius));
+        *hit_point = ray_origin + ray_direction * (tca - thc * std::copysign(1.0, sphere_radius));
     }
+
+    return true;
 }
  
  
-inline AtVector intersectionNormal(AtVector hit_point, AtVector sphere_center, float sphere_radius){
-    return AiV3Normalize(sphere_center - hit_point) * std::copysign(1.0, sphere_radius);
+inline bool intersectionNormal(AtVector hit_point, AtVector sphere_center, float sphere_radius, AtVector *hit_point_normal){
+    *hit_point_normal = AiV3Normalize(sphere_center - hit_point) * std::copysign(1.0, sphere_radius);
+    return true;
 }
  
  
-inline AtVector calculateTransmissionVector(float ior1, float ior2, AtVector incidentVector, AtVector normalVector, bool tracingRealRays){
+inline bool calculateTransmissionVector(AtVector *ray_direction, float ior1, float ior2, AtVector incidentVector, AtVector normalVector, bool tracingRealRays){
     incidentVector = AiV3Normalize(incidentVector);
     normalVector = AiV3Normalize(normalVector);
  
@@ -725,13 +730,13 @@ inline AtVector calculateTransmissionVector(float ior1, float ior2, AtVector inc
     float cs2 = eta * eta * (1.0 - c1 * c1);
  
     // total internal reflection, can only occur when ior1 > ior2
-    //if( tracingRealRays && ior1 > ior2 && cs2 > 1.0){
-    //    ++ld.totalInternalReflection;
-        // arbitrary value that I use to check for errors
-    //    return {0.0, 0.0, 0.0};
-    //}
+    if( tracingRealRays && ior1 > ior2 && cs2 > 1.0){
+        ++ld.totalInternalReflection;
+        return false;
+    }
  
-    return (incidentVector * eta) + (normalVector * ((eta * c1) - std::sqrt(ABS(1.0 - cs2))));
+    *ray_direction = (incidentVector * eta) + (normalVector * ((eta * c1) - std::sqrt(ABS(1.0 - cs2))));
+    return true;
 }
  
 AtVector2 lineLineIntersection(AtVector line1_origin, AtVector line1_direction, AtVector line2_origin, AtVector line2_direction){
@@ -752,9 +757,8 @@ AtVector linePlaneIntersection(AtVector rayOrigin, AtVector rayDirection) {
     AtVector planeNormal = {0.0, 1.0, 0.0};
     rayDirection = AiV3Normalize(rayDirection);
     coord = AiV3Normalize(coord);
- 
-    float x = (AiV3Dot(coord, planeNormal) - AiV3Dot(planeNormal, rayOrigin)) / AiV3Dot(planeNormal, rayDirection);
-    return rayOrigin + (rayDirection * x);
+
+    return rayOrigin + (rayDirection * (AiV3Dot(coord, planeNormal) - AiV3Dot(planeNormal, rayOrigin)) / AiV3Dot(planeNormal, rayDirection));
 }
  
  
@@ -768,6 +772,9 @@ float calculateImageDistance(float objectDistance, Lensdata *ld){
  
      float summedThickness = 0.0;
      float imageDistance;
+
+     AtVector hit_point_normal;
+     AtVector hit_point;
  
      for(int k = 0; k < (int)ld->lensRadiusCurvature.size(); k++){
          summedThickness += ld->lensThickness[k];
@@ -781,13 +788,13 @@ float calculateImageDistance(float objectDistance, Lensdata *ld){
          sphere_center.y = 0.0;
          sphere_center.z = summedThickness - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i];
         
-         AtVector hit_point = raySphereIntersection(ray_direction_focus, ray_origin_focus, sphere_center, ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], true, false);
-         AtVector hit_point_normal = intersectionNormal(hit_point, sphere_center, - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i]);
+        raySphereIntersection(&hit_point, ray_direction_focus, ray_origin_focus, sphere_center, ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], true, false);
+        intersectionNormal(hit_point, sphere_center, - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], &hit_point_normal);
         
          if(i==0){
-             ray_direction_focus = calculateTransmissionVector(1.0, ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal, false);
+             calculateTransmissionVector(&ray_direction_focus, 1.0, ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal, false);
          } else {
-             ray_direction_focus = calculateTransmissionVector(ld->lensIOR[ld->lensRadiusCurvature.size() - i], ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal, false);
+             calculateTransmissionVector(&ray_direction_focus, ld->lensIOR[ld->lensRadiusCurvature.size() - i], ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal, false);
          }
         
          if(i == (int)ld->lensRadiusCurvature.size() - 1){
@@ -811,19 +818,19 @@ bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, Len
     AtVector tmpRayDirection;
  
     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-         sphere_center = {0.0, 0.0, ld->lensCenter[i]};
-         hit_point = raySphereIntersection(*ray_direction, *ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
+        sphere_center = {0.0, 0.0, ld->lensCenter[i]};
+        raySphereIntersection(&hit_point, *ray_direction, *ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
+
+        float hitPoint2 = hit_point.x * hit_point.x + hit_point.y * hit_point.y;
  
-         float hitPoint2 = hit_point.x * hit_point.x + hit_point.y * hit_point.y;
- 
-         // check if ray hits lens boundary or aperture
-         if ((hit_point.x + hit_point.y + hit_point.z == 0.0) ||
-             (hitPoint2 > (ld->lensAperture[i] * 0.5) * (ld->lensAperture[i] * 0.5)) ||
-             ((i == ld->apertureElement) && (hitPoint2 > ld->userApertureRadius * ld->userApertureRadius))){
-                 return false;
-         }
- 
-         hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
+        // check if ray hits lens boundary or aperture
+        if ((hit_point.x + hit_point.y + hit_point.z == 0.0) ||
+            (hitPoint2 > (ld->lensAperture[i] * 0.5) * (ld->lensAperture[i] * 0.5)) ||
+            ((i == ld->apertureElement) && (hitPoint2 > ld->userApertureRadius * ld->userApertureRadius))){
+                return false;
+        }
+        
+        intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
  
         DRAW_ONLY({
             if(draw){
@@ -841,10 +848,14 @@ bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, Len
  
         // if not last lens element
         if(i != (int)ld->lensRadiusCurvature.size() - 1){
-            tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], *ray_direction, hit_point_normal, true);
+            if(!calculateTransmissionVector(&tmpRayDirection, ld->lensIOR[i], ld->lensIOR[i+1], *ray_direction, hit_point_normal, true)){
+                return false;
+            }
         } else { // last lens element
-            // assuming the material outside the lens is air
-            tmpRayDirection = calculateTransmissionVector(ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true);
+            // assuming the material outside the lens is air [ior 1.0]
+            if(!calculateTransmissionVector(&tmpRayDirection, ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true)){
+                return false;
+            }
  
             DRAW_ONLY({
                 if (draw){
@@ -859,11 +870,6 @@ bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, Len
                 }})
         }
  
-        // check for total internal reflection case
-        //if (tmpRayDirection.x == 0.0 && tmpRayDirection.y == 0.0 && tmpRayDirection.z == 0.0){
-        //    return false;
-        //}
- 
         *ray_direction = tmpRayDirection;
     }
  
@@ -877,6 +883,8 @@ float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
     float principlePlaneDistance;
     float summedThickness = 0.0;
     float rayOriginHeight = ld->lensAperture[0] * 0.1;
+    AtVector hit_point;
+    AtVector hit_point_normal;
  
     AtVector ray_origin = {0.0, rayOriginHeight, 0.0};
     AtVector ray_direction = {0.0, 0.0, 99999.0};
@@ -886,13 +894,13 @@ float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
         i == 0 ? summedThickness = ld->lensThickness[0] : summedThickness += ld->lensThickness[i];
  
         AtVector sphere_center = {0.0, 0.0, summedThickness - ld->lensRadiusCurvature[i]};
-        AtVector hit_point = raySphereIntersection(ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, false);
-        AtVector hit_point_normal = intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i]);
+        raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, false);
+        intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
  
         if(i != (int)ld->lensRadiusCurvature.size() - 1){
-            ray_direction = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true);
+            calculateTransmissionVector(&ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true);
         } else { // last element in vector
-            ray_direction = calculateTransmissionVector(ld->lensIOR[i], 1.0, ray_direction, hit_point_normal, true);
+            calculateTransmissionVector(&ray_direction, ld->lensIOR[i], 1.0, ray_direction, hit_point_normal, true);
  
             // original parallel ray start and end
             AtVector pp_line1start = {0.0, rayOriginHeight, 0.0};
@@ -942,15 +950,15 @@ bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_d
     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         sphere_center.z = ld->lensCenter[i];
  
-        ray_origin = raySphereIntersection(ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
+        raySphereIntersection(&ray_origin, ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
  
         float hitPoint2 = ray_origin.x * ray_origin.x + ray_origin.y * ray_origin.y;
         if(i == ld->apertureElement && hitPoint2 > (ld->userApertureRadius * ld->userApertureRadius)){
             return false;
         }
  
-        hit_point_normal = intersectionNormal(ray_origin, sphere_center, ld->lensRadiusCurvature[i]);
-        ray_direction = calculateTransmissionVector(ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true);
+        intersectionNormal(ray_origin, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
+        calculateTransmissionVector(&ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true);
     }
  
     return true;
@@ -1029,7 +1037,7 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0); // distance between sensor and lens in cm
-    AiParameterFLT("fStop", 3.4);
+    AiParameterFLT("fStop", 2.4);
     AiParameterFLT("focalDistance", 100.0); // distance from lens to focal point
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); // bokeh shape image location
@@ -1120,7 +1128,6 @@ node_update {
         ld.yres = static_cast<float>(AiNodeGetInt(options,"yres"));
  
         // not sure if this is the right way to do it.. probably more to it than this!
-        // these values seem to produce the same image as the other camera which is correct.. hey ho
         ld.filmDiagonal = std::sqrt(_sensorWidth * _sensorWidth + _sensorHeight * _sensorHeight);
  
         ld.focalDistance = _focalDistance;
@@ -1153,9 +1160,10 @@ node_update {
  
         // find by how much all lens elements should be scaled
         ld.focalLengthRatio = _focalLength / kolbFocalLength;
+        AiMsgInfo( "%-40s %12.8f", "[ZOIC] Focal length ratio", ld.focalLengthRatio);
  
         // scale lens elements
-        //adjustFocalLength(&ld);
+        adjustFocalLength(&ld);
  
         // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
         kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, true);
@@ -1482,9 +1490,9 @@ camera_create_ray {
  
  
     if(_kolb){
-        // arbitrary values but they are the same as the thin lens so.. dunno man
-        output->origin.x = input->sx * 1.8;
-        output->origin.y = input->sy * 1.8;
+        // not sure if this is correct, i´d like to use the diagonal since that seems to be the standard
+        output->origin.x = input->sx * (_sensorWidth * 0.5);
+        output->origin.y = input->sy * (_sensorWidth * 0.5);
         output->origin.z = ld.originShift;
  
         /*
@@ -1569,7 +1577,7 @@ camera_create_ray {
         }
  
         // looks cleaner in 2d when rays are aligned on axis
-        //DRAW_ONLY(output->dir.x = 0.0;)
+        // DRAW_ONLY(output->dir.x = 0.0;)
  
         if(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw)){
             ++ld.vignettedRays;
