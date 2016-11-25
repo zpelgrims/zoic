@@ -76,6 +76,7 @@ C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/
 #else
 #  define DRAW_ONLY(block)
 #endif
+
  
 // global vars for lens drawing, remove these at some point
 std::ofstream myfile;
@@ -105,6 +106,8 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 #define _highlightWidth (params[13].FLT)
 #define _highlightStrength (params[14].FLT)
 #define _exposureControl (params[15].FLT)
+
+#define AI_PIOVER4 (0.78539816339f)
  
  
 inline bool LoadTexture(const AtString path, void *pixelData){
@@ -515,15 +518,17 @@ struct Lensdata{
 // Improved concentric mapping code by Dave Cline [peter shirley´s blog]
 inline void concentricDiskSample(float ox, float oy, float *lensU, float *lensV) {
      float phi, r;
+
+     // switch coordinate space from [0, 1] to [-1, 1]
      float a = 2.0 * ox - 1.0;
      float b = 2.0 * oy - 1.0;
  
      if (SQR(a) > SQR(b)) {
          r = a;
-         phi = (AI_PI / 4.0) * (b / a);
+         phi = (AI_PIOVER4) * (b / a);
      } else {
          r = b;
-         phi = (AI_PI / 2.0) - (AI_PI / 4.0) * (a / b);
+         phi = (AI_PIOVER2) - (AI_PIOVER4) * (a / b);
      }
  
      *lensU = r * std::cos(phi);
@@ -815,18 +820,19 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
     AtVector hit_point;
     AtVector hit_point_normal;
     AtVector sphere_center;
-    AtVector tmpRayDirection;
  
     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
         sphere_center = {0.0, 0.0, ld->lensCenter[i]};
-        raySphereIntersection(&hit_point, *ray_direction, *ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
 
-        float hitPoint2 = hit_point.x * hit_point.x + hit_point.y * hit_point.y;
+        if(!raySphereIntersection(&hit_point, *ray_direction, *ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true)){
+            return false;
+        }
+
+        float hitPoint2 = SQR(hit_point.x) + SQR(hit_point.y);
  
         // check if ray hits lens boundary or aperture
-        if ((hit_point.x + hit_point.y + hit_point.z == 0.0) ||
-            (hitPoint2 > (ld->lensAperture[i] * 0.5) * (ld->lensAperture[i] * 0.5)) ||
-            ((i == ld->apertureElement) && (hitPoint2 > ld->userApertureRadius * ld->userApertureRadius))){
+        if ((hitPoint2 > (ld->lensAperture[i] * 0.5) * (ld->lensAperture[i] * 0.5)) ||
+            ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
                 return false;
         }
         
@@ -848,12 +854,14 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
  
         // if not last lens element
         if(i != (int)ld->lensRadiusCurvature.size() - 1){
-            if(!calculateTransmissionVector(&tmpRayDirection, ld->lensIOR[i], ld->lensIOR[i+1], *ray_direction, hit_point_normal, true)){
+            // ray direction gets modified
+            if(!calculateTransmissionVector(ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], *ray_direction, hit_point_normal, true)){
                 return false;
             }
         } else { // last lens element
             // assuming the material outside the lens is air [ior 1.0]
-            if(!calculateTransmissionVector(&tmpRayDirection, ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true)){
+            // ray direction gets modified
+            if(!calculateTransmissionVector(ray_direction, ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true)){
                 return false;
             }
  
@@ -863,14 +871,12 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
                     myfile << " ";
                     myfile << std::fixed << std::setprecision(10) << - hit_point.y;
                     myfile << " ";
-                    myfile << std::fixed << std::setprecision(10) <<  hit_point.z + tmpRayDirection.z * -10000.0;
+                    myfile << std::fixed << std::setprecision(10) <<  hit_point.z + ray_direction->z * -10000.0;
                     myfile << " ";
-                    myfile << std::fixed << std::setprecision(10) <<  hit_point.y + tmpRayDirection.y * -10000.0;
+                    myfile << std::fixed << std::setprecision(10) <<  hit_point.y + ray_direction->y * -10000.0;
                     myfile << " ";
                 }})
         }
- 
-        *ray_direction = tmpRayDirection;
     }
  
      return true;
@@ -883,6 +889,7 @@ float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
     float principlePlaneDistance;
     float summedThickness = 0.0;
     float rayOriginHeight = ld->lensAperture[0] * 0.1;
+
     AtVector hit_point;
     AtVector hit_point_normal;
  
