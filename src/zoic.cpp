@@ -1193,26 +1193,64 @@ void testAperturesSmart(Lensdata *ld){
                 origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.z = ld->originShift;
 
-                // find lowest bound x value
-                std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
-                it = ld->apertureMap.lower_bound(ABS(origin.x));
-                float value1 = it->first;
+                std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator low, prev;
+                low = ld->apertureMap.lower_bound(origin.x);
+
+                float value1;
+
+                // search for closest value, not just lower bound
+                if (low == ld->apertureMap.end()) {
+                    // check for last value
+                    --low;
+                    value1 = low->first;
+                } else if (low == ld->apertureMap.begin()) {
+                    // check for start value
+                    value1 = low->first;
+                } else {
+                    prev = low;
+                    --prev;
+                    if ((origin.x - prev->first) < (low->first - origin.x)){
+                        value1 = prev->first;
+                    } else {
+                        value1 = low->first;
+                    }
+                }
 
                 // find lowest bound y value
-                std::map<float, std::vector<AtPoint2>> internal_map = it->second;
-                std::map<float, std::vector<AtPoint2>>::iterator it2;
-                it2 = internal_map.lower_bound(ABS(origin.y));
-                float value2 = it2->first;
+                std::map<float, std::vector<AtPoint2>> internal_map = low->second;
+                std::map<float, std::vector<AtPoint2>>::iterator low2, prev2;
+                low2 = internal_map.lower_bound(origin.y);
+                float value2;
+
+                
+
+                // search for closest value, not just lower bound
+                if (low2 == internal_map.end()) {
+                    // check for last value
+                    --low2;
+                    value2 = low2->first;
+                } else if (low2 == internal_map.begin()) {
+                    // check for start value
+                    value2 = low2->first;
+                } else {
+                    prev2 = low2;
+                    --prev2;
+                    if ((origin.y - prev2->first) < (low2->first - origin.y)){
+                        value2 = prev2->first;
+                    } else {
+                        value2 = low2->first;
+                    }
+                }
 
                 //AiMsgInfo("originx, value1: [%f, %f] \noriginy, value2:[%f, %f]", origin.x, value1, origin.y, value2);
 
                 // choose which triangle out of 8 to sample
-                //if (randomNumber == 11){
-                //    randomNumber = -1;
-                //}
-                //++randomNumber;
+                if (randomNumber == 15){
+                    randomNumber = -1;
+                }
+                ++randomNumber;
 
-                randomNumber = 5;
+                //randomNumber = 5;
                 
 
                 // construct triangle vertices
@@ -1222,9 +1260,9 @@ void testAperturesSmart(Lensdata *ld){
 
                 AtPoint2 vertexC;
                 if(randomNumber == 0){
-                    vertexC = {ld->apertureMap[value1][value2][11].x, ld->apertureMap[value1][value2][11].y};
+                    vertexC = {ld->apertureMap[value1][value2][15].x, ld->apertureMap[value1][value2][15].y};
                 } else {
-                    vertexC = {ld->apertureMap[value1][value2][randomNumber + 1].x, ld->apertureMap[value1][value2][randomNumber + 1].y};
+                    vertexC = {ld->apertureMap[value1][value2][randomNumber - 1].x, ld->apertureMap[value1][value2][randomNumber - 1].y};
                 }
 
                 AtPoint2 pointOnLens;
@@ -1249,15 +1287,15 @@ void testAperturesSmart(Lensdata *ld){
 
 void exitPupilLUT(Lensdata *ld, bool print){
     // optimise these vars
-    int filmSamplesX = 7;
-    int filmSamplesY = 7;
-    int lensSamples = 256;
-    int samplingDirections = 12;
+    int filmSamplesX = 64;
+    int filmSamplesY = 64;
+    int lensSamples = 1024;
+    int samplingDirections = 16;
 
     std::string progress;
 
-    float filmWidth = 2.0;
-    float filmHeight = 2.0;
+    float filmWidth = 3.0;
+    float filmHeight = 3.0;
 
     float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
     float filmSpacingY = filmHeight / static_cast<float>(filmSamplesY);
@@ -1298,7 +1336,20 @@ void exitPupilLUT(Lensdata *ld, bool print){
                         break;
                     }
                 }
+
+                if (traceThroughLensElementsForApertureSize(sampleOrigin, 
+                                                            {rotatedPoint.x - sampleOrigin.x, 
+                                                            rotatedPoint.y - sampleOrigin.y, 
+                                                            static_cast<float>(- ld->lensThickness[0])}, 
+                                                            ld))
+                {
+                    maxAperturesPerDirection.push_back(rotatedPoint);
+                }
             }
+
+            //if (maxAperturesPerDirection.size() != 7){
+            //    AiMsgWarning("Only %d directions!", maxAperturesPerDirection.size());
+            //}
 
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
             maxAperturesPerDirection.clear();
