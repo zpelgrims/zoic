@@ -1041,45 +1041,47 @@ void writeToFile(Lensdata *ld){
 
 
 
-void testApertures(Lensdata *ld){
+void testAperturesNaive(Lensdata *ld){
     testAperturesFile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);
 
     AtVector origin;
     AtVector direction;
 
-    int filmSamples = 5;
-    int apertureSamples = 10000;
+    int filmSamples = 3;
+    int apertureSamples = 30000;
 
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(0.0, 1.0);
 
-    //for (int i = - filmSamples; i < filmSamples; i++){
-    //    for (int j = -filmSamples; j < filmSamples; j++){
-            //origin.x = (i / float(filmSamples)) * (3.6 * 0.5);
-            //origin.y = (j / float(filmSamples)) * (3.6 * 0.5);
-            origin.x = (-0.9) * (3.6 * 0.5);
-            origin.y = (-0.9) * (3.6 * 0.5);
-            origin.z = ld->originShift;
+    for (int i = - filmSamples; i < filmSamples + 1; i++){
+        for (int j = -filmSamples; j < filmSamples + 1; j++){
         
             float lensU, lensV = 0.0;
 
             for (int k = 0; k < apertureSamples; k++){
                 concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
+
+                //origin.x = -1.8;
+                //origin.y = 1.8;
+                origin.x = (i / float(filmSamples)) * (3.6 * 0.5);
+                origin.y = (j / float(filmSamples)) * (3.6 * 0.5);
+                origin.z = ld->originShift;
+            
          
                 direction.x = (lensU * ld->lensAperture[0]) - origin.x;
                 direction.y = (lensV * ld->lensAperture[0]) - origin.y;
                 direction.z = - ld->lensThickness[0];
 
-                if(traceThroughLensElements(&origin, &direction, ld, draw) == true){
+                if(traceThroughLensElements(&origin, &direction, ld, draw)){
                     // draw lensu, lensv
-                    testAperturesFile << direction.x << " " << direction.y << " ";
-            
+                    testAperturesFile << lensU << " " << lensV << " ";
                 }
             }
-            //testAperturesFile << std::endl;
-    //    }
-    //}
+
+            testAperturesFile << std::endl;
+        }
+    }
 
     testAperturesFile.close();
 }
@@ -1399,13 +1401,14 @@ node_update {
         trianglefile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingList.zoic", std::ofstream::out | std::ofstream::trunc);
 
 
-        // testApertures(&ld);
+        // testAperturesNaive(&ld);
 
-         DRAW_ONLY({
-             // write to file for lens drawing
-             writeToFile(&ld);
-             myfile << "RAYS{";
-         })
+
+        DRAW_ONLY({
+            // write to file for lens drawing
+            writeToFile(&ld);
+            myfile << "RAYS{";
+        })
  
     }
  
