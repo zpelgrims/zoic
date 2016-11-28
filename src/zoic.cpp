@@ -1124,6 +1124,7 @@ void testAperturesTruth(Lensdata *ld){
 }
 
 
+
 void testAperturesNaive(Lensdata *ld){
     testAperturesFile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);
 
@@ -1164,6 +1165,7 @@ void testAperturesNaive(Lensdata *ld){
 }
  
 
+
 void testAperturesSmart(Lensdata *ld){
     testAperturesFile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);
 
@@ -1171,7 +1173,7 @@ void testAperturesSmart(Lensdata *ld){
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 5000;
+    int apertureSamples = 2000;
 
     int randomNumberCounter = 0;
     int randomNumber = 0;
@@ -1187,26 +1189,30 @@ void testAperturesSmart(Lensdata *ld){
 
             for (int k = 0; k < apertureSamples; k++){
 
-                origin.x = (i / static_cast<float>(filmSamples)) * (3.6 * 0.5);
-                origin.y = (j / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.z = ld->originShift;
 
                 // find lowest bound x value
                 std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
-                it = ld->apertureMap.lower_bound(origin.x);
+                it = ld->apertureMap.lower_bound(ABS(origin.x));
                 float value1 = it->first;
 
                 // find lowest bound y value
                 std::map<float, std::vector<AtPoint2>> internal_map = it->second;
                 std::map<float, std::vector<AtPoint2>>::iterator it2;
-                it2 = internal_map.lower_bound(origin.y);
+                it2 = internal_map.lower_bound(ABS(origin.y));
                 float value2 = it2->first;
 
+                //AiMsgInfo("originx, value1: [%f, %f] \noriginy, value2:[%f, %f]", origin.x, value1, origin.y, value2);
+
                 // choose which triangle out of 8 to sample
-                if (randomNumber == 8){
-                    randomNumber = 0;
-                }
-                ++randomNumber;
+                //if (randomNumber == 11){
+                //    randomNumber = -1;
+                //}
+                //++randomNumber;
+
+                randomNumber = 5;
                 
 
                 // construct triangle vertices
@@ -1216,9 +1222,9 @@ void testAperturesSmart(Lensdata *ld){
 
                 AtPoint2 vertexC;
                 if(randomNumber == 0){
-                    vertexC = {ld->apertureMap[value1][value2][7].x, ld->apertureMap[value1][value2][7].y};
+                    vertexC = {ld->apertureMap[value1][value2][11].x, ld->apertureMap[value1][value2][11].y};
                 } else {
-                    vertexC = {ld->apertureMap[value1][value2][randomNumber - 1].x, ld->apertureMap[value1][value2][randomNumber - 1].y};
+                    vertexC = {ld->apertureMap[value1][value2][randomNumber + 1].x, ld->apertureMap[value1][value2][randomNumber + 1].y};
                 }
 
                 AtPoint2 pointOnLens;
@@ -1232,6 +1238,92 @@ void testAperturesSmart(Lensdata *ld){
     }
 
     testAperturesFile.close();
+
+    // execute python drawing
+    std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingDraw.py";
+    std::string command = "python ";
+    command += filename;
+    system(command.c_str());
+}
+
+
+void exitPupilLUT(Lensdata *ld, bool print){
+    // optimise these vars
+    int filmSamplesX = 7;
+    int filmSamplesY = 7;
+    int lensSamples = 256;
+    int samplingDirections = 12;
+
+    std::string progress;
+
+    float filmWidth = 2.0;
+    float filmHeight = 2.0;
+
+    float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
+    float filmSpacingY = filmHeight / static_cast<float>(filmSamplesY);
+
+    float samplingDirectionSpacing = 360.0 / static_cast<float>(samplingDirections);
+
+    float lensSpacing = (ld->lensAperture[0] * 0.5) / static_cast<float>(lensSamples); // do I need to pick the whole aperture or it´s radius?
+
+    std::vector<AtPoint2> maxAperturesPerDirection;
+
+    AtPoint2 tmpPoint;
+    AtPoint2 rotatedPoint;
+
+    for(int i = 0; i < filmSamplesX + 1; i++){
+        for(int j = 0; j < filmSamplesY + 1; j++){
+            AtVector sampleOrigin = {static_cast<float>((filmSpacingX * static_cast<float>(i) * 2.0) - filmWidth / 2.0), 
+                                     static_cast<float>((filmSpacingY * static_cast<float>(j) * 2.0) - filmHeight / 2.0), 
+                                     ld->originShift};
+
+            for(int sd = 0; sd < samplingDirections; sd++){
+                float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * 0.0174533; // degrees to radians
+
+                for(int ls = 0; ls < lensSamples; ls++){  
+                    // vector with lens spacing coordinates on one axis
+                    tmpPoint.x = 0.0;
+                    tmpPoint.y = lensSpacing * static_cast<float>(ls);
+
+                    // rotate that vector around origin
+                    rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+                    rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
+
+                    AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, 
+                                                rotatedPoint.y - sampleOrigin.y, 
+                                                static_cast<float>(- ld->lensThickness[0])};
+
+                    if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, ld)){
+                        maxAperturesPerDirection.push_back(rotatedPoint); // gives exact coordinates
+                        break;
+                    }
+                }
+            }
+
+            ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
+            maxAperturesPerDirection.clear();
+            
+        }
+    }
+
+    if(print){
+        // print out data structure
+        for(auto &it : ld->apertureMap){
+            std::cout << "sampleOrigin.x = [" << std::fixed << std::setprecision(5) << it.first << "] :: " << std::endl;
+            std::map<float, std::vector<AtPoint2>> &internal_map = it.second;
+
+            for (auto &it2 : internal_map) {
+                std::cout << "\t sampleOrigin.y = [" << std::fixed << std::setprecision(5) << it2.first << "] :: ";
+                std::vector<AtPoint2> &internal_vector = it2.second;
+
+                for (auto &it3 : internal_vector){
+                    std::cout << std::fixed << std::setprecision(5) << "[" << it3.x << ", " << it3.y << "]" << ", ";
+                }
+
+            std::cout << std::endl;
+            }
+        }
+    }
 }
 
 
@@ -1397,13 +1489,13 @@ node_update {
         // precompute lens centers
         computeLensCenters(&ld);
 
-        
+
+        /*
         // search for ideal max height to shoot rays to on first lens element, by tracing test rays and seeing which one fails
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
         // and I don't think it does..
         // use lookup table instead!
 
-        /*
         if(_kolbSamplingMethod == 1){
             int sampleCount = 1024;
             AtVector sampleOrigin = {0.0, 0.0, ld.originShift};
@@ -1422,100 +1514,8 @@ node_update {
         */
         
 
-        
-
-        // TRIANGLE SAMPLING METHOD
-        // hopefully this will allow for more rays to be sent inside the actual precalculated aperture, meaning less vignetted rays which are evil time and noise wise
-
-        // expand slightly to correct for error due to non-smoothed corners
-        // choose random number between 0 and 8+
-        // uniformly sample the corresponding triangle slice of the aperture ngon
-        // i think i could use an unordered map since I will always do lookups based on value, but do that later on when I´m improving code
-
-        
-        // data structure works, now just to get right values in there!
-
         if(_kolbSamplingMethod == 1){
-            // optimise these vars
-            int filmSamplesX = 64;
-            int filmSamplesY = 64;
-            int lensSamples = 512;
-            int samplingDirections = 8;
-
-            std::string progress;
-
-            float filmWidth = 2.0;
-            float filmHeight = 2.0;
-
-            float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
-            float filmSpacingY = filmHeight / static_cast<float>(filmSamplesY);
-
-            float samplingDirectionSpacing = 360.0 / static_cast<float>(samplingDirections);
-
-            float lensSpacing = (ld.lensAperture[0] * 0.5) / static_cast<float>(lensSamples); // do I need to pick the whole aperture or it´s radius?
-
-            std::vector<AtPoint2> maxAperturesPerDirection;
-
-            AtPoint2 tmpPoint;
-            AtPoint2 rotatedPoint;
-
-            for(int i = 0; i < filmSamplesX + 1; i++){
-                for(int j = 0; j < filmSamplesY + 1; j++){
-                    // i think in theory it should look like this, but gives me segfaults
-                    AtVector sampleOrigin = {static_cast<float>((filmSpacingX * static_cast<float>(i) * 2.0) - filmWidth / 2.0), static_cast<float>((filmSpacingY * static_cast<float>(j) * 2.0) - filmHeight / 2.0), ld.originShift};
-                    //AtVector sampleOrigin = {filmSpacingX * static_cast<float>(i), filmSpacingY * static_cast<float>(j), ld.originShift};
-
-                    for(int sd = 0; sd < samplingDirections; sd++){
-                        float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * 0.0174533; // degrees to radians
-
-                        for(int ls = 0; ls < lensSamples; ls++){  
-                            // vector with lens spacing coordinates on one axis
-                            tmpPoint.x = 0.0;
-                            tmpPoint.y = lensSpacing * static_cast<float>(ls);
-
-                            // rotate that vector around origin
-                            rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
-                            rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
-
-                            AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, rotatedPoint.y - sampleOrigin.y, - static_cast<float>(ld.lensThickness[0])};
-
-                            if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
-                                //maxAperturesPerDirection.push_back(lensSpacing * static_cast<float>(ls - 1)); // length from origin to failure
-                                maxAperturesPerDirection.push_back(rotatedPoint); // gives exact coordinates
-                                break;
-                            }
-                        }
-                    }
-
-                    ld.apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
-                    maxAperturesPerDirection.clear();
-                    
-                }
-            }
-            
-            
-        
-            /*
-            // print out data structure
-            for(auto &it : ld.apertureMap){
-                std::cout << "sampleOrigin.x = [" << std::fixed << std::setprecision(5) << it.first << "] :: " << std::endl;
-                std::map<float, std::vector<AtPoint2>> &internal_map = it.second;
-
-                for (auto &it2 : internal_map) {
-                    std::cout << "\t sampleOrigin.y = [" << std::fixed << std::setprecision(5) << it2.first << "] :: ";
-                    std::vector<AtPoint2> &internal_vector = it2.second;
-
-                    for (auto &it3 : internal_vector){
-                        std::cout << std::fixed << std::setprecision(5) << "[" << it3.x << ", " << it3.y << "]" << ", ";
-                    }
-
-                std::cout << std::endl;
-                }
-            }
-            */
-
-
-            
+            exitPupilLUT(&ld, false);           
         }
 
 
