@@ -140,104 +140,131 @@ public:
          , pixelData(0), cdfRow(0), cdfColumn(0)
          , rowIndices(0), columnIndices(0) {
      }
+
      ~imageData(){
          invalidate();
      }
+
      bool isValid() const{
          return (x * y * nchannels > 0 && nchannels >= 3);
      }
+
      void invalidate(){
          if (pixelData){
              AiAddMemUsage(-x * y * nchannels * sizeof(float), "zoic");
              AiFree(pixelData);
              pixelData = 0;
          }
+
          if (cdfRow){
              AiAddMemUsage(-y * sizeof(float), "zoic");
              AiFree(cdfRow);
              cdfRow = 0;
          }
+
          if (cdfColumn){
              AiAddMemUsage(-x * y * sizeof(float), "zoic");
              AiFree(cdfColumn);
              cdfColumn = 0;
          }
+
          if (rowIndices){
              AiAddMemUsage(-y * sizeof(int), "zoic");
              AiFree(rowIndices);
              rowIndices = 0;
          }
+
          if (columnIndices){
              AiAddMemUsage(-x * y * sizeof(int), "zoic");
              AiFree(columnIndices);
              columnIndices = 0;
          }
+
          x = y = nchannels = 0;
      }
+
      bool read(const char *bokeh_kernel_filename){
          invalidate();
          AtInt64 nbytes = 0;
          AiMsgInfo("[ZOIC] Reading image using Arnold API: %s", bokeh_kernel_filename);
          AtString path(bokeh_kernel_filename);
          unsigned int iw, ih, nc;
+
          if (!AiTextureGetResolution(path, &iw, &ih) ||
              !AiTextureGetNumChannels(path, &nc)){
              return false;
          }
+
          x = static_cast<int>(iw);
          y = static_cast<int>(ih);
+
          nchannels = static_cast<int>(nc);
          nbytes = x * y * nchannels * sizeof(float);
+
          AiAddMemUsage(nbytes, "zoic");
+
          pixelData = (float*) AiMalloc(nbytes);
          if (!LoadTexture(path, pixelData)){
              invalidate();
              return false;
          }
+
          AiMsgInfo("[ZOIC] Image Width: %d", x);
          AiMsgInfo("[ZOIC] Image Height: %d", y);
          AiMsgInfo("[ZOIC] Image Channels: %d", nchannels);
          AiMsgInfo("[ZOIC] Total amount of pixels to process: %d", x * y);
+
          DEBUG_ONLY({
              // print out raw pixel data
              int npixels = x * y;
              for (int i = 0, j = 0; i < npixels; i++){
                  std::cout << "[";
+
                  for (int k = 0; k < nchannels; k++, j++){
                      std::cout << pixelData[j];
                      if (k + 1 < nchannels){
                          std::cout << ", ";
                      }
                  }
+
                  std::cout << "]";
+
                  if (i + 1 < npixels){
                      std::cout << ", ";
                  }
              }
+
              AiMsgInfo("[ZOIC] ----------------------------------------------");
              AiMsgInfo("[ZOIC] ----------------------------------------------");
          })
+
          bokehProbability();
+
          return true;
      }
+
      // Importance sampling
      void bokehProbability(){
          if (!isValid()){
              return;
          }
+
          // initialize arrays
          AtInt64 nbytes = x * y * sizeof(float);
          AtInt64 totalTempBytes = 0;
          AiAddMemUsage(nbytes, "zoic");
+
          float *pixelValues = (float*) AiMalloc(nbytes);
          totalTempBytes += nbytes;
         AiAddMemUsage(nbytes, "zoic");
+
          float *normalizedPixelValues = (float*) AiMalloc(nbytes);
          totalTempBytes += nbytes;
          int npixels = x * y;
          int o1 = (nchannels >= 2 ? 1 : 0);
          int o2 = (nchannels >= 3 ? 2 : o1);
         float totalValue = 0.0f;
+
          // for every pixel
          for (int i=0, j=0; i < npixels; ++i, j+=nchannels){
              // store pixel value in array
@@ -246,45 +273,54 @@ public:
              totalValue += pixelValues[i];
              DEBUG_ONLY(std::cout << "Pixel Luminance: " << i << " -> " << pixelValues[i] << std::endl);
          }
+
          DEBUG_ONLY({
             std::cout << "----------------------------------------------" << std::endl;
              std::cout << "DEBUG: Total Pixel Value: " << totalValue << std::endl;
              std::cout << "----------------------------------------------" << std::endl;
              std::cout << "----------------------------------------------" << std::endl;
          })
+
          // normalize pixel values so sum = 1
          float invTotalValue = 1.0f / totalValue;
          float totalNormalizedValue = 0.0f;
+
          for(int i=0; i < npixels; ++i){
              normalizedPixelValues[i] = pixelValues[i] * invTotalValue;
              totalNormalizedValue += normalizedPixelValues[i];
              DEBUG_ONLY(std::cout << "Normalized Pixel Value: " << i << ": " << normalizedPixelValues[i] << std::endl);
          }
+
          DEBUG_ONLY({
              std::cout << "----------------------------------------------" << std::endl;
              std::cout << "DEBUG: Total Normalized Pixel Value: " << totalNormalizedValue << std::endl;
              std::cout << "----------------------------------------------" << std::endl;
              std::cout << "----------------------------------------------" << std::endl;
          })
+
          // calculate sum for each row
          nbytes = y * sizeof(float);
          AiAddMemUsage(nbytes, "zoic");
          float *summedRowValues = (float*) AiMalloc(nbytes);
          totalTempBytes += nbytes;
+
          for(int i=0, k=0; i < y; ++i){
              summedRowValues[i] = 0.0f;
              for(int j=0; j < x; ++j, ++k){
                  summedRowValues[i] += normalizedPixelValues[k];
              }
+
             DEBUG_ONLY(std::cout << "Summed Values row [" << i << "]: " << summedRowValues[i] << std::endl);
          }
  
          DEBUG_ONLY({
              // calculate sum of all row values, just to debug
              float totalNormalizedRowValue = 0.0f;
+
              for(int i=0; i < y; ++i){
                  totalNormalizedRowValue += summedRowValues[i];
              }
+
              std::cout << "----------------------------------------------" << std::endl;
              std::cout << "Debug: Summed Row Value: " << totalNormalizedRowValue << std::endl;
              std::cout << "----------------------------------------------" << std::endl;
@@ -294,9 +330,11 @@ public:
          nbytes = y * sizeof(int);
          AiAddMemUsage(nbytes, "zoic");
          rowIndices = (int*) AiMalloc(nbytes);
+
          for(int i = 0; i < y; ++i){
              rowIndices[i] = i;
         }
+
          std::sort(rowIndices, rowIndices + y, arrayCompare(summedRowValues));
  
          DEBUG_ONLY({
@@ -304,6 +342,7 @@ public:
              for(int i = 0; i < y; ++i){
                  std::cout << "PDF row [" <<  rowIndices[i] << "]: " << summedRowValues[rowIndices[i]] << std::endl;
              }
+
              std::cout << "----------------------------------------------" << std::endl;
              std::cout << "----------------------------------------------" << std::endl;
          })
@@ -318,6 +357,7 @@ public:
          for (int i = 0; i < y; ++i){
              cdfRow[i] = prevVal + summedRowValues[rowIndices[i]];
              prevVal = cdfRow[i];
+
              DEBUG_ONLY(std::cout << "CDF row [" << rowIndices[i] << "]: " << cdfRow[i] << std::endl);
          }
  
@@ -339,10 +379,10 @@ public:
                  // avoid division by 0
                  if ((normalizedPixelValues[i] != 0) && (summedRowValues[r] != 0)){
                      normalizedValuesPerRow[i] = normalizedPixelValues[i] / summedRowValues[r];
-                 }
-                 else{
+                 } else{
                      normalizedValuesPerRow[i] = 0;
                  }
+
                  DEBUG_ONLY(std::cout << "Normalized Pixel value per row: " << i << ": " << normalizedValuesPerRow[i] << std::endl);
              }
          }
@@ -1131,7 +1171,10 @@ void testAperturesSmart(Lensdata *ld){
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 10000;
+    int apertureSamples = 5000;
+
+    int randomNumberCounter = 0;
+    int randomNumber = 0;
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -1143,7 +1186,6 @@ void testAperturesSmart(Lensdata *ld){
             float lensU, lensV = 0.0;
 
             for (int k = 0; k < apertureSamples; k++){
-                concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
 
                 origin.x = (i / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.y = (j / static_cast<float>(filmSamples)) * (3.6 * 0.5);
@@ -1151,41 +1193,36 @@ void testAperturesSmart(Lensdata *ld){
 
                 // find lowest bound x value
                 std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
-                it = ld.apertureMap.lower_bound(output->origin.x);
+                it = ld->apertureMap.lower_bound(origin.x);
                 float value1 = it->first;
 
                 // find lowest bound y value
                 std::map<float, std::vector<AtPoint2>> internal_map = it->second;
                 std::map<float, std::vector<AtPoint2>>::iterator it2;
-                it2 = internal_map.lower_bound(output->origin.y);
+                it2 = internal_map.lower_bound(origin.y);
                 float value2 = it2->first;
 
                 // choose which triangle out of 8 to sample
-                // for some reason this seems to fail the process
-                // can do one but can´t iterate through...
-                if(randomNumberCounter == 2){
-                    randomNumberCounter = 0;
-                    ++randomNumber;
-                    if (randomNumber == 8){
-                        randomNumber = 0;
-                    }
+                if (randomNumber == 8){
+                    randomNumber = 0;
                 }
-                ++randomNumberCounter;
+                ++randomNumber;
+                
 
                 // construct triangle vertices
                 // find maximum coordinates of that triangle, for the defined x y coords
                 AtPoint2 vertexA = {0.0, 0.0};
-                AtPoint2 vertexB = {ld.apertureMap[value1][value2][randomNumber].x, ld.apertureMap[value1][value2][randomNumber].y};
+                AtPoint2 vertexB = {ld->apertureMap[value1][value2][randomNumber].x, ld->apertureMap[value1][value2][randomNumber].y};
 
                 AtPoint2 vertexC;
                 if(randomNumber == 0){
-                    vertexC = {ld.apertureMap[value1][value2][7].x, ld.apertureMap[value1][value2][7].y};
+                    vertexC = {ld->apertureMap[value1][value2][7].x, ld->apertureMap[value1][value2][7].y};
                 } else {
-                    vertexC = {ld.apertureMap[value1][value2][randomNumber - 1].x, ld.apertureMap[value1][value2][randomNumber - 1].y};
+                    vertexC = {ld->apertureMap[value1][value2][randomNumber - 1].x, ld->apertureMap[value1][value2][randomNumber - 1].y};
                 }
 
                 AtPoint2 pointOnLens;
-                sampleTriangle(input->lensx, input->lensy, vertexA, vertexB, vertexC, &pointOnLens);
+                sampleTriangle(dis(gen), dis(gen), vertexA, vertexB, vertexC, &pointOnLens);
 
                 testAperturesFile << pointOnLens.x << " " << pointOnLens.y << " ";
             }
