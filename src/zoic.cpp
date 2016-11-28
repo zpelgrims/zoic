@@ -1173,7 +1173,7 @@ void testAperturesSmart(Lensdata *ld){
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 2000;
+    int apertureSamples = 5000;
 
     int randomNumberCounter = 0;
     int randomNumber = 0;
@@ -1222,8 +1222,6 @@ void testAperturesSmart(Lensdata *ld){
                 low2 = internal_map.lower_bound(origin.y);
                 float value2;
 
-                
-
                 // search for closest value, not just lower bound
                 if (low2 == internal_map.end()) {
                     // check for last value
@@ -1242,16 +1240,11 @@ void testAperturesSmart(Lensdata *ld){
                     }
                 }
 
-                //AiMsgInfo("originx, value1: [%f, %f] \noriginy, value2:[%f, %f]", origin.x, value1, origin.y, value2);
-
                 // choose which triangle out of 8 to sample
                 if (randomNumber == 15){
                     randomNumber = -1;
                 }
                 ++randomNumber;
-
-                //randomNumber = 5;
-                
 
                 // construct triangle vertices
                 // find maximum coordinates of that triangle, for the defined x y coords
@@ -1287,9 +1280,9 @@ void testAperturesSmart(Lensdata *ld){
 
 void exitPupilLUT(Lensdata *ld, bool print){
     // optimise these vars
-    int filmSamplesX = 64;
-    int filmSamplesY = 64;
-    int lensSamples = 1024;
+    int filmSamplesX = 32;
+    int filmSamplesY = 32;
+    int lensSamples = 64;
     int samplingDirections = 16;
 
     std::string progress;
@@ -1317,26 +1310,32 @@ void exitPupilLUT(Lensdata *ld, bool print){
 
             for(int sd = 0; sd < samplingDirections; sd++){
                 float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * 0.0174533; // degrees to radians
+                float direction = 1.0;
 
-                for(int ls = 0; ls < lensSamples; ls++){  
+                for(int ls = 0; ls < lensSamples; ls++){
                     // vector with lens spacing coordinates on one axis
                     tmpPoint.x = 0.0;
                     tmpPoint.y = lensSpacing * static_cast<float>(ls);
 
                     // rotate that vector around origin
-                    rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
-                    rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
+                    rotatedPoint.x = direction * (tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta));
+                    rotatedPoint.y = direction * (tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta));
 
                     AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, 
                                                 rotatedPoint.y - sampleOrigin.y, 
                                                 static_cast<float>(- ld->lensThickness[0])};
 
                     if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, ld)){
-                        maxAperturesPerDirection.push_back(rotatedPoint); // gives exact coordinates
-                        break;
+                        if(ls != 0){
+                            maxAperturesPerDirection.push_back(rotatedPoint); // exact coordinates on first lens element
+                            break;
+                        } else {
+                            direction = -1.0;
+                        }
                     }
                 }
 
+                // if all rays get through, append the last tried point
                 if (traceThroughLensElementsForApertureSize(sampleOrigin, 
                                                             {rotatedPoint.x - sampleOrigin.x, 
                                                             rotatedPoint.y - sampleOrigin.y, 
@@ -1346,10 +1345,6 @@ void exitPupilLUT(Lensdata *ld, bool print){
                     maxAperturesPerDirection.push_back(rotatedPoint);
                 }
             }
-
-            //if (maxAperturesPerDirection.size() != 7){
-            //    AiMsgWarning("Only %d directions!", maxAperturesPerDirection.size());
-            //}
 
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
             maxAperturesPerDirection.clear();
@@ -1612,6 +1607,8 @@ node_update {
         })
  
     }
+
+    AiRenderAbort();
  
 }
  
@@ -1652,7 +1649,6 @@ int randomNumberCounter = 0;
 int randomNumber = 0;
 
 camera_create_ray {
-    AiRenderAbort();
 
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
