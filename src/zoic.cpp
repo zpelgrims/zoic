@@ -184,9 +184,9 @@ public:
              !AiTextureGetNumChannels(path, &nc)){
              return false;
          }
-         x = int(iw);
-         y = int(ih);
-         nchannels = int(nc);
+         x = static_cast<int>(iw);
+         y = static_cast<int>(ih);
+         nchannels = static_cast<int>(nc);
          nbytes = x * y * nchannels * sizeof(float);
          AiAddMemUsage(nbytes, "zoic");
          pixelData = (float*) AiMalloc(nbytes);
@@ -418,7 +418,7 @@ public:
              r = y - 1;
          } else{
              DEBUG_ONLY(std::cout << "UPPER BOUND: " << *pUpperBound << std::endl);
-             r = int(pUpperBound - cdfRow);
+             r = static_cast<int>(pUpperBound - cdfRow);
          }
  
          // find actual pixel row
@@ -451,7 +451,7 @@ public:
              c = startPixel + x - 1;
          } else{
              DEBUG_ONLY(std::cout << "UPPER BOUND: " << *pUpperBoundColumn << std::endl);
-             c = int(pUpperBoundColumn - cdfColumn);
+             c = static_cast<int>(pUpperBoundColumn - cdfColumn);
          }
  
          // find actual pixel column
@@ -470,12 +470,12 @@ public:
          })
  
          // to get the right image orientation, flip the x and y coordinates and then multiply the y values by -1 to flip the pixels vertically
-        float flippedRow = float(recalulatedPixelColumn);
+        float flippedRow = static_cast<float>(recalulatedPixelColumn);
          float flippedColumn = recalulatedPixelRow * -1.0f;
  
          // send values back
-         *dx = (float)flippedRow / (float)x * 2.0;
-         *dy = (float)flippedColumn / (float)y * 2.0;
+         *dx = static_cast<float>(flippedRow) / static_cast<float>(x) * 2.0;
+         *dy = static_cast<float>(flippedColumn) / static_cast<float>(y) * 2.0;
      }
 };
  
@@ -744,7 +744,8 @@ inline bool calculateTransmissionVector(AtVector *ray_direction, float ior1, flo
 
     return true;
 }
- 
+
+
 AtVector2 lineLineIntersection(AtVector line1_origin, AtVector line1_direction, AtVector line2_origin, AtVector line2_direction){
     float A1 = line1_direction.y - line1_origin.y;
     float B1 = line1_origin.z - line1_direction.z;
@@ -915,7 +916,7 @@ float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
             AtVector pp_line1end = {0.0, rayOriginHeight, 999999.0};
  
             // direction ray end
-            AtVector pp_line2end = {0.0, float(ray_origin.y + (ray_direction.y * 100000.0)), float(ray_origin.z + (ray_direction.z * 100000.0))};
+            AtVector pp_line2end = {0.0, static_cast<float>(ray_origin.y + (ray_direction.y * 100000.0)), static_cast<float>(ray_origin.z + (ray_direction.z * 100000.0))};
  
             principlePlaneDistance = lineLineIntersection(pp_line1start, pp_line1end, ray_origin, pp_line2end).x;
            
@@ -1041,7 +1042,7 @@ void writeToFile(Lensdata *ld){
 
 
 
-void testAperturesNaive(Lensdata *ld){
+void testAperturesTruth(Lensdata *ld){
     testAperturesFile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);
 
     AtVector origin;
@@ -1062,20 +1063,16 @@ void testAperturesNaive(Lensdata *ld){
             for (int k = 0; k < apertureSamples; k++){
                 concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
 
-                //origin.x = -1.8;
-                //origin.y = 1.8;
-                origin.x = (i / float(filmSamples)) * (3.6 * 0.5);
-                origin.y = (j / float(filmSamples)) * (3.6 * 0.5);
+                origin.x = (i / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.y = (j / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.z = ld->originShift;
             
-         
                 direction.x = (lensU * ld->lensAperture[0]) - origin.x;
                 direction.y = (lensV * ld->lensAperture[0]) - origin.y;
                 direction.z = - ld->lensThickness[0];
 
-                if(traceThroughLensElements(&origin, &direction, ld, draw)){
-                    // draw lensu, lensv
-                    testAperturesFile << lensU << " " << lensV << " ";
+                if(traceThroughLensElements(&origin, &direction, ld, false)){
+                    testAperturesFile << lensU * ld->lensAperture[0] << " " << lensV * ld->lensAperture[0] << " ";
                 }
             }
 
@@ -1086,8 +1083,121 @@ void testAperturesNaive(Lensdata *ld){
     testAperturesFile.close();
 }
 
+
+void testAperturesNaive(Lensdata *ld){
+    testAperturesFile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);
+
+    AtVector origin;
+    AtVector direction;
+
+    int filmSamples = 3;
+    int apertureSamples = 10000;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(0.0, 1.0);
+
+    for (int i = - filmSamples; i < filmSamples + 1; i++){
+        for (int j = -filmSamples; j < filmSamples + 1; j++){
+        
+            float lensU, lensV = 0.0;
+
+            for (int k = 0; k < apertureSamples; k++){
+                concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
+
+                origin.x = (i / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.y = (j / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.z = ld->originShift;
+
+                direction.x = (lensU * ld->optimalAperture) - origin.x;
+                direction.y = (lensV * ld->optimalAperture) - origin.y;
+                direction.z = - ld->lensThickness[0];
+
+                testAperturesFile << lensU * ld->optimalAperture << " " << lensV * ld->optimalAperture << " ";
+            }
+
+            testAperturesFile << std::endl;
+        }
+    }
+
+    testAperturesFile.close();
+}
  
- 
+
+void testAperturesSmart(Lensdata *ld){
+    testAperturesFile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);
+
+    AtVector origin;
+    AtVector direction;
+
+    int filmSamples = 3;
+    int apertureSamples = 10000;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(0.0, 1.0);
+
+    for (int i = - filmSamples; i < filmSamples + 1; i++){
+        for (int j = -filmSamples; j < filmSamples + 1; j++){
+        
+            float lensU, lensV = 0.0;
+
+            for (int k = 0; k < apertureSamples; k++){
+                concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
+
+                origin.x = (i / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.y = (j / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.z = ld->originShift;
+
+                // find lowest bound x value
+                std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
+                it = ld.apertureMap.lower_bound(output->origin.x);
+                float value1 = it->first;
+
+                // find lowest bound y value
+                std::map<float, std::vector<AtPoint2>> internal_map = it->second;
+                std::map<float, std::vector<AtPoint2>>::iterator it2;
+                it2 = internal_map.lower_bound(output->origin.y);
+                float value2 = it2->first;
+
+                // choose which triangle out of 8 to sample
+                // for some reason this seems to fail the process
+                // can do one but can´t iterate through...
+                if(randomNumberCounter == 2){
+                    randomNumberCounter = 0;
+                    ++randomNumber;
+                    if (randomNumber == 8){
+                        randomNumber = 0;
+                    }
+                }
+                ++randomNumberCounter;
+
+                // construct triangle vertices
+                // find maximum coordinates of that triangle, for the defined x y coords
+                AtPoint2 vertexA = {0.0, 0.0};
+                AtPoint2 vertexB = {ld.apertureMap[value1][value2][randomNumber].x, ld.apertureMap[value1][value2][randomNumber].y};
+
+                AtPoint2 vertexC;
+                if(randomNumber == 0){
+                    vertexC = {ld.apertureMap[value1][value2][7].x, ld.apertureMap[value1][value2][7].y};
+                } else {
+                    vertexC = {ld.apertureMap[value1][value2][randomNumber - 1].x, ld.apertureMap[value1][value2][randomNumber - 1].y};
+                }
+
+                AtPoint2 pointOnLens;
+                sampleTriangle(input->lensx, input->lensy, vertexA, vertexB, vertexC, &pointOnLens);
+
+                testAperturesFile << pointOnLens.x << " " << pointOnLens.y << " ";
+            }
+
+            testAperturesFile << std::endl;
+        }
+    }
+
+    testAperturesFile.close();
+}
+
+
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
@@ -1255,12 +1365,14 @@ node_update {
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
         // and I don't think it does..
         // use lookup table instead!
+
+        /*
         if(_kolbSamplingMethod == 1){
             int sampleCount = 1024;
             AtVector sampleOrigin = {0.0, 0.0, ld.originShift};
             for (int i = 0; i < sampleCount; i++){
-                float heightVariation = ld.lensAperture[0] / float(sampleCount);
-                AtVector sampleDirection = {0.0, heightVariation * float(i), float(- ld.lensThickness[0])};
+                float heightVariation = ld.lensAperture[0] / static_cast<float>(sampleCount);
+                AtVector sampleDirection = {0.0, heightVariation * static_cast<float>(i), static_cast<float>(- ld.lensThickness[0])};
  
                 if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
                     AiMsgInfo("[ZOIC] Positive failure at sample [%d] out of [%d]", i, sampleCount);
@@ -1270,10 +1382,10 @@ node_update {
                 }
             }
         }
-        
+        */
         
 
-        /*
+        
 
         // TRIANGLE SAMPLING METHOD
         // hopefully this will allow for more rays to be sent inside the actual precalculated aperture, meaning less vignetted rays which are evil time and noise wise
@@ -1298,12 +1410,12 @@ node_update {
             float filmWidth = 2.0;
             float filmHeight = 2.0;
 
-            float filmSpacingX = filmWidth / float(filmSamplesX);
-            float filmSpacingY = filmHeight / float(filmSamplesY);
+            float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
+            float filmSpacingY = filmHeight / static_cast<float>(filmSamplesY);
 
-            float samplingDirectionSpacing = 360.0 / float(samplingDirections);
+            float samplingDirectionSpacing = 360.0 / static_cast<float>(samplingDirections);
 
-            float lensSpacing = (ld.lensAperture[0] * 0.5) / float(lensSamples); // do I need to pick the whole aperture or it´s radius?
+            float lensSpacing = (ld.lensAperture[0] * 0.5) / static_cast<float>(lensSamples); // do I need to pick the whole aperture or it´s radius?
 
             std::vector<AtPoint2> maxAperturesPerDirection;
 
@@ -1313,25 +1425,25 @@ node_update {
             for(int i = 0; i < filmSamplesX + 1; i++){
                 for(int j = 0; j < filmSamplesY + 1; j++){
                     // i think in theory it should look like this, but gives me segfaults
-                    AtVector sampleOrigin = {float((filmSpacingX * float(i) * 2.0) - filmWidth / 2.0), float((filmSpacingY * float(j) * 2.0) - filmHeight / 2.0), ld.originShift};
-                    //AtVector sampleOrigin = {filmSpacingX * float(i), filmSpacingY * float(j), ld.originShift};
+                    AtVector sampleOrigin = {static_cast<float>((filmSpacingX * static_cast<float>(i) * 2.0) - filmWidth / 2.0), static_cast<float>((filmSpacingY * static_cast<float>(j) * 2.0) - filmHeight / 2.0), ld.originShift};
+                    //AtVector sampleOrigin = {filmSpacingX * static_cast<float>(i), filmSpacingY * static_cast<float>(j), ld.originShift};
 
                     for(int sd = 0; sd < samplingDirections; sd++){
-                        float theta = (samplingDirectionSpacing * float(sd)) * 0.0174533; // degrees to radians
+                        float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * 0.0174533; // degrees to radians
 
                         for(int ls = 0; ls < lensSamples; ls++){  
                             // vector with lens spacing coordinates on one axis
                             tmpPoint.x = 0.0;
-                            tmpPoint.y = lensSpacing * float(ls);
+                            tmpPoint.y = lensSpacing * static_cast<float>(ls);
 
                             // rotate that vector around origin
                             rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
                             rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
-                            AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, rotatedPoint.y - sampleOrigin.y, - float(ld.lensThickness[0])};
+                            AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, rotatedPoint.y - sampleOrigin.y, - static_cast<float>(ld.lensThickness[0])};
 
                             if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
-                                //maxAperturesPerDirection.push_back(lensSpacing * float(ls - 1)); // length from origin to failure
+                                //maxAperturesPerDirection.push_back(lensSpacing * static_cast<float>(ls - 1)); // length from origin to failure
                                 maxAperturesPerDirection.push_back(rotatedPoint); // gives exact coordinates
                                 break;
                             }
@@ -1343,7 +1455,7 @@ node_update {
                     
                 }
             }
-            */
+            
             
         
             /*
@@ -1367,7 +1479,7 @@ node_update {
 
 
             
-        //}
+        }
 
 
 
@@ -1398,11 +1510,12 @@ node_update {
         myfile.close();
         */
 
-        trianglefile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingList.zoic", std::ofstream::out | std::ofstream::trunc);
+        //trianglefile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingList.zoic", std::ofstream::out | std::ofstream::trunc);
 
 
-        // testAperturesNaive(&ld);
-
+        //testAperturesTruth(&ld);
+        //testAperturesNaive(&ld);
+        testAperturesSmart(&ld);
 
         DRAW_ONLY({
             // write to file for lens drawing
@@ -1420,7 +1533,7 @@ node_finish {
  
     AiMsgInfo( "%-40s %12d", "[ZOIC] Succesful rays", ld.succesRays);
     AiMsgInfo( "%-40s %12d", "[ZOIC] Vignetted rays", ld.vignettedRays);
-    AiMsgInfo( "%-40s %12.8f", "[ZOIC] Vignetted Percentage", (float(ld.vignettedRays) / (float(ld.succesRays) + float(ld.vignettedRays))) * 100.0);
+    AiMsgInfo( "%-40s %12.8f", "[ZOIC] Vignetted Percentage", (static_cast<float>(ld.vignettedRays) / (static_cast<float>(ld.succesRays) + static_cast<float>(ld.vignettedRays))) * 100.0);
     AiMsgInfo( "%-40s %12d", "[ZOIC] Total internal reflection cases", ld.totalInternalReflection);
    
     DRAW_ONLY({
@@ -1451,6 +1564,8 @@ int randomNumberCounter = 0;
 int randomNumber = 0;
 
 camera_create_ray {
+    AiRenderAbort();
+
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
