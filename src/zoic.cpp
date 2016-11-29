@@ -15,9 +15,10 @@
 
 // Make it work with other lens profiles
 // Find answer to: Should I scale the film plane along with the focal length?
-// Implement LUT for aperture size
-// With super wide apertures, more rays are vignetted and the picture gets darker, fix this. It shouldn´t get darker in the middle
-    // this will come with the LUT fix i think
+// LUT
+    // linear interpolation
+    // lensx, lensy wacky bokeh shape?!
+    // slow...
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // implement correct exposure based on film plane sample position
@@ -65,6 +66,13 @@ C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/
 #include <iomanip>
 #include <random>
  
+#ifdef _WIN32
+#   include <Windows.h>
+#else
+#   include <sys/time.h>
+#   include <ctime>
+#endif
+
 #ifdef _DEBUGIMAGESAMPLING
 #  define DEBUG_ONLY(block) block
 #else
@@ -1261,19 +1269,19 @@ void testAperturesSmart(Lensdata *ld){
                 }
 
                 // choose which triangle out of 8 to sample
-                if (randomNumber == 15){
+                if (randomNumber == 31){
                     randomNumber = -1;
                 }
                 ++randomNumber;
 
                 // construct triangle vertices
                 // find maximum coordinates of that triangle, for the defined x y coords
-                AtPoint2 vertexA = {ld->apertureMap[value1][value2][16].x, ld->apertureMap[value1][value2][16].y};
+                AtPoint2 vertexA = {ld->apertureMap[value1][value2][32].x, ld->apertureMap[value1][value2][32].y};
                 AtPoint2 vertexB = {ld->apertureMap[value1][value2][randomNumber].x, ld->apertureMap[value1][value2][randomNumber].y};
 
                 AtPoint2 vertexC;
                 if(randomNumber == 0){
-                    vertexC = {ld->apertureMap[value1][value2][15].x, ld->apertureMap[value1][value2][15].y};
+                    vertexC = {ld->apertureMap[value1][value2][31].x, ld->apertureMap[value1][value2][31].y};
                 } else {
                     vertexC = {ld->apertureMap[value1][value2][randomNumber - 1].x, ld->apertureMap[value1][value2][randomNumber - 1].y};
                 }
@@ -1304,12 +1312,11 @@ void testAperturesSmart(Lensdata *ld){
 
 
 void exitPupilLUT(Lensdata *ld, bool print){
-    // optimise these vars
     int filmSamplesX = 32;
     int filmSamplesY = 32;
-    int lensSamples = 64;
+    int lensSamples = 128;
     int boundsSamples = 1024;
-    int samplingDirections = 16;
+    int samplingDirections = 32;
 
     float filmWidth = 6.0;
     float filmHeight = 6.0;
@@ -1376,10 +1383,9 @@ void exitPupilLUT(Lensdata *ld, bool print){
                 }
             }
 
-
+            // centroid of bounds
             AtPoint2 centroid = {static_cast<float>((minBounds.x + maxBounds.x) * 0.5), 
                                  static_cast<float>((minBounds.y + maxBounds.y) * 0.5)};
-
 
 
             // find edges of shape, so no samples are wasted (bounding box would be very wasteful in many cases)
@@ -1448,6 +1454,9 @@ void exitPupilLUT(Lensdata *ld, bool print){
             }
         }
     }
+
+    AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
+
 }
 
 
@@ -1679,6 +1688,50 @@ void exitPupilLUTer(Lensdata *ld, bool print){
 
 
 
+
+/* Remove if already defined */
+typedef long long int64;
+typedef unsigned long long uint64;
+
+/* Returns the amount of milliseconds elapsed since the UNIX epoch. Works on both
+ * windows and linux. */
+
+uint64 GetTimeMs64(){
+    #ifdef _WIN32
+        /* Windows */
+        FILETIME ft;
+        LARGE_INTEGER li;
+
+        /* Get the amount of 100 nano seconds intervals elapsed since January 1, 1601 (UTC) and copy it
+        * to a LARGE_INTEGER structure. */
+        GetSystemTimeAsFileTime(&ft);
+        li.LowPart = ft.dwLowDateTime;
+        li.HighPart = ft.dwHighDateTime;
+
+        uint64 ret = li.QuadPart;
+        ret -= 116444736000000000LL; /* Convert from file time to UNIX epoch time. */
+        ret /= 10000; /* From 100 nano seconds (10^-7) to 1 millisecond (10^-3) intervals */
+
+        return ret;
+    #else
+        /* Linux */
+        struct timeval tv;
+
+        gettimeofday(&tv, NULL);
+
+        uint64 ret = tv.tv_usec;
+        /* Convert from micro seconds (10^-6) to milliseconds (10^-3) */
+        ret /= 1000;
+
+        /* Adds the seconds (10^0) after converting them to milliseconds (10^-3) */
+        ret += (tv.tv_sec * 1000);
+
+        return ret;
+    #endif
+}
+
+
+
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
@@ -1903,7 +1956,7 @@ node_update {
 
         //testAperturesTruth(&ld);
         //testAperturesNaive(&ld);
-        testAperturesSmart(&ld);
+        //testAperturesSmart(&ld);
         //testAperturesSmarter(&ld);
 
         DRAW_ONLY({
@@ -1913,12 +1966,11 @@ node_update {
         })
  
     }
-
-    AiRenderAbort();
  
 }
  
- 
+
+
 node_finish {
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
  
@@ -1949,13 +2001,10 @@ node_finish {
     AiCameraDestroy(node);
  
 }
- 
- 
-int randomNumberCounter = 0;
-int randomNumber = 0;
+
+
 
 camera_create_ray {
-
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
@@ -2070,9 +2119,11 @@ camera_create_ray {
         */
 
         // sample disk with proper sample distribution
-        float lensU, lensV = 0.0;
+        float lensU = 0.0;
+        float lensV = 0.0;
+
         if (_useImage == false){
-            concentricDiskSample(input->lensx, input->lensy, &lensU, &lensV);
+            //concentricDiskSample(input->lensx, input->lensy, &lensU, &lensV);
         } else { // sample bokeh image
             camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
         }
@@ -2086,45 +2137,67 @@ camera_create_ray {
             output->dir.y = (lensV * ld.lensAperture[0]) - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
         } else { // using binary aperture search
-            output->dir.x = (lensU * ld.optimalAperture) - (output->origin.x * 0.5); // this strangely seems to work just fine..
-            output->dir.y = (lensV * ld.optimalAperture) - (output->origin.y * 0.5); // this strangely seems to work just fine..
-            output->dir.z = - ld.lensThickness[0];
-            
+            //output->dir.x = (lensU * ld.optimalAperture) - (output->origin.x * 0.5); // this strangely seems to work just fine..
+            //output->dir.y = (lensV * ld.optimalAperture) - (output->origin.y * 0.5); // this strangely seems to work just fine..
+            //output->dir.z = - ld.lensThickness[0];
 
-            /*
-            // find lowest bound x value
-            std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator it;
-            it = ld.apertureMap.lower_bound(output->origin.x);
-            float value1 = it->first;
+            std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator low, prev;
+            low = ld.apertureMap.lower_bound(output->origin.x);
+            float value1;
 
-            // find lowest bound y value
-            std::map<float, std::vector<AtPoint2>> internal_map = it->second;
-            std::map<float, std::vector<AtPoint2>>::iterator it2;
-            it2 = internal_map.lower_bound(output->origin.y);
-            float value2 = it2->first;
-
-            //AiMsgWarning("origin.x, value 1 x :: [%f, %f]\norigin.y, value 2 y :: [%f, %f]", output->origin.x, value1,output->origin.y, value2);
-
-            // choose which triangle out of 8 to sample
-            // for some reason this seems to fail the process
-            // can do one but can´t iterate through...
-            if(randomNumberCounter == 2){
-                randomNumberCounter = 0;
-                ++randomNumber;
-                if (randomNumber == 8){
-                    randomNumber = 0;
+            // search for closest value, not just lower bound
+            if (low == ld.apertureMap.end()) {
+                // check for last value
+                --low;
+                value1 = low->first;
+            } else if (low == ld.apertureMap.begin()) {
+                // check for start value
+                value1 = low->first;
+            } else {
+                prev = low;
+                --prev;
+                if ((output->origin.x - prev->first) < (low->first - output->origin.x)){
+                    value1 = prev->first;
+                } else {
+                    value1 = low->first;
                 }
             }
-            ++randomNumberCounter;
+
+            // find lowest bound y value
+            std::map<float, std::vector<AtPoint2>> internal_map = low->second;
+            std::map<float, std::vector<AtPoint2>>::iterator low2, prev2;
+            low2 = internal_map.lower_bound(output->origin.y);
+            float value2;
+
+            // search for closest value, not just lower bound
+            if (low2 == internal_map.end()) {
+                // check for last value
+                --low2;
+                value2 = low2->first;
+            } else if (low2 == internal_map.begin()) {
+                // check for start value
+                value2 = low2->first;
+            } else {
+                prev2 = low2;
+                --prev2;
+                if ((output->origin.y - prev2->first) < (low2->first - output->origin.y)){
+                    value2 = prev2->first;
+                } else {
+                    value2 = low2->first;
+                }
+            }
+
+
+            int randomNumber = static_cast<int>(input->lensx * 31.0);
 
             // construct triangle vertices
             // find maximum coordinates of that triangle, for the defined x y coords
-            AtPoint2 vertexA = {0.0, 0.0};
+            AtPoint2 vertexA = {ld.apertureMap[value1][value2][32].x, ld.apertureMap[value1][value2][32].y};
             AtPoint2 vertexB = {ld.apertureMap[value1][value2][randomNumber].x, ld.apertureMap[value1][value2][randomNumber].y};
 
             AtPoint2 vertexC;
             if(randomNumber == 0){
-                vertexC = {ld.apertureMap[value1][value2][7].x, ld.apertureMap[value1][value2][7].y};
+                vertexC = {ld.apertureMap[value1][value2][31].x, ld.apertureMap[value1][value2][31].y};
             } else {
                 vertexC = {ld.apertureMap[value1][value2][randomNumber - 1].x, ld.apertureMap[value1][value2][randomNumber - 1].y};
             }
@@ -2132,13 +2205,11 @@ camera_create_ray {
             AtPoint2 pointOnLens;
             sampleTriangle(input->lensx, input->lensy, vertexA, vertexB, vertexC, &pointOnLens);
 
-            // trianglefile << pointOnLens.x << ", " << pointOnLens.y << ", ";
-
             // dir = lenspoint - filmpoint
             output->dir.x = pointOnLens.x - output->origin.x;
             output->dir.y = pointOnLens.y - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
-            */
+            
 
         }
  
