@@ -924,7 +924,50 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
      return true;
 }
  
+
+bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld){
+    AtVector hit_point;
+    AtVector hit_point_normal;
+    AtVector sphere_center;
  
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
+        sphere_center = {0.0, 0.0, ld->lensCenter[i]};
+
+        if(!raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true)){
+            return false;
+        }
+
+        float hitPoint2 = SQR(hit_point.x) + SQR(hit_point.y);
+ 
+        // check if ray hits lens boundary or aperture
+        if ((hitPoint2 > (ld->lensAperture[i] * 0.5) * (ld->lensAperture[i] * 0.5)) ||
+            ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
+                return false;
+        }
+        
+        intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
+ 
+        ray_origin = hit_point;
+ 
+        // if not last lens element
+        if(i != (int)ld->lensRadiusCurvature.size() - 1){
+            // ray direction gets modified
+            if(!calculateTransmissionVector(&ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true)){
+                return false;
+            }
+        } else { // last lens element
+            // assuming the material outside the lens is air [ior 1.0]
+            // ray direction gets modified
+            if(!calculateTransmissionVector(&ray_direction, ld->lensIOR[i], 1.0, ray_direction, hit_point_normal, true)){
+                return false;
+            }
+        }
+    }
+ 
+     return true;
+}
+
+
 float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
     float tracedFocalLength;
     float focalPointDistance;
@@ -989,30 +1032,6 @@ float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
  
     return tracedFocalLength;
 }
- 
- 
- 
-bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld){
-    AtVector hit_point_normal;
-    AtVector sphere_center = {0.0, 0.0, 0.0};
- 
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        sphere_center.z = ld->lensCenter[i];
- 
-        raySphereIntersection(&ray_origin, ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true);
- 
-        float hitPoint2 = ray_origin.x * ray_origin.x + ray_origin.y * ray_origin.y;
-        if(i == ld->apertureElement && hitPoint2 > (ld->userApertureRadius * ld->userApertureRadius)){
-            return false;
-        }
- 
-        intersectionNormal(ray_origin, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
-        calculateTransmissionVector(&ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true);
-    }
- 
-    return true;
-}
- 
  
  
 void adjustFocalLength(Lensdata *ld){
@@ -1103,8 +1122,8 @@ void testAperturesTruth(Lensdata *ld){
             for (int k = 0; k < apertureSamples; k++){
                 concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
 
-                origin.x = (i / static_cast<float>(filmSamples)) * (3.6 * 0.5);
-                origin.y = (j / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.z = ld->originShift;
             
                 direction.x = (lensU * ld->lensAperture[0]) - origin.x;
@@ -1241,19 +1260,19 @@ void testAperturesSmart(Lensdata *ld){
                 }
 
                 // choose which triangle out of 8 to sample
-                if (randomNumber == 15){
+                if (randomNumber == 31){
                     randomNumber = -1;
                 }
                 ++randomNumber;
 
                 // construct triangle vertices
                 // find maximum coordinates of that triangle, for the defined x y coords
-                AtPoint2 vertexA = {0.0, 0.0};
+                AtPoint2 vertexA = {ld->apertureMap[value1][value2][32].x, ld->apertureMap[value1][value2][32].y};
                 AtPoint2 vertexB = {ld->apertureMap[value1][value2][randomNumber].x, ld->apertureMap[value1][value2][randomNumber].y};
 
                 AtPoint2 vertexC;
                 if(randomNumber == 0){
-                    vertexC = {ld->apertureMap[value1][value2][15].x, ld->apertureMap[value1][value2][15].y};
+                    vertexC = {ld->apertureMap[value1][value2][31].x, ld->apertureMap[value1][value2][31].y};
                 } else {
                     vertexC = {ld->apertureMap[value1][value2][randomNumber - 1].x, ld->apertureMap[value1][value2][randomNumber - 1].y};
                 }
@@ -1262,6 +1281,9 @@ void testAperturesSmart(Lensdata *ld){
                 sampleTriangle(dis(gen), dis(gen), vertexA, vertexB, vertexC, &pointOnLens);
 
                 testAperturesFile << pointOnLens.x << " " << pointOnLens.y << " ";
+                testAperturesFile << vertexA.x << " " << vertexA.y << " ";
+                testAperturesFile << vertexB.x << " " << vertexB.y << " ";
+                testAperturesFile << vertexC.x << " " << vertexC.y << " ";
             }
 
             testAperturesFile << std::endl;
@@ -1282,11 +1304,11 @@ void exitPupilLUT(Lensdata *ld, bool print){
     // optimise these vars
     int filmSamplesX = 32;
     int filmSamplesY = 32;
-    int lensSamples = 128;
-    int samplingDirections = 16;
+    int lensSamples = 64;
+    int samplingDirections = 32;
 
-    float filmWidth = 4.0;
-    float filmHeight = 4.0;
+    float filmWidth = 6.0;
+    float filmHeight = 6.0;
 
     float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
     float filmSpacingY = filmHeight / static_cast<float>(filmSamplesY);
@@ -1343,6 +1365,43 @@ void exitPupilLUT(Lensdata *ld, bool print){
                     maxAperturesPerDirection.push_back(rotatedPoint);
                 }
             }
+
+            
+            // compute centroid point
+            AtPoint2 centroid = {0.0, 0.0};
+            
+            /*
+            for(int i = 0; i < maxAperturesPerDirection.size(); i++){
+                centroid += maxAperturesPerDirection[i]; 
+            }
+            centroid /= static_cast<float>(maxAperturesPerDirection.size());
+            */
+
+            // find points furthest from each other
+            float maxDistance = 0.0;
+            AtPoint2 outerPoint1, outerPoint2;
+            for(int i = 0; i < maxAperturesPerDirection.size(); i++){
+                for(int j = 0; j < maxAperturesPerDirection.size(); j++){
+                    if(i == j){
+                        continue;
+                    }
+
+                    float distanceBetweenPoints = AiV2Dist(maxAperturesPerDirection[i], maxAperturesPerDirection[j]);
+                    
+                    if (distanceBetweenPoints > maxDistance){
+                        maxDistance = distanceBetweenPoints;
+                        outerPoint1 = maxAperturesPerDirection[i];
+                        outerPoint2 = maxAperturesPerDirection[j];
+                    }
+                }
+            }
+
+            // center betwen two furthest points
+            centroid = {static_cast<float>((outerPoint1.x + outerPoint2.x) * 0.5), 
+                        static_cast<float>((outerPoint1.y + outerPoint2.y) * 0.5)};
+
+            // might be a bit confusing, but chuck centroid in aperture vector as last element, probably change this to better data struct
+            maxAperturesPerDirection.push_back(centroid);
 
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
             maxAperturesPerDirection.clear();
@@ -1445,15 +1504,10 @@ void testAperturesSmarter(Lensdata *ld){
                     }
                 }
 
-                // choose which triangle out of 8 to sample
-                if (randomNumber == 15){
-                    randomNumber = -1;
-                }
-                ++randomNumber;
 
                 // find points furthest from each other
-                // not tested yet, most likely problems due to it going around in a circle
                 float maxDistance = 0.0;
+                AtPoint2 outerPoint1, outerPoint2;
                 for(int i = 0; i < ld->apertureMap[value1][value2].size(); i++){
                     for(int j = 0; j < ld->apertureMap[value1][value2].size(); j++){
                         if(i == j){
@@ -1464,28 +1518,31 @@ void testAperturesSmarter(Lensdata *ld){
                         
                         if (distanceBetweenPoints > maxDistance){
                             maxDistance = distanceBetweenPoints;
+                            outerPoint1 = ld->apertureMap[value1][value2][i];
+                            outerPoint2 = ld->apertureMap[value1][value2][j];
                         }
                     }
                 }
 
                 // calculate normal between two points
+                // x' = x cos(t) - y sin(t)
+                // y' = x sin(t) + y cos(t)
+                // cos90 = 0, sin90 = 1
+
+                // vector between two points
+                AtVector2 outerPointNormal = outerPoint2 - outerPoint1;
+                // normalize
+                outerPointNormal = outerPointNormal / AiV2Length(outerPointNormal);
+                // calculate normal of vector
+                outerPointNormal = {- outerPointNormal.y, outerPointNormal.x};
+
+
+
+
                 // trace rays from middle between points, perpendicular to that axis
                 // find value of this on both sides
                 // scale concentric disk samples along that axis
 
-                /*
-                // construct triangle vertices
-                // find maximum coordinates of that triangle, for the defined x y coords
-                //AtPoint2 vertexA = {0.0, 0.0};
-                //AtPoint2 vertexB = {ld->apertureMap[value1][value2][randomNumber].x, ld->apertureMap[value1][value2][randomNumber].y};
-
-                //AtPoint2 vertexC;
-                //if(randomNumber == 0){
-                //    vertexC = {ld->apertureMap[value1][value2][15].x, ld->apertureMap[value1][value2][15].y};
-                //} else {
-                //    vertexC = {ld->apertureMap[value1][value2][randomNumber - 1].x, ld->apertureMap[value1][value2][randomNumber - 1].y};
-                //}
-                */
 
                 AtPoint2 pointOnLens;
                 //sampleTriangle(dis(gen), dis(gen), vertexA, vertexB, vertexC, &pointOnLens);
@@ -1787,8 +1844,8 @@ node_update {
         }
         */
 
-        //exitPupilLUT(&ld, false);           
-        exitPupilLUTer(&ld, false);           
+        exitPupilLUT(&ld, false);           
+        //exitPupilLUTer(&ld, false);           
                 
 
 
@@ -1825,8 +1882,8 @@ node_update {
 
         //testAperturesTruth(&ld);
         //testAperturesNaive(&ld);
-        //testAperturesSmart(&ld);
-        testAperturesSmarter(&ld);
+        testAperturesSmart(&ld);
+        //testAperturesSmarter(&ld);
 
         DRAW_ONLY({
             // write to file for lens drawing
