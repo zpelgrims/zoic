@@ -1330,7 +1330,6 @@ void exitPupilLUT(Lensdata *ld, bool print){
 
             for(int sd = 0; sd < samplingDirections; sd++){
                 float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * 0.0174533; // degrees to radians
-                float direction = 1.0;
 
                 for(int ls = 0; ls < lensSamples; ls++){
                     // vector with lens spacing coordinates on one axis
@@ -1338,34 +1337,28 @@ void exitPupilLUT(Lensdata *ld, bool print){
                     tmpPoint.y = lensSpacing * static_cast<float>(ls);
 
                     // rotate that vector around origin
-                    rotatedPoint.x = direction * (tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta));
-                    rotatedPoint.y = direction * (tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta));
+                    rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+                    rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
                     AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, 
                                                 rotatedPoint.y - sampleOrigin.y, 
                                                 static_cast<float>(- ld->lensThickness[0])};
 
                     if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, ld)){
-                        if(ls != 0){
-                            maxAperturesPerDirection.push_back(rotatedPoint); // exact coordinates on first lens element
-                            break;
-                        } else {
-                            direction = -1.0;
-                        }
+                        maxAperturesPerDirection.push_back(rotatedPoint); // exact coordinates on first lens element
+                        break;
                     }
                 }
 
                 // if all rays get through, append the last tried point
                 if (traceThroughLensElementsForApertureSize(sampleOrigin, 
-                                                            {rotatedPoint.x - sampleOrigin.x, 
+                                                           {rotatedPoint.x - sampleOrigin.x, 
                                                             rotatedPoint.y - sampleOrigin.y, 
-                                                            static_cast<float>(- ld->lensThickness[0])}, 
-                                                            ld))
+                                                            static_cast<float>(- ld->lensThickness[0])}, ld))
                 {
                     maxAperturesPerDirection.push_back(rotatedPoint);
                 }
             }
-
             
             // compute centroid point
             AtPoint2 centroid = {0.0, 0.0};
@@ -1396,7 +1389,7 @@ void exitPupilLUT(Lensdata *ld, bool print){
                 }
             }
 
-            // center betwen two furthest points
+            // center between two furthest points
             centroid = {static_cast<float>((outerPoint1.x + outerPoint2.x) * 0.5), 
                         static_cast<float>((outerPoint1.y + outerPoint2.y) * 0.5)};
 
