@@ -1204,7 +1204,8 @@ void testAperturesSmart(Lensdata *ld){
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
         
-            float lensU, lensV = 0.0;
+            float lensU = 0.0;
+            float lensV = 0.0;
 
             for (int k = 0; k < apertureSamples; k++){
 
@@ -1260,19 +1261,19 @@ void testAperturesSmart(Lensdata *ld){
                 }
 
                 // choose which triangle out of 8 to sample
-                if (randomNumber == 31){
+                if (randomNumber == 15){
                     randomNumber = -1;
                 }
                 ++randomNumber;
 
                 // construct triangle vertices
                 // find maximum coordinates of that triangle, for the defined x y coords
-                AtPoint2 vertexA = {ld->apertureMap[value1][value2][32].x, ld->apertureMap[value1][value2][32].y};
+                AtPoint2 vertexA = {ld->apertureMap[value1][value2][16].x, ld->apertureMap[value1][value2][16].y};
                 AtPoint2 vertexB = {ld->apertureMap[value1][value2][randomNumber].x, ld->apertureMap[value1][value2][randomNumber].y};
 
                 AtPoint2 vertexC;
                 if(randomNumber == 0){
-                    vertexC = {ld->apertureMap[value1][value2][31].x, ld->apertureMap[value1][value2][31].y};
+                    vertexC = {ld->apertureMap[value1][value2][15].x, ld->apertureMap[value1][value2][15].y};
                 } else {
                     vertexC = {ld->apertureMap[value1][value2][randomNumber - 1].x, ld->apertureMap[value1][value2][randomNumber - 1].y};
                 }
@@ -1284,6 +1285,8 @@ void testAperturesSmart(Lensdata *ld){
                 testAperturesFile << vertexA.x << " " << vertexA.y << " ";
                 testAperturesFile << vertexB.x << " " << vertexB.y << " ";
                 testAperturesFile << vertexC.x << " " << vertexC.y << " ";
+                //testAperturesFile << ld->apertureMap[value1][value2][17].x << " " << ld->apertureMap[value1][value2][17].y << " ";
+                //testAperturesFile << ld->apertureMap[value1][value2][18].x << " " << ld->apertureMap[value1][value2][18].y << " ";
             }
 
             testAperturesFile << std::endl;
@@ -1305,7 +1308,8 @@ void exitPupilLUT(Lensdata *ld, bool print){
     int filmSamplesX = 32;
     int filmSamplesY = 32;
     int lensSamples = 64;
-    int samplingDirections = 32;
+    int boundsSamples = 1024;
+    int samplingDirections = 16;
 
     float filmWidth = 6.0;
     float filmHeight = 6.0;
@@ -1322,23 +1326,76 @@ void exitPupilLUT(Lensdata *ld, bool print){
     AtPoint2 tmpPoint;
     AtPoint2 rotatedPoint;
 
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(-1.0, 1.0);
+
     for(int i = 0; i < filmSamplesX + 1; i++){
         for(int j = 0; j < filmSamplesY + 1; j++){
             AtVector sampleOrigin = {static_cast<float>((filmSpacingX * static_cast<float>(i) * 2.0) - filmWidth / 2.0), 
                                      static_cast<float>((filmSpacingY * static_cast<float>(j) * 2.0) - filmHeight / 2.0), 
                                      ld->originShift};
 
+
+            // calculate bounds of aperture, to find centroid
+            AtPoint2 minBounds = {0.0, 0.0};
+            AtPoint2 maxBounds = {0.0, 0.0};
+            AtVector boundsDirection;
+            float lensU = 0.0;
+            float lensV = 0.0;
+
+            for(int b = 0; b < boundsSamples; b++){
+                lensU = dis(gen);
+                lensV = dis(gen);
+
+                boundsDirection.x = (lensU * ld->lensAperture[0]) - sampleOrigin.x;
+                boundsDirection.y = (lensV * ld->lensAperture[0]) - sampleOrigin.y;
+                boundsDirection.z = - ld->lensThickness[0];
+
+                if(traceThroughLensElementsForApertureSize(sampleOrigin, boundsDirection, ld)){
+                    if((minBounds.x + minBounds.y) == 0.0){
+                        minBounds = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
+                        maxBounds = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
+                    }
+
+                    if((lensU * ld->lensAperture[0]) > maxBounds.x){
+                        maxBounds.x = lensU * ld->lensAperture[0];
+                    }
+
+                    if((lensV * ld->lensAperture[0]) > maxBounds.y){
+                        maxBounds.y = lensV * ld->lensAperture[0];
+                    }
+
+                    if((lensU * ld->lensAperture[0]) < minBounds.x){
+                        minBounds.x = lensU * ld->lensAperture[0];
+                    }
+
+                    if((lensV * ld->lensAperture[0]) < minBounds.y){
+                        minBounds.y = lensV * ld->lensAperture[0];
+                    }
+                }
+            }
+
+
+            AtPoint2 centroid = {static_cast<float>((minBounds.x + maxBounds.x) * 0.5), 
+                                 static_cast<float>((minBounds.y + maxBounds.y) * 0.5)};
+
+
+
+            // find edges of shape, so no samples are wasted (bounding box would be very wasteful in many cases)
             for(int sd = 0; sd < samplingDirections; sd++){
                 float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * 0.0174533; // degrees to radians
 
                 for(int ls = 0; ls < lensSamples; ls++){
                     // vector with lens spacing coordinates on one axis
                     tmpPoint.x = 0.0;
-                    tmpPoint.y = lensSpacing * static_cast<float>(ls);
+                    tmpPoint.y = (lensSpacing * static_cast<float>(ls));
 
                     // rotate that vector around origin
                     rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
                     rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
+
+                    rotatedPoint += centroid;
 
                     AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, 
                                                 rotatedPoint.y - sampleOrigin.y, 
@@ -1358,43 +1415,14 @@ void exitPupilLUT(Lensdata *ld, bool print){
                 {
                     maxAperturesPerDirection.push_back(rotatedPoint);
                 }
-            }
-            
-            // compute centroid point
-            AtPoint2 centroid = {0.0, 0.0};
-            
-            /*
-            for(int i = 0; i < maxAperturesPerDirection.size(); i++){
-                centroid += maxAperturesPerDirection[i]; 
-            }
-            centroid /= static_cast<float>(maxAperturesPerDirection.size());
-            */
 
-            // find points furthest from each other
-            float maxDistance = 0.0;
-            AtPoint2 outerPoint1, outerPoint2;
-            for(int i = 0; i < maxAperturesPerDirection.size(); i++){
-                for(int j = 0; j < maxAperturesPerDirection.size(); j++){
-                    if(i == j){
-                        continue;
-                    }
-
-                    float distanceBetweenPoints = AiV2Dist(maxAperturesPerDirection[i], maxAperturesPerDirection[j]);
-                    
-                    if (distanceBetweenPoints > maxDistance){
-                        maxDistance = distanceBetweenPoints;
-                        outerPoint1 = maxAperturesPerDirection[i];
-                        outerPoint2 = maxAperturesPerDirection[j];
-                    }
-                }
             }
-
-            // center between two furthest points
-            centroid = {static_cast<float>((outerPoint1.x + outerPoint2.x) * 0.5), 
-                        static_cast<float>((outerPoint1.y + outerPoint2.y) * 0.5)};
 
             // might be a bit confusing, but chuck centroid in aperture vector as last element, probably change this to better data struct
             maxAperturesPerDirection.push_back(centroid);
+            //maxAperturesPerDirection.push_back(minBounds);
+            //maxAperturesPerDirection.push_back(maxBounds);
+            
 
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
             maxAperturesPerDirection.clear();
