@@ -18,7 +18,9 @@
 // LUT
     // linear interpolation
     // lensx, lensy wacky bokeh shape?!
-    // slow...
+    // slow... benchmark
+
+    // try the concentric mapping scaling along axis
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // implement correct exposure based on film plane sample position
@@ -1456,7 +1458,6 @@ void exitPupilLUT(Lensdata *ld, bool print){
     }
 
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
-
 }
 
 
@@ -1595,26 +1596,30 @@ void testAperturesSmarter(Lensdata *ld){
 
 
 void exitPupilLUTer(Lensdata *ld, bool print){
-    // optimise these vars
     int filmSamplesX = 32;
     int filmSamplesY = 32;
-    int lensSamples = 64;
-    int samplingDirections = 16;
+    int lensSamples = 128;
+    int boundsSamples = 1024;
+    int samplingDirections = 32;
 
-    float filmWidth = 3.0;
-    float filmHeight = 3.0;
+    float filmWidth = 6.0;
+    float filmHeight = 6.0;
 
     float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
     float filmSpacingY = filmHeight / static_cast<float>(filmSamplesY);
 
     float samplingDirectionSpacing = 360.0 / static_cast<float>(samplingDirections);
 
-    float lensSpacing = (ld->lensAperture[0] * 0.5) / static_cast<float>(lensSamples);
+    float lensSpacing = (ld->lensAperture[0] * 0.5) / static_cast<float>(lensSamples); // do I need to pick the whole aperture or it´s radius?
 
     std::vector<AtPoint2> maxAperturesPerDirection;
 
     AtPoint2 tmpPoint;
     AtPoint2 rotatedPoint;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(-1.0, 1.0);
 
     for(int i = 0; i < filmSamplesX + 1; i++){
         for(int j = 0; j < filmSamplesY + 1; j++){
@@ -1622,43 +1627,92 @@ void exitPupilLUTer(Lensdata *ld, bool print){
                                      static_cast<float>((filmSpacingY * static_cast<float>(j) * 2.0) - filmHeight / 2.0), 
                                      ld->originShift};
 
+
+            // calculate bounds of aperture, to find centroid
+            AtPoint2 minBounds = {0.0, 0.0};
+            AtPoint2 maxBounds = {0.0, 0.0};
+            AtVector boundsDirection;
+            float lensU = 0.0;
+            float lensV = 0.0;
+
+            for(int b = 0; b < boundsSamples; b++){
+                lensU = dis(gen);
+                lensV = dis(gen);
+
+                boundsDirection.x = (lensU * ld->lensAperture[0]) - sampleOrigin.x;
+                boundsDirection.y = (lensV * ld->lensAperture[0]) - sampleOrigin.y;
+                boundsDirection.z = - ld->lensThickness[0];
+
+                if(traceThroughLensElementsForApertureSize(sampleOrigin, boundsDirection, ld)){
+                    if((minBounds.x + minBounds.y) == 0.0){
+                        minBounds = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
+                        maxBounds = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
+                    }
+
+                    if((lensU * ld->lensAperture[0]) > maxBounds.x){
+                        maxBounds.x = lensU * ld->lensAperture[0];
+                    }
+
+                    if((lensV * ld->lensAperture[0]) > maxBounds.y){
+                        maxBounds.y = lensV * ld->lensAperture[0];
+                    }
+
+                    if((lensU * ld->lensAperture[0]) < minBounds.x){
+                        minBounds.x = lensU * ld->lensAperture[0];
+                    }
+
+                    if((lensV * ld->lensAperture[0]) < minBounds.y){
+                        minBounds.y = lensV * ld->lensAperture[0];
+                    }
+                }
+            }
+
+            // centroid of bounds
+            AtPoint2 centroid = {static_cast<float>((minBounds.x + maxBounds.x) * 0.5), 
+                                 static_cast<float>((minBounds.y + maxBounds.y) * 0.5)};
+
+
+            // find edges of shape, so no samples are wasted (bounding box would be very wasteful in many cases)
             for(int sd = 0; sd < samplingDirections; sd++){
                 float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * 0.0174533; // degrees to radians
-                float direction = 1.0;
 
                 for(int ls = 0; ls < lensSamples; ls++){
                     // vector with lens spacing coordinates on one axis
                     tmpPoint.x = 0.0;
-                    tmpPoint.y = lensSpacing * static_cast<float>(ls);
+                    tmpPoint.y = (lensSpacing * static_cast<float>(ls));
 
                     // rotate that vector around origin
-                    rotatedPoint.x = direction * (tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta));
-                    rotatedPoint.y = direction * (tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta));
+                    rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+                    rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
+
+                    rotatedPoint += centroid;
 
                     AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, 
                                                 rotatedPoint.y - sampleOrigin.y, 
                                                 static_cast<float>(- ld->lensThickness[0])};
 
                     if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, ld)){
-                        if(ls != 0){
-                            maxAperturesPerDirection.push_back(rotatedPoint); // exact coordinates on first lens element
-                            break;
-                        } else {
-                            direction = -1.0;
-                        }
+                        maxAperturesPerDirection.push_back(rotatedPoint); // exact coordinates on first lens element
+                        break;
                     }
                 }
 
                 // if all rays get through, append the last tried point
                 if (traceThroughLensElementsForApertureSize(sampleOrigin, 
-                                                            {rotatedPoint.x - sampleOrigin.x, 
+                                                           {rotatedPoint.x - sampleOrigin.x, 
                                                             rotatedPoint.y - sampleOrigin.y, 
-                                                            static_cast<float>(- ld->lensThickness[0])}, 
-                                                            ld))
+                                                            static_cast<float>(- ld->lensThickness[0])}, ld))
                 {
                     maxAperturesPerDirection.push_back(rotatedPoint);
                 }
+
             }
+
+            // might be a bit confusing, but chuck centroid in aperture vector as last element, probably change this to better data struct
+            maxAperturesPerDirection.push_back(centroid);
+            //maxAperturesPerDirection.push_back(minBounds);
+            //maxAperturesPerDirection.push_back(maxBounds);
+            
 
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
             maxAperturesPerDirection.clear();
@@ -1684,6 +1738,8 @@ void exitPupilLUTer(Lensdata *ld, bool print){
             }
         }
     }
+
+    AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
 
 
@@ -1692,10 +1748,8 @@ void exitPupilLUTer(Lensdata *ld, bool print){
 /* Remove if already defined */
 typedef long long int64;
 typedef unsigned long long uint64;
-
 /* Returns the amount of milliseconds elapsed since the UNIX epoch. Works on both
  * windows and linux. */
-
 uint64 GetTimeMs64(){
     #ifdef _WIN32
         /* Windows */
@@ -1895,7 +1949,7 @@ node_update {
         computeLensCenters(&ld);
 
 
-        /*
+        
         // search for ideal max height to shoot rays to on first lens element, by tracing test rays and seeing which one fails
         // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
         // and I don't think it does..
@@ -1916,10 +1970,10 @@ node_update {
                 }
             }
         }
-        */
+        
 
-        exitPupilLUT(&ld, false);           
-        //exitPupilLUTer(&ld, false);           
+        //exitPupilLUT(&ld, false);           
+        exitPupilLUTer(&ld, false);           
                 
 
 
@@ -2123,7 +2177,7 @@ camera_create_ray {
         float lensV = 0.0;
 
         if (_useImage == false){
-            //concentricDiskSample(input->lensx, input->lensy, &lensU, &lensV);
+            concentricDiskSample(input->lensx, input->lensy, &lensU, &lensV);
         } else { // sample bokeh image
             camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
         }
@@ -2136,11 +2190,13 @@ camera_create_ray {
             output->dir.x = (lensU * ld.lensAperture[0]) - output->origin.x;
             output->dir.y = (lensV * ld.lensAperture[0]) - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
-        } else { // using binary aperture search
-            //output->dir.x = (lensU * ld.optimalAperture) - (output->origin.x * 0.5); // this strangely seems to work just fine..
-            //output->dir.y = (lensV * ld.optimalAperture) - (output->origin.y * 0.5); // this strangely seems to work just fine..
+        } else { 
+            //output->dir.x = (lensU * ld.optimalAperture * 0.01) - output->origin.x;
+            //output->dir.y = (lensV * ld.optimalAperture) - output->origin.y;
             //output->dir.z = - ld.lensThickness[0];
 
+            /*
+            // using LUT
             std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator low, prev;
             low = ld.apertureMap.lower_bound(output->origin.x);
             float value1;
@@ -2187,11 +2243,9 @@ camera_create_ray {
                 }
             }
 
-
             int randomNumber = static_cast<int>(input->lensx * 31.0);
 
             // construct triangle vertices
-            // find maximum coordinates of that triangle, for the defined x y coords
             AtPoint2 vertexA = {ld.apertureMap[value1][value2][32].x, ld.apertureMap[value1][value2][32].y};
             AtPoint2 vertexB = {ld.apertureMap[value1][value2][randomNumber].x, ld.apertureMap[value1][value2][randomNumber].y};
 
@@ -2209,7 +2263,7 @@ camera_create_ray {
             output->dir.x = pointOnLens.x - output->origin.x;
             output->dir.y = pointOnLens.y - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
-            
+            */
 
         }
  
