@@ -58,15 +58,15 @@ while i < len(POINTSLIST):
 		#points
 		d.ellipse([((POINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) - 5, ((POINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) - 5, ((POINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) + 5, ((POINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) + 5], ORANGE,ORANGE)
 		#centroids
-		d.ellipse([((POINTSLIST[i][j+2] + posx) * AAS * SCALE + TRANSLATEX) - 20, ((POINTSLIST[i][j+3] + posy) * AAS * SCALE + TRANSLATEY) - 20, ((POINTSLIST[i][j+2] + posx) * AAS * SCALE + TRANSLATEX) + 20, ((POINTSLIST[i][j+3] + posy) * AAS * SCALE + TRANSLATEY) + 20], WHITE,WHITE)
+		# d.ellipse([((POINTSLIST[i][j+2] + posx) * AAS * SCALE + TRANSLATEX) - 20, ((POINTSLIST[i][j+3] + posy) * AAS * SCALE + TRANSLATEY) - 20, ((POINTSLIST[i][j+2] + posx) * AAS * SCALE + TRANSLATEX) + 20, ((POINTSLIST[i][j+3] + posy) * AAS * SCALE + TRANSLATEY) + 20], WHITE,WHITE)
 		# vertices
-		d.ellipse([((POINTSLIST[i][j+4] + posx) * AAS * SCALE + TRANSLATEX) - 10, ((POINTSLIST[i][j+5] + posy) * AAS * SCALE + TRANSLATEY) - 10, ((POINTSLIST[i][j+4] + posx) * AAS * SCALE + TRANSLATEX) + 10, ((POINTSLIST[i][j+5] + posy) * AAS * SCALE + TRANSLATEY) + 10], WHITE,WHITE)
-		d.ellipse([((POINTSLIST[i][j+6] + posx) * AAS * SCALE + TRANSLATEX) - 10, ((POINTSLIST[i][j+7] + posy) * AAS * SCALE + TRANSLATEY) - 10, ((POINTSLIST[i][j+6] + posx) * AAS * SCALE + TRANSLATEX) + 10, ((POINTSLIST[i][j+7] + posy) * AAS * SCALE + TRANSLATEY) + 10], WHITE,WHITE)
+		#d.ellipse([((POINTSLIST[i][j+4] + posx) * AAS * SCALE + TRANSLATEX) - 10, ((POINTSLIST[i][j+5] + posy) * AAS * SCALE + TRANSLATEY) - 10, ((POINTSLIST[i][j+4] + posx) * AAS * SCALE + TRANSLATEX) + 10, ((POINTSLIST[i][j+5] + posy) * AAS * SCALE + TRANSLATEY) + 10], WHITE,WHITE)
+		#d.ellipse([((POINTSLIST[i][j+6] + posx) * AAS * SCALE + TRANSLATEX) - 10, ((POINTSLIST[i][j+7] + posy) * AAS * SCALE + TRANSLATEY) - 10, ((POINTSLIST[i][j+6] + posx) * AAS * SCALE + TRANSLATEX) + 10, ((POINTSLIST[i][j+7] + posy) * AAS * SCALE + TRANSLATEY) + 10], WHITE,WHITE)
 
 		#d.rectangle([((POINTSLIST[i][j+8] + posx) * AAS * SCALE + TRANSLATEX), ((POINTSLIST[i][j+9] + posy) * AAS * SCALE + TRANSLATEY), ((POINTSLIST[i][j+10] + posx) * AAS * SCALE + TRANSLATEX), ((POINTSLIST[i][j+11] + posy) * AAS * SCALE + TRANSLATEY)], 0, WHITE)
 		#j += 12
 
-		j+=8
+		j+=2
 
 	d.text([(posx + 0.4) * AAS * SCALE + TRANSLATEX, (posy + 0.4) * AAS * SCALE + TRANSLATEY], str(i), DARKGREY, font)
 	

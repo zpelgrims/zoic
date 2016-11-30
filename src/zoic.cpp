@@ -1392,7 +1392,7 @@ void exitPupilLUT(Lensdata *ld, bool print){
 
             // find edges of shape, so no samples are wasted (bounding box would be very wasteful in many cases)
             for(int sd = 0; sd < samplingDirections; sd++){
-                float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * 0.0174533; // degrees to radians
+                float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * AI_DTOR; // degrees to radians
 
                 for(int ls = 0; ls < lensSamples; ls++){
                     // vector with lens spacing coordinates on one axis
@@ -1479,9 +1479,6 @@ void testAperturesSmarter(Lensdata *ld){
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
-        
-            float lensU, lensV = 0.0;
-
             for (int k = 0; k < apertureSamples; k++){
 
                 origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
@@ -1536,49 +1533,33 @@ void testAperturesSmarter(Lensdata *ld){
                 }
 
 
-                // find points furthest from each other
-                float maxDistance = 0.0;
-                AtPoint2 outerPoint1, outerPoint2;
-                for(int i = 0; i < ld->apertureMap[value1][value2].size(); i++){
-                    for(int j = 0; j < ld->apertureMap[value1][value2].size(); j++){
-                        if(i == j){
-                            continue;
-                        }
+                float lensU = 0.0;
+                float lensV = 0.0;
 
-                        float distanceBetweenPoints = AiV2Dist(ld->apertureMap[value1][value2][i], ld->apertureMap[value1][value2][j]);
-                        
-                        if (distanceBetweenPoints > maxDistance){
-                            maxDistance = distanceBetweenPoints;
-                            outerPoint1 = ld->apertureMap[value1][value2][i];
-                            outerPoint2 = ld->apertureMap[value1][value2][j];
-                        }
-                    }
-                }
+                concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
+                
+                // scale
+                lensU *= ld->apertureMap[value1][value2][33].x;
 
-                // calculate normal between two points
-                // x' = x cos(t) - y sin(t)
-                // y' = x sin(t) + y cos(t)
-                // cos90 = 0, sin90 = 1
+                // rotate
+                float theta = ld->apertureMap[value1][value2][34].x;
+                AtPoint2 tmpPoint = {lensU, lensV};
+                AtPoint2 rotatedPoint;
+                rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+                rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
-                // vector between two points
-                AtVector2 outerPointNormal = outerPoint2 - outerPoint1;
-                // normalize
-                outerPointNormal = outerPointNormal / AiV2Length(outerPointNormal);
-                // calculate normal of vector
-                outerPointNormal = {- outerPointNormal.y, outerPointNormal.x};
+                lensU = rotatedPoint.x;
+                lensV = rotatedPoint.y;
 
+                // translate to new midpoint
+                lensU += ld->apertureMap[value1][value2][32].x;
+                lensV += ld->apertureMap[value1][value2][32].y;
 
+                direction.x = lensU - origin.x;
+                direction.y = lensV - origin.y;
+                direction.z = - ld->lensThickness[0];
 
-
-                // trace rays from middle between points, perpendicular to that axis
-                // find value of this on both sides
-                // scale concentric disk samples along that axis
-
-
-                AtPoint2 pointOnLens;
-                //sampleTriangle(dis(gen), dis(gen), vertexA, vertexB, vertexC, &pointOnLens);
-
-                testAperturesFile << pointOnLens.x << " " << pointOnLens.y << " ";
+                testAperturesFile << lensU << " " << lensV << " ";
             }
 
             testAperturesFile << std::endl;
@@ -1588,7 +1569,7 @@ void testAperturesSmarter(Lensdata *ld){
     testAperturesFile.close();
 
     // execute python drawing
-    std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingDraw.py";
+    std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic/zoic/src/triangleSamplingDraw.py";
     std::string command = "python ";
     command += filename;
     system(command.c_str());
@@ -1674,7 +1655,7 @@ void exitPupilLUTer(Lensdata *ld, bool print){
 
             // find edges of shape, so no samples are wasted (bounding box would be very wasteful in many cases)
             for(int sd = 0; sd < samplingDirections; sd++){
-                float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * 0.0174533; // degrees to radians
+                float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * AI_DTOR; // degrees to radians
 
                 for(int ls = 0; ls < lensSamples; ls++){
                     // vector with lens spacing coordinates on one axis
@@ -1708,11 +1689,61 @@ void exitPupilLUTer(Lensdata *ld, bool print){
 
             }
 
+
+            // find points furthest from each other
+            float maxDistance = 0.0;
+            AtPoint2 outerPoint1, outerPoint2;
+            for(int i = 0; i < maxAperturesPerDirection.size(); i++){
+                for(int j = 0; j < maxAperturesPerDirection.size(); j++){
+                    if(i == j){
+                        continue;
+                    }
+
+                    float distanceBetweenPoints = AiV2Dist(maxAperturesPerDirection[i], maxAperturesPerDirection[j]);
+                    
+                    if (distanceBetweenPoints > maxDistance){
+                        maxDistance = distanceBetweenPoints;
+                        outerPoint1 = maxAperturesPerDirection[i];
+                        outerPoint2 = maxAperturesPerDirection[j];
+                    }
+                }
+            }
+
+            // midpoint between two points
+            AtPoint2 midPoint = (outerPoint1 + outerPoint2) * 0.5;
+
             // might be a bit confusing, but chuck centroid in aperture vector as last element, probably change this to better data struct
-            maxAperturesPerDirection.push_back(centroid);
-            //maxAperturesPerDirection.push_back(minBounds);
-            //maxAperturesPerDirection.push_back(maxBounds);
-            
+            maxAperturesPerDirection.push_back(midPoint);
+
+            // angle between midpoint and origin
+            float angleRad = atan2(0.0 - midPoint.y, 0.0 - midPoint.x);
+
+            // trace rays from middle between points, perpendicular to that axis
+            // find value of this on both sides
+
+            for(int i = 0; i < lensSamples; i++){
+                tmpPoint.x = 0.0;
+                tmpPoint.y = (lensSpacing * static_cast<float>(i));
+
+                // rotate that vector around origin
+                rotatedPoint.x = tmpPoint.x * std::cos(angleRad) - tmpPoint.y * std::sin(angleRad);
+                rotatedPoint.y = tmpPoint.x * std::sin(angleRad) + tmpPoint.y * std::cos(angleRad);
+
+                // translate point
+                rotatedPoint += midPoint;
+
+                AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, 
+                                            rotatedPoint.y - sampleOrigin.y, 
+                                            static_cast<float>(- ld->lensThickness[0])};
+
+                // find scale
+                if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, ld)){
+                    maxAperturesPerDirection.push_back({AiV2Dist(rotatedPoint, midPoint), 0.0}); // distance
+                    break;
+                }
+            }
+                        
+            maxAperturesPerDirection.push_back({angleRad + AI_PIOVER2, 0.0}); // rotation
 
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
             maxAperturesPerDirection.clear();
@@ -1745,41 +1776,30 @@ void exitPupilLUTer(Lensdata *ld, bool print){
 
 
 
-/* Remove if already defined */
+
 typedef long long int64;
 typedef unsigned long long uint64;
 /* Returns the amount of milliseconds elapsed since the UNIX epoch. Works on both
  * windows and linux. */
 uint64 GetTimeMs64(){
     #ifdef _WIN32
-        /* Windows */
+        // Windows
         FILETIME ft;
         LARGE_INTEGER li;
-
-        /* Get the amount of 100 nano seconds intervals elapsed since January 1, 1601 (UTC) and copy it
-        * to a LARGE_INTEGER structure. */
         GetSystemTimeAsFileTime(&ft);
         li.LowPart = ft.dwLowDateTime;
         li.HighPart = ft.dwHighDateTime;
-
         uint64 ret = li.QuadPart;
-        ret -= 116444736000000000LL; /* Convert from file time to UNIX epoch time. */
-        ret /= 10000; /* From 100 nano seconds (10^-7) to 1 millisecond (10^-3) intervals */
-
+        ret -= 116444736000000000LL;
+        ret /= 10000;
         return ret;
     #else
-        /* Linux */
+        // Linux
         struct timeval tv;
-
         gettimeofday(&tv, NULL);
-
         uint64 ret = tv.tv_usec;
-        /* Convert from micro seconds (10^-6) to milliseconds (10^-3) */
         ret /= 1000;
-
-        /* Adds the seconds (10^0) after converting them to milliseconds (10^-3) */
         ret += (tv.tv_sec * 1000);
-
         return ret;
     #endif
 }
@@ -2011,7 +2031,7 @@ node_update {
         //testAperturesTruth(&ld);
         //testAperturesNaive(&ld);
         //testAperturesSmart(&ld);
-        //testAperturesSmarter(&ld);
+        testAperturesSmarter(&ld);
 
         DRAW_ONLY({
             // write to file for lens drawing
@@ -2020,6 +2040,8 @@ node_update {
         })
  
     }
+
+    AiRenderAbort();
  
 }
  
