@@ -10,7 +10,6 @@ AAS = 4
 LINEWIDTH = 10
 TRANSLATEX = (SIZE[0] * AAS) / 2
 TRANSLATEY = (SIZE[1] * AAS) / 2
-font = ImageFont.truetype('C:\Windows\Fonts\Consola.ttf', 16 * AAS)
 
 SCALE = 70
 
@@ -24,7 +23,8 @@ GREY = (150, 150, 150)
 DARKGREY = (120, 120, 120)
 
 
-dataFile = open('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic', 'r')
+"""dataFile = open('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic', 'r')"""
+dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/testApertures.zoic', 'r')
 POINTSLIST = []
 
 
@@ -68,8 +68,6 @@ while i < len(POINTSLIST):
 
 		j+=2
 
-	d.text([(posx + 0.4) * AAS * SCALE + TRANSLATEX, (posy + 0.4) * AAS * SCALE + TRANSLATEY], str(i), DARKGREY, font)
-	
 
 	""" ground truth drawing
 	while j < len(POINTSLIST[i]):
@@ -92,4 +90,5 @@ print "PYTHON: ---- Anti-aliasing image"
 img.thumbnail(SIZE, Image.ANTIALIAS)
 
 print "PYTHON: Saving image"
-img.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_new.png','png')
+"""img.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_new.png','png')"""
+img.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling.png','png')
