@@ -1,6 +1,6 @@
 // ZOIC - Extended Arnold camera shader with options for:
 // Refracting through lens elements read from ground truth lens data
-         // Physically plausible lens distortion and optical vignetting
+        // Physically plausible lens distortion and optical vignetting
 // Image based bokeh shapes
 // Emperical optical vignetting using the thin-lens equation
  
@@ -17,10 +17,9 @@
 // Find answer to: Should I scale the film plane along with the focal length?
 // LUT
     // linear interpolation
-    // lensx, lensy wacky bokeh shape?!
     // slow... benchmark
+    // account for sampling error
 
-    // try the concentric mapping scaling along axis
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // implement correct exposure based on film plane sample position
@@ -1192,7 +1191,6 @@ void testAperturesNaive(Lensdata *ld){
 
     testAperturesFile.close();
 }
- 
 
 
 void testAperturesSmart(Lensdata *ld){
@@ -1428,10 +1426,7 @@ void exitPupilLUT(Lensdata *ld, bool print){
 
             // might be a bit confusing, but chuck centroid in aperture vector as last element, probably change this to better data struct
             maxAperturesPerDirection.push_back(centroid);
-            //maxAperturesPerDirection.push_back(minBounds);
-            //maxAperturesPerDirection.push_back(maxBounds);
             
-
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
             maxAperturesPerDirection.clear();
             
@@ -2228,17 +2223,16 @@ camera_create_ray {
             }
 
             // find lowest bound y value
-            std::map<float, std::vector<AtPoint2>> internal_map = low->second;
             std::map<float, std::vector<AtPoint2>>::iterator low2, prev2;
-            low2 = internal_map.lower_bound(output->origin.y);
+            low2 = low->second.lower_bound(output->origin.y);
             float value2;
 
             // search for closest value, not just lower bound
-            if (low2 == internal_map.end()) {
+            if (low2 == low->second.end()) {
                 // check for last value
                 --low2;
                 value2 = low2->first;
-            } else if (low2 == internal_map.begin()) {
+            } else if (low2 == low->second.begin()) {
                 // check for start value
                 value2 = low2->first;
             } else {
