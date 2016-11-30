@@ -1714,8 +1714,6 @@ void exitPupilLUTer(Lensdata *ld, bool print){
             float angleRad = atan2(0.0 - midPoint.y, 0.0 - midPoint.x);
 
             // trace rays from middle between points, perpendicular to that axis
-            // find value of this on both sides
-
             for(int i = 0; i < lensSamples; i++){
                 tmpPoint.x = 0.0;
                 tmpPoint.y = (lensSpacing * static_cast<float>(i));
@@ -1734,13 +1732,12 @@ void exitPupilLUTer(Lensdata *ld, bool print){
                 // find scale
                 if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, ld)){
                     //std::cout << AiV2Dist(rotatedPoint, midPoint) << std::endl;
-                    maxAperturesPerDirection.push_back({AiV2Dist(rotatedPoint, midPoint), AiV2Dist(outerPoint2, outerPoint1) * 0.5}); // distance
+                    maxAperturesPerDirection.push_back({AiV2Dist(rotatedPoint, midPoint), AiV2Dist(outerPoint2, outerPoint1) * 0.5f}); // distance
                     break;
                 }
             }
                         
             maxAperturesPerDirection.push_back({angleRad, 0.0}); // rotation
-
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
             maxAperturesPerDirection.clear();
             
@@ -2027,7 +2024,7 @@ node_update {
         //testAperturesTruth(&ld);
         //testAperturesNaive(&ld);
         //testAperturesSmart(&ld);
-        testAperturesSmarter(&ld);
+        //testAperturesSmarter(&ld);
 
         DRAW_ONLY({
             // write to file for lens drawing
@@ -2036,8 +2033,6 @@ node_update {
         })
  
     }
-
-    AiRenderAbort();
  
 }
  
@@ -2208,12 +2203,7 @@ camera_create_ray {
             output->dir.x = (lensU * ld.lensAperture[0]) - output->origin.x;
             output->dir.y = (lensV * ld.lensAperture[0]) - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
-        } else { 
-            //output->dir.x = (lensU * ld.optimalAperture * 0.01) - output->origin.x;
-            //output->dir.y = (lensV * ld.optimalAperture) - output->origin.y;
-            //output->dir.z = - ld.lensThickness[0];
-
-            /*
+        } else {
             // using LUT
             std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator low, prev;
             low = ld.apertureMap.lower_bound(output->origin.x);
@@ -2260,28 +2250,25 @@ camera_create_ray {
                     value2 = low2->first;
                 }
             }
+            
+            // scale
+            lensU *= ld.apertureMap[value1][value2][33].x;
+            lensV *= ld.apertureMap[value1][value2][33].y;
 
-            int randomNumber = static_cast<int>(input->lensx * 31.0);
+            // rotate
+            float theta = ld.apertureMap[value1][value2][34].x;
+            AtPoint2 tmpPoint = {lensU, lensV};
+            lensU = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+            lensV = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
-            // construct triangle vertices
-            AtPoint2 vertexA = {ld.apertureMap[value1][value2][32].x, ld.apertureMap[value1][value2][32].y};
-            AtPoint2 vertexB = {ld.apertureMap[value1][value2][randomNumber].x, ld.apertureMap[value1][value2][randomNumber].y};
+            // translate to new midpoint
+            lensU += ld.apertureMap[value1][value2][32].x;
+            lensV += ld.apertureMap[value1][value2][32].y;
 
-            AtPoint2 vertexC;
-            if(randomNumber == 0){
-                vertexC = {ld.apertureMap[value1][value2][31].x, ld.apertureMap[value1][value2][31].y};
-            } else {
-                vertexC = {ld.apertureMap[value1][value2][randomNumber - 1].x, ld.apertureMap[value1][value2][randomNumber - 1].y};
-            }
-
-            AtPoint2 pointOnLens;
-            sampleTriangle(input->lensx, input->lensy, vertexA, vertexB, vertexC, &pointOnLens);
-
-            // dir = lenspoint - filmpoint
-            output->dir.x = pointOnLens.x - output->origin.x;
-            output->dir.y = pointOnLens.y - output->origin.y;
+            output->dir.x = lensU - output->origin.x;
+            output->dir.y = lensV - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
-            */
+            
 
         }
  
