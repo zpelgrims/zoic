@@ -12,47 +12,14 @@
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
  
 // TODO
-
 // Make it work with other lens profiles
 // Find answer to: Should I scale the film plane along with the focal length?
 // LUT
     // linear interpolation
-    // slow... benchmark
     // account for sampling error
-
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
-// implement correct exposure based on film plane sample position
 // Support lens files with extra information (abbe number, kind of glass)
- 
-
- 
-/* COMPILE AT WORK:
-
-DRAW:
-g++ -std=c++11 -O3 -I"C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/include" -L"C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin" -lai -D_DRAW --shared C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/zoic.cpp -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/zoic.dll
-
-NODRAW:
-g++ -std=c++11 -O3 -I"C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/include" -L"C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin" -lai --shared C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/zoic.cpp -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/zoic.dll
-
-LIGHTS DRAW:
-C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/lights.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_lights.exr -set options.threads 1 -dp
-
-LIGHTS NO DRAW:
-NAIVE:
-C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/lights.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_lights_naiveSampling.exr -dp
-
-GOOD SAMPLING:
-C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/lights.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_lights_goodSampling.exr -dp
-
-DISTANCE DRAW:
-C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/distance.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -set options.skip_license_check on -l "C:/Program Files/Ilion/IlionMayaFramework/2015/modules/mtoa/1.2.7.2.2-4.2.13.6/shaders" -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_distance.exr -set options.threads 1 -dp
-
-DISTANCE NO DRAW:
-C:/ilionData/Users/zeno.pelgrims/Desktop/Arnold-4.2.13.4-windows/bin/kick -i C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/distance.ass -g 2.2 -v 2 -l C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile -set options.skip_license_check on -l "C:/Program Files/Ilion/IlionMayaFramework/2015/modules/mtoa/1.2.7.2.2-4.2.13.6/shaders" -o C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testScene_distance.exr
-
-*/
- 
  
 #include <ai.h>
 #include <map>
@@ -92,7 +59,6 @@ std::ofstream myfile;
 bool draw = false;
 int counter = 0;
 
-std::ofstream trianglefile;
 std::ofstream testAperturesFile;
 
 
@@ -449,11 +415,10 @@ public:
  
  
      // Sample image
-     void bokehSample(float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
+     void bokehSample(float randomNumberRow, float randomNumberColumn, AtPoint2 *lens){
          if (!isValid()){
              AiMsgWarning("[ZOIC] Invalid bokeh image data.");
-             *dx = 0.0f;
-             *dy = 0.0f;
+             *lens = {0.0, 0.0};
             return;
          }
          // print random number between 0 and 1
@@ -520,11 +485,11 @@ public:
  
          // to get the right image orientation, flip the x and y coordinates and then multiply the y values by -1 to flip the pixels vertically
         float flippedRow = static_cast<float>(recalulatedPixelColumn);
-         float flippedColumn = recalulatedPixelRow * -1.0f;
+        float flippedColumn = recalulatedPixelRow * -1.0f;
  
          // send values back
-         *dx = static_cast<float>(flippedRow) / static_cast<float>(x) * 2.0;
-         *dy = static_cast<float>(flippedColumn) / static_cast<float>(y) * 2.0;
+         *lens = {static_cast<float>(flippedRow) / static_cast<float>(x) * 2.0f,
+                  static_cast<float>(flippedColumn) / static_cast<float>(y) * 2.0f};
      }
 };
  
@@ -566,23 +531,22 @@ struct Lensdata{
  
  
 // Improved concentric mapping code by Dave Cline [peter shirley´s blog]
-inline void concentricDiskSample(float ox, float oy, float *lensU, float *lensV) {
-     float phi, r;
+inline void concentricDiskSample(float ox, float oy, AtPoint2 *lens) {
+    float phi, r;
 
-     // switch coordinate space from [0, 1] to [-1, 1]
-     float a = 2.0 * ox - 1.0;
-     float b = 2.0 * oy - 1.0;
- 
-     if (SQR(a) > SQR(b)) {
-         r = a;
-         phi = (AI_PIOVER4) * (b / a);
-     } else {
-         r = b;
-         phi = (AI_PIOVER2) - (AI_PIOVER4) * (a / b);
-     }
- 
-     *lensU = r * std::cos(phi);
-     *lensV = r * std::sin(phi);
+    // switch coordinate space from [0, 1] to [-1, 1]
+    float a = 2.0 * ox - 1.0;
+    float b = 2.0 * oy - 1.0;
+
+    if (SQR(a) > SQR(b)) {
+        r = a;
+        phi = (AI_PIOVER4) * (b / a);
+    } else {
+        r = b;
+        phi = (AI_PIOVER2) - (AI_PIOVER4) * (a / b);
+    }
+        
+    *lens = {r * std::cos(phi), r * std::sin(phi)};
 }
 
 
@@ -1051,8 +1015,7 @@ void adjustFocalLength(Lensdata *ld){
     }
 }
  
- 
- 
+
 void writeToFile(Lensdata *ld){
      myfile << "LENSES{";
      for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
@@ -1109,7 +1072,6 @@ void writeToFile(Lensdata *ld){
 }
 
 
-
 void testAperturesTruth(Lensdata *ld){
     testAperturesFile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);
 
@@ -1125,22 +1087,21 @@ void testAperturesTruth(Lensdata *ld){
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
-        
-            float lensU, lensV = 0.0;
+            AtPoint2 lens = {0.0, 0.0};
 
             for (int k = 0; k < apertureSamples; k++){
-                concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
+                concentricDiskSample(dis(gen), dis(gen), &lens);
 
                 origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.z = ld->originShift;
             
-                direction.x = (lensU * ld->lensAperture[0]) - origin.x;
-                direction.y = (lensV * ld->lensAperture[0]) - origin.y;
+                direction.x = (lens.x * ld->lensAperture[0]) - origin.x;
+                direction.y = (lens.y * ld->lensAperture[0]) - origin.y;
                 direction.z = - ld->lensThickness[0];
 
                 if(traceThroughLensElements(&origin, &direction, ld, false)){
-                    testAperturesFile << lensU * ld->lensAperture[0] << " " << lensV * ld->lensAperture[0] << " ";
+                    testAperturesFile << lens.x * ld->lensAperture[0] << " " << lens.y * ld->lensAperture[0] << " ";
                 }
             }
 
@@ -1150,7 +1111,6 @@ void testAperturesTruth(Lensdata *ld){
 
     testAperturesFile.close();
 }
-
 
 
 void testAperturesNaive(Lensdata *ld){
@@ -1168,21 +1128,21 @@ void testAperturesNaive(Lensdata *ld){
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
-        
-            float lensU, lensV = 0.0;
+
+            AtPoint2 lens = {0.0, 0.0};
 
             for (int k = 0; k < apertureSamples; k++){
-                concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
+                concentricDiskSample(dis(gen), dis(gen), &lens);
 
                 origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.z = ld->originShift;
 
-                direction.x = (lensU * ld->optimalAperture) - origin.x;
-                direction.y = (lensV * ld->optimalAperture) - origin.y;
+                direction.x = (lens.x * ld->optimalAperture) - origin.x;
+                direction.y = (lens.y * ld->optimalAperture) - origin.y;
                 direction.z = - ld->lensThickness[0];
 
-                testAperturesFile << lensU * ld->optimalAperture << " " << lensV * ld->optimalAperture << " ";
+                testAperturesFile << lens.x * ld->optimalAperture << " " << lens.y * ld->optimalAperture << " ";
             }
 
             testAperturesFile << std::endl;
@@ -1245,17 +1205,16 @@ void testAperturesSmart(Lensdata *ld){
                 }
 
                 // find lowest bound y value
-                std::map<float, std::vector<AtPoint2>> internal_map = low->second;
                 std::map<float, std::vector<AtPoint2>>::iterator low2, prev2;
-                low2 = internal_map.lower_bound(origin.y);
+                low2 = low->second.lower_bound(origin.y);
                 float value2;
 
                 // search for closest value, not just lower bound
-                if (low2 == internal_map.end()) {
+                if (low2 == low->second.end()) {
                     // check for last value
                     --low2;
                     value2 = low2->first;
-                } else if (low2 == internal_map.begin()) {
+                } else if (low2 == low->second.begin()) {
                     // check for start value
                     value2 = low2->first;
                 } else {
@@ -1311,7 +1270,7 @@ void testAperturesSmart(Lensdata *ld){
 }
 
 
-void exitPupilLUT(Lensdata *ld, bool print){
+void exitPupilLUTTriangle(Lensdata *ld, bool print){
     int filmSamplesX = 32;
     int filmSamplesY = 32;
     int lensSamples = 128;
@@ -1504,17 +1463,16 @@ void testAperturesSmarter(Lensdata *ld){
                 }
 
                 // find lowest bound y value
-                std::map<float, std::vector<AtPoint2>> internal_map = low->second;
                 std::map<float, std::vector<AtPoint2>>::iterator low2, prev2;
-                low2 = internal_map.lower_bound(origin.y);
+                low2 = low->second.lower_bound(origin.y);
                 float value2;
 
                 // search for closest value, not just lower bound
-                if (low2 == internal_map.end()) {
+                if (low2 == low->second.end()) {
                     // check for last value
                     --low2;
                     value2 = low2->first;
-                } else if (low2 == internal_map.begin()) {
+                } else if (low2 == low->second.begin()) {
                     // check for start value
                     value2 = low2->first;
                 } else {
@@ -1527,31 +1485,26 @@ void testAperturesSmarter(Lensdata *ld){
                     }
                 }
 
-
-                float lensU = 0.0;
-                float lensV = 0.0;
-
-                concentricDiskSample(dis(gen), dis(gen), &lensU, &lensV);
+                AtPoint2 lens = {0.0, 0.0};
+                concentricDiskSample(dis(gen), dis(gen), &lens);
                 
                 // scale
-                lensU *= ld->apertureMap[value1][value2][33].x;
-                lensV *= ld->apertureMap[value1][value2][33].y;
+                lens *= ld->apertureMap[value1][value2][33];
 
                 // rotate
                 float theta = ld->apertureMap[value1][value2][34].x;
-                AtPoint2 tmpPoint = {lensU, lensV};
-                lensU = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
-                lensV = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
+                AtPoint2 tmpPoint = {lens.x, lens.y};
+                lens.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+                lens.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
                 // translate to new midpoint
-                lensU += ld->apertureMap[value1][value2][32].x;
-                lensV += ld->apertureMap[value1][value2][32].y;
+                lens += ld->apertureMap[value1][value2][32];
 
-                direction.x = lensU - origin.x;
-                direction.y = lensV - origin.y;
+                direction.x = lens.x - origin.x;
+                direction.y = lens.y - origin.y;
                 direction.z = - ld->lensThickness[0];
 
-                testAperturesFile << lensU << " " << lensV << " ";
+                testAperturesFile << lens.x << " " << lens.y << " ";
             }
 
             testAperturesFile << std::endl;
@@ -1568,11 +1521,7 @@ void testAperturesSmarter(Lensdata *ld){
 }
 
 
-void exitPupilLUTer(Lensdata *ld, bool print){
-    int filmSamplesX = 32;
-    int filmSamplesY = 32;
-    int lensSamples = 128;
-    int boundsSamples = 1024;
+void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSamples, int boundsSamples, bool print){
     int samplingDirections = 32;
 
     float filmWidth = 6.0;
@@ -1762,9 +1711,6 @@ void exitPupilLUTer(Lensdata *ld, bool print){
 }
 
 
-
-
-
 typedef long long int64;
 typedef unsigned long long uint64;
 /* Returns the amount of milliseconds elapsed since the UNIX epoch. Works on both
@@ -1889,7 +1835,7 @@ node_update {
         ld.yres = static_cast<float>(AiNodeGetInt(options,"yres"));
  
         // not sure if this is the right way to do it.. probably more to it than this!
-        ld.filmDiagonal = std::sqrt(_sensorWidth * _sensorWidth + _sensorHeight * _sensorHeight);
+        ld.filmDiagonal = std::sqrt(SQR(_sensorWidth) + SQR(_sensorHeight));
  
         ld.focalDistance = _focalDistance;
  
@@ -1956,69 +1902,9 @@ node_update {
         // precompute lens centers
         computeLensCenters(&ld);
 
+        // calculate lookup table for vignetting-free sampling
+        exitPupilLUT(&ld, 32, 32, 128, 1024, false);
 
-        
-        // search for ideal max height to shoot rays to on first lens element, by tracing test rays and seeing which one fails
-        // maybe this varies based on where on the filmplane we are shooting the ray from? In this case this wouldn´t work..
-        // and I don't think it does..
-        // use lookup table instead!
-
-        if(_kolbSamplingMethod == 1){
-            int sampleCount = 1024;
-            AtVector sampleOrigin = {0.0, 0.0, ld.originShift};
-            for (int i = 0; i < sampleCount; i++){
-                float heightVariation = ld.lensAperture[0] / static_cast<float>(sampleCount);
-                AtVector sampleDirection = {0.0, heightVariation * static_cast<float>(i), static_cast<float>(- ld.lensThickness[0])};
- 
-                if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, &ld)){
-                    AiMsgInfo("[ZOIC] Positive failure at sample [%d] out of [%d]", i, sampleCount);
-                    ld.optimalAperture = sampleDirection.y - heightVariation;
-                    AiMsgInfo("[ZOIC] Optimal max height to shoot rays to on first lens element = [%.9f]", ld.optimalAperture);
-                    break;
-                }
-            }
-        }
-        
-
-        //exitPupilLUT(&ld, false);           
-        exitPupilLUTer(&ld, false);           
-                
-
-
-
-        /* write triangle sample points to file, keep for docs
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_real_distribution<> dis(0.0, 1.0);
-
-        std::ofstream myfile;
-        myfile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingList.zoic", std::ofstream::out | std::ofstream::trunc);
-
-        for(int i = 0; i < 5000; i++){
-            float u = dis(gen);
-            float v = dis(gen);
-
-            float tmp = std::sqrt(u);
-            float x = 1.0 - tmp;
-            float y = v * tmp;        
-
-            AtPoint2 vertexA = {0.0, 0.0};
-            AtPoint2 vertexB = {0.0, 2.0};
-            AtPoint2 vertexC = {0.5, 0.0};
-
-            AtPoint2 randomPoint = {((1.0 - x - y) * vertexA) + (x * vertexB) + (y * vertexC)};
-            myfile << randomPoint.x << ", " << randomPoint.y << ", ";
-        }
-
-        myfile.close();
-        */
-
-        //trianglefile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/triangleSamplingList.zoic", std::ofstream::out | std::ofstream::trunc);
-
-
-        //testAperturesTruth(&ld);
-        //testAperturesNaive(&ld);
-        //testAperturesSmart(&ld);
         //testAperturesSmarter(&ld);
 
         DRAW_ONLY({
@@ -2028,7 +1914,6 @@ node_update {
         })
  
     }
- 
 }
  
 
@@ -2056,8 +1941,6 @@ node_finish {
  
         AiMsgInfo("[ZOIC] Drawing finished");
     })
-
-    trianglefile.close();
  
     delete camera;
     AiCameraDestroy(node);
@@ -2093,21 +1976,20 @@ camera_create_ray {
         // DOF CALCULATIONS
         if (_useDof == true) {
             // Initialize point on lens
-            float lensU, lensV = 0.0;
+            AtPoint2 lens = {0.0, 0.0};
  
             // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
             if (_useImage == false){
-                concentricDiskSample(input->lensx, input->lensy, &lensU, &lensV);
+                concentricDiskSample(input->lensx, input->lensy, &lens);
             } else { // sample bokeh image
-                camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
+                camera->image.bokehSample(input->lensx, input->lensy, &lens);
             }
  
             // scale new lens coordinates by the aperture radius
-            lensU *= camera->apertureRadius;
-            lensV *= camera->apertureRadius;
+            lens *= camera->apertureRadius;
  
             // update arnold ray origin
-            output->origin = {lensU, lensV, 0.0};
+            output->origin = {lens.x, lens.y, 0.0};
  
             // Compute point on plane of focus, intersection on z axis
             float intersection = std::abs(_focalDistance / output->dir.z);
@@ -2181,13 +2063,12 @@ camera_create_ray {
         */
 
         // sample disk with proper sample distribution
-        float lensU = 0.0;
-        float lensV = 0.0;
+        AtPoint2 lens = {0.0, 0.0};
 
         if (_useImage == false){
-            concentricDiskSample(input->lensx, input->lensy, &lensU, &lensV);
+            concentricDiskSample(input->lensx, input->lensy, &lens);
         } else { // sample bokeh image
-            camera->image.bokehSample(input->lensx, input->lensy, &lensU, &lensV);
+            camera->image.bokehSample(input->lensx, input->lensy, &lens);
         }
         
         // pick between different sampling methods (change to enum)
@@ -2195,11 +2076,11 @@ camera_create_ray {
         // sampling optimal aperture is efficient, but might not make a whole image
         if (_kolbSamplingMethod == false){ // using noisy ground truth
             // not sure if all the rays are actually hitting the first lens element here, modify drawing function and check?
-            output->dir.x = (lensU * ld.lensAperture[0]) - output->origin.x;
-            output->dir.y = (lensV * ld.lensAperture[0]) - output->origin.y;
+            output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
+            output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
         } else {
-            // using LUT
+            // using LUT for aperture sampling
             std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator low, prev;
             low = ld.apertureMap.lower_bound(output->origin.x);
             float value1;
@@ -2246,21 +2127,19 @@ camera_create_ray {
             }
             
             // scale
-            lensU *= ld.apertureMap[value1][value2][33].x;
-            lensV *= ld.apertureMap[value1][value2][33].y;
+            lens *= ld.apertureMap[value1][value2][33];
 
             // rotate
             float theta = ld.apertureMap[value1][value2][34].x;
-            AtPoint2 tmpPoint = {lensU, lensV};
-            lensU = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
-            lensV = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
+            AtPoint2 tmpPoint = lens;
+            lens.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+            lens.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
             // translate to new midpoint
-            lensU += ld.apertureMap[value1][value2][32].x;
-            lensV += ld.apertureMap[value1][value2][32].y;
+            lens += ld.apertureMap[value1][value2][32];
 
-            output->dir.x = lensU - output->origin.x;
-            output->dir.y = lensV - output->origin.y;
+            output->dir.x = lens.x - output->origin.x;
+            output->dir.y = lens.y - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
             
 
@@ -2289,7 +2168,7 @@ camera_create_ray {
     }
  
     // control to go light stops up and down
-    float e2 = _exposureControl * _exposureControl;
+    float e2 = SQR(_exposureControl);
     if (_exposureControl > 0){
         output->weight *= 1.0f + e2;
     } else if (_exposureControl < 0){
