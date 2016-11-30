@@ -1540,16 +1540,13 @@ void testAperturesSmarter(Lensdata *ld){
                 
                 // scale
                 lensU *= ld->apertureMap[value1][value2][33].x;
+                lensV *= ld->apertureMap[value1][value2][33].y;
 
                 // rotate
                 float theta = ld->apertureMap[value1][value2][34].x;
                 AtPoint2 tmpPoint = {lensU, lensV};
-                AtPoint2 rotatedPoint;
-                rotatedPoint.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
-                rotatedPoint.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
-
-                lensU = rotatedPoint.x;
-                lensV = rotatedPoint.y;
+                lensU = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+                lensV = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
                 // translate to new midpoint
                 lensU += ld->apertureMap[value1][value2][32].x;
@@ -1695,9 +1692,7 @@ void exitPupilLUTer(Lensdata *ld, bool print){
             AtPoint2 outerPoint1, outerPoint2;
             for(int i = 0; i < maxAperturesPerDirection.size(); i++){
                 for(int j = 0; j < maxAperturesPerDirection.size(); j++){
-                    if(i == j){
-                        continue;
-                    }
+                    if(i == j){continue;}
 
                     float distanceBetweenPoints = AiV2Dist(maxAperturesPerDirection[i], maxAperturesPerDirection[j]);
                     
@@ -1726,8 +1721,8 @@ void exitPupilLUTer(Lensdata *ld, bool print){
                 tmpPoint.y = (lensSpacing * static_cast<float>(i));
 
                 // rotate that vector around origin
-                rotatedPoint.x = tmpPoint.x * std::cos(angleRad) - tmpPoint.y * std::sin(angleRad);
-                rotatedPoint.y = tmpPoint.x * std::sin(angleRad) + tmpPoint.y * std::cos(angleRad);
+                rotatedPoint.x = tmpPoint.x * std::cos(angleRad + AI_PIOVER2) - tmpPoint.y * std::sin(angleRad + AI_PIOVER2);
+                rotatedPoint.y = tmpPoint.x * std::sin(angleRad + AI_PIOVER2) + tmpPoint.y * std::cos(angleRad + AI_PIOVER2);
 
                 // translate point
                 rotatedPoint += midPoint;
@@ -1738,12 +1733,13 @@ void exitPupilLUTer(Lensdata *ld, bool print){
 
                 // find scale
                 if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, ld)){
-                    maxAperturesPerDirection.push_back({AiV2Dist(rotatedPoint, midPoint), 0.0}); // distance
+                    //std::cout << AiV2Dist(rotatedPoint, midPoint) << std::endl;
+                    maxAperturesPerDirection.push_back({AiV2Dist(rotatedPoint, midPoint), AiV2Dist(outerPoint2, outerPoint1) * 0.5}); // distance
                     break;
                 }
             }
                         
-            maxAperturesPerDirection.push_back({angleRad + AI_PIOVER2, 0.0}); // rotation
+            maxAperturesPerDirection.push_back({angleRad, 0.0}); // rotation
 
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, maxAperturesPerDirection));
             maxAperturesPerDirection.clear();
