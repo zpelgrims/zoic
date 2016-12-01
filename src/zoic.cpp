@@ -4,18 +4,12 @@
 // Image based bokeh shapes
 // Emperical optical vignetting using the thin-lens equation
  
-// Special thanks to Marc-Antoine Desjardins for the information on the image sampling
-// Special thanks to Benedikt Bitterli for the information on emperical optical vignetting
-// Special thanks to Tom Minor for getting me started with C++
-// Special thanks to Gaetan Guidet for the C++ cleanup on Github.
- 
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
  
 // TODO
 // Make it work with other lens profiles
 // Find answer to: Should I scale the film plane along with the focal length?
-// LUT
-    // account for sampling error
+// LUT: account for sampling error, fix strange rotation issue
 // Thin lens optical vignetting LUT
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
@@ -592,7 +586,7 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
         std::size_t prev = 0, pos;
         iss << line;
  
-        while ((pos = line.find_first_of(" \t,", prev)) != std::string::npos){
+        while ((pos = line.find_first_of("\t,;: ", prev)) != std::string::npos){
             if (pos > prev){
                 if (lensDataCounter == 0){
                     ld->lensRadiusCurvature.push_back(std::stod(line.substr(prev, pos-prev)));
@@ -1444,25 +1438,14 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSamp
 }
 
 
-/*
-bool traceThinLens(AtPoint origin, AtPoint2 lens, float sx, float sy, float tan_fov, float apertureRadius, float focalDistance, float opticalVignettingDistance, float opticalVignettingRadius){
-    AtPoint p = {sx * tan_fov, sy * tan_fov, 1.0};
-    AtVector dir = AiV3Normalize(p - origin);
-    lens *= camera->apertureRadius;
 
-    origin = {lens.x, lens.y, 0.0};
-
-    float intersection = std::abs(focalDistance / dir.z);
-    AtPoint focusPoint = dir * intersection;
-
-    dir = AiV3Normalize(focusPoint - origin);
-
-    if (_opticalVignettingDistance > 0.0f){
+bool traceThinLens(AtPoint origin, AtVector dir, float apertureRadius, float opticalVignettingDistance, float opticalVignettingRadius){
+    if (opticalVignettingDistance > 0.0f){
         AtPoint opticalVignetPoint;
         opticalVignetPoint = dir * opticalVignettingDistance;
         opticalVignetPoint -= origin;
 
-        float pointHypotenuse = std::sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
+        float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
         float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
 
         if (ABS(pointHypotenuse) > virtualApertureTrueRadius){
@@ -1474,8 +1457,8 @@ bool traceThinLens(AtPoint origin, AtPoint2 lens, float sx, float sy, float tan_
 }
 
 
-// still needs converting
-void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSamples, int boundsSamples, bool print){
+// still needs to be figured out
+void thinlensLUT(int filmSamplesX, int filmSamplesY, int lensSamples, int boundsSamples, float apertureRadius, float tan_fov, float focalDistance, float opticalVignettingDistance, float opticalVignettingRadius){
     int samplingDirections = 32;
 
     float filmWidth = 6.0;
@@ -1486,7 +1469,7 @@ void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSampl
 
     float samplingDirectionSpacing = 360.0 / static_cast<float>(samplingDirections);
 
-    float lensSpacing = (ld->lensAperture[0] * 0.5) / static_cast<float>(lensSamples); // do I need to pick the whole aperture or it´s radius?
+    float lensSpacing = (apertureRadius * 0.5) / static_cast<float>(lensSamples); // do I need to pick the whole aperture or it´s radius?
 
     std::vector<AtPoint2> maxAperturesPerDirection;
 
@@ -1501,7 +1484,7 @@ void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSampl
         for(int j = 0; j < filmSamplesY + 1; j++){
             AtVector sampleOrigin = {static_cast<float>((filmSpacingX * static_cast<float>(i) * 2.0) - filmWidth / 2.0), 
                                      static_cast<float>((filmSpacingY * static_cast<float>(j) * 2.0) - filmHeight / 2.0), 
-                                     ld->originShift};
+                                     0.0};
 
 
             // calculate bounds of aperture, to find centroid
@@ -1515,30 +1498,40 @@ void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSampl
                 lensU = dis(gen);
                 lensV = dis(gen);
 
-                boundsDirection.x = (lensU * ld->lensAperture[0]) - sampleOrigin.x;
-                boundsDirection.y = (lensV * ld->lensAperture[0]) - sampleOrigin.y;
-                boundsDirection.z = - ld->lensThickness[0];
+                // how to emulate sx??
+                //AtPoint p = {sx * tan_fov, sy * tan_fov, 1.0};
+                AtPoint p = {dis(gen) * tan_fov, dis(gen) * tan_fov, 1.0};
+                boundsDirection = AiV3Normalize(p - sampleOrigin);
+                lensU *= apertureRadius;
+                lensV *= apertureRadius;
 
-                if(traceThroughLensElementsForApertureSize(sampleOrigin, boundsDirection, ld)){
+                sampleOrigin = {lensU, lensV, 0.0};
+
+                float intersection = std::abs(focalDistance / boundsDirection.z);
+                AtPoint focusPoint = boundsDirection * intersection;
+
+                boundsDirection = AiV3Normalize(focusPoint - sampleOrigin);
+
+                if(traceThinLens(sampleOrigin, boundsDirection, apertureRadius, opticalVignettingDistance, opticalVignettingRadius)){
                     if((minBounds.x + minBounds.y) == 0.0){
-                        minBounds = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
-                        maxBounds = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
+                        minBounds = {lensU * apertureRadius, lensV * apertureRadius};
+                        maxBounds = minBounds;
                     }
 
-                    if((lensU * ld->lensAperture[0]) > maxBounds.x){
-                        maxBounds.x = lensU * ld->lensAperture[0];
+                    if((lensU * apertureRadius) > maxBounds.x){
+                        maxBounds.x = lensU * apertureRadius;
                     }
 
-                    if((lensV * ld->lensAperture[0]) > maxBounds.y){
-                        maxBounds.y = lensV * ld->lensAperture[0];
+                    if((lensV * apertureRadius) > maxBounds.y){
+                        maxBounds.y = lensV * apertureRadius;
                     }
 
-                    if((lensU * ld->lensAperture[0]) < minBounds.x){
-                        minBounds.x = lensU * ld->lensAperture[0];
+                    if((lensU * apertureRadius) < minBounds.x){
+                        minBounds.x = lensU * apertureRadius;
                     }
 
-                    if((lensV * ld->lensAperture[0]) < minBounds.y){
-                        minBounds.y = lensV * ld->lensAperture[0];
+                    if((lensV * apertureRadius) < minBounds.y){
+                        minBounds.y = lensV * apertureRadius;
                     }
                 }
             }
@@ -1546,6 +1539,9 @@ void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSampl
             // centroid of bounds
             AtPoint2 centroid = {static_cast<float>((minBounds.x + maxBounds.x) * 0.5), 
                                  static_cast<float>((minBounds.y + maxBounds.y) * 0.5)};
+
+
+            //STILL NEED TO CONVERT EVERYTHING BELOW
 
 
             // find edges of shape, so no samples are wasted (bounding box would be very wasteful in many cases)
@@ -1567,18 +1563,14 @@ void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSampl
                                                 rotatedPoint.y - sampleOrigin.y, 
                                                 static_cast<float>(- ld->lensThickness[0])};
 
-                    if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, ld)){
+                    if (!traceThinLens()){
                         maxAperturesPerDirection.push_back(rotatedPoint); // exact coordinates on first lens element
                         break;
                     }
                 }
 
                 // if all rays get through, append the last tried point
-                if (traceThroughLensElementsForApertureSize(sampleOrigin, 
-                                                           {rotatedPoint.x - sampleOrigin.x, 
-                                                            rotatedPoint.y - sampleOrigin.y, 
-                                                            static_cast<float>(- ld->lensThickness[0])}, ld))
-                {
+                if (traceThinLens()){
                     maxAperturesPerDirection.push_back(rotatedPoint);
                 }
 
@@ -1628,8 +1620,7 @@ void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSampl
                                             static_cast<float>(- ld->lensThickness[0])};
 
                 // find scale
-                if (!traceThroughLensElementsForApertureSize(sampleOrigin, sampleDirection, ld)){
-                    //std::cout << AiV2Dist(rotatedPoint, midPoint) << std::endl;
+                if (!traceThinLens()){
                     maxAperturesPerDirection.push_back({AiV2Dist(rotatedPoint, midPoint), AiV2Dist(outerPoint2, outerPoint1) * 0.5f}); // distance
                     break;
                 }
@@ -1642,28 +1633,10 @@ void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSampl
         }
     }
 
-    if(print){
-        // print out data structure
-        for(auto &it : ld->apertureMap){
-            std::cout << "sampleOrigin.x = [" << std::fixed << std::setprecision(5) << it.first << "] :: " << std::endl;
-            std::map<float, std::vector<AtPoint2>> &internal_map = it.second;
-
-            for (auto &it2 : internal_map) {
-                std::cout << "\t sampleOrigin.y = [" << std::fixed << std::setprecision(5) << it2.first << "] :: ";
-                std::vector<AtPoint2> &internal_vector = it2.second;
-
-                for (auto &it3 : internal_vector){
-                    std::cout << std::fixed << std::setprecision(5) << "[" << it3.x << ", " << it3.y << "]" << ", ";
-                }
-
-            std::cout << std::endl;
-            }
-        }
-    }
-
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
-*/
+
+
 
 /*
 typedef long long int64;
@@ -1698,7 +1671,7 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0); // distance between sensor and lens in cm
-    AiParameterFLT("fStop", 2.4);
+    AiParameterFLT("fStop", 1.4);
     AiParameterFLT("focalDistance", 100.0); // distance from lens to focal point
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", ""); // bokeh shape image location
@@ -1859,7 +1832,7 @@ node_update {
         // calculate lookup table for vignetting-free sampling
         exitPupilLUT(&ld, 32, 32, 128, 1024, false);
 
-        testAperturesSmarter(&ld);
+        //testAperturesSmarter(&ld);
 
         DRAW_ONLY({
             // write to file for lens drawing
@@ -1898,7 +1871,6 @@ node_finish {
  
     delete camera;
     AiCameraDestroy(node);
- 
 }
 
 
@@ -2018,20 +1990,18 @@ camera_create_ray {
 
         if (_useImage == false){
             concentricDiskSample(input->lensx, input->lensy, &lens);
-        } else { // sample bokeh image
+        } else {
             camera->image.bokehSample(input->lensx, input->lensy, &lens);
         }
         
         // pick between different sampling methods (change to enum)
         // sampling first element is "ground truth" but wastes a lot of rays
-        // sampling optimal aperture is efficient, but might not make a whole image
         if (_kolbSamplingMethod == false){ // using noisy ground truth
             // not sure if all the rays are actually hitting the first lens element here, modify drawing function and check?
             output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
             output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
         } else {
-
             // using LUT for aperture sampling
             
             // lowest bound x value
@@ -2055,14 +2025,13 @@ camera_create_ray {
             float xpercentage = (output->origin.x - value1) / (value3 - value1);
             float ypercentage = (output->origin.y - value2) / (value4 - value2);
 
-
-            // scale
+            // scale aperture
             lens *= {BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][33].x, ld.apertureMap[value3][value2][33].x, 
                                                       ld.apertureMap[value1][value4][33].x, ld.apertureMap[value3][value4][33].x), 
                      BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][33].y, ld.apertureMap[value3][value2][33].y,
                                                       ld.apertureMap[value1][value4][33].y, ld.apertureMap[value3][value4][33].y)};
 
-            // rotation
+            // rotate aperture
             float interpolatedRotation = BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][34].x, ld.apertureMap[value3][value2][34].x, 
                                                                           ld.apertureMap[value1][value4][34].x, ld.apertureMap[value3][value4][34].x);
             
@@ -2070,7 +2039,7 @@ camera_create_ray {
             lens.x = tmpPoint.x * std::cos(interpolatedRotation) - tmpPoint.y * std::sin(interpolatedRotation);
             lens.y = tmpPoint.x * std::sin(interpolatedRotation) + tmpPoint.y * std::cos(interpolatedRotation);
 
-            // translation
+            // translate aperture
             lens += {BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][32].x, ld.apertureMap[value3][value2][32].x, 
                                                       ld.apertureMap[value1][value4][32].x, ld.apertureMap[value3][value4][32].x),
                      BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][32].y, ld.apertureMap[value3][value2][32].y,
