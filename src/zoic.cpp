@@ -1184,66 +1184,54 @@ void testAperturesSmarter(Lensdata *ld){
                 origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.z = ld->originShift;
 
-                std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator low, prev;
+                // lowest bound x value
+                std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator low;
                 low = ld->apertureMap.lower_bound(origin.x);
+                float value1 = low->first;
 
-                float value1;
-
-                // search for closest value, not just lower bound
-                if (low == ld->apertureMap.end()) {
-                    // check for last value
-                    --low;
-                    value1 = low->first;
-                } else if (low == ld->apertureMap.begin()) {
-                    // check for start value
-                    value1 = low->first;
-                } else {
-                    prev = low;
-                    --prev;
-                    if ((origin.x - prev->first) < (low->first - origin.x)){
-                        value1 = prev->first;
-                    } else {
-                        value1 = low->first;
-                    }
-                }
-
-                // find lowest bound y value
-                std::map<float, std::vector<AtPoint2>>::iterator low2, prev2;
+                // lowest bound y value
+                std::map<float, std::vector<AtPoint2>>::iterator low2;
                 low2 = low->second.lower_bound(origin.y);
-                float value2;
+                float value2 = low2->first;
 
-                // search for closest value, not just lower bound
-                if (low2 == low->second.end()) {
-                    // check for last value
-                    --low2;
-                    value2 = low2->first;
-                } else if (low2 == low->second.begin()) {
-                    // check for start value
-                    value2 = low2->first;
-                } else {
-                    prev2 = low2;
-                    --prev2;
-                    if ((origin.y - prev2->first) < (low2->first - origin.y)){
-                        value2 = prev2->first;
-                    } else {
-                        value2 = low2->first;
-                    }
-                }
 
                 AtPoint2 lens = {0.0, 0.0};
                 concentricDiskSample(dis(gen), dis(gen), &lens);
                 
+
+                // go back 1 element in sorted map
+                --low;
+                float value3 = low->first;
+                
+                --low2;
+                float value4 = low2->first;
+
+                // percentage of x inbetween two stored LUT entries
+                float xpercentage = (origin.x - value1) / (value3 - value1);
+                float ypercentage = (origin.y - value2) / (value4 - value2);
+
+
                 // scale
-                lens *= ld->apertureMap[value1][value2][33];
+                lens *= {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][33].x, ld->apertureMap[value3][value2][33].x, 
+                                                          ld->apertureMap[value1][value4][33].x, ld->apertureMap[value3][value4][33].x), 
+                         BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][33].y, ld->apertureMap[value3][value2][33].y,
+                                                          ld->apertureMap[value1][value4][33].y, ld->apertureMap[value3][value4][33].y)};
 
-                // rotate
-                float theta = ld->apertureMap[value1][value2][34].x;
-                AtPoint2 tmpPoint = {lens.x, lens.y};
-                lens.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
-                lens.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
+                // rotation
+                float interpolatedRotation = BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][34].x, ld->apertureMap[value3][value2][34].x, 
+                                                                              ld->apertureMap[value1][value4][34].x, ld->apertureMap[value3][value4][34].x);
+                AtPoint2 tmpPoint = lens;
+                lens.x = tmpPoint.x * std::cos(interpolatedRotation) - tmpPoint.y * std::sin(interpolatedRotation);
+                lens.y = tmpPoint.x * std::sin(interpolatedRotation) + tmpPoint.y * std::cos(interpolatedRotation);
 
-                // translate to new midpoint
-                lens += ld->apertureMap[value1][value2][32];
+
+                // translation
+                lens *= {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][32].x, ld->apertureMap[value3][value2][32].x, 
+                                                          ld->apertureMap[value1][value4][32].x, ld->apertureMap[value3][value4][32].x),
+                         BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][32].y, ld->apertureMap[value3][value2][32].y,
+                                                          ld->apertureMap[value1][value4][32].y, ld->apertureMap[value3][value4][32].y)};
+
+
 
                 direction.x = lens.x - origin.x;
                 direction.y = lens.y - origin.y;
@@ -2044,67 +2032,64 @@ camera_create_ray {
             output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
         } else {
+
             // using LUT for aperture sampling
-            std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator low, prev;
-            low = ld.apertureMap.lower_bound(output->origin.x);
-            float value1;
-
-
-
-            /*
-            // search for closest value, not just lower bound
-            if (low == ld.apertureMap.end()) {
-                // check for last value
-                --low;
-                value1 = low->first;
-            } else if (low == ld.apertureMap.begin()) {
-                // check for start value
-                value1 = low->first;
-            } else {
-                prev = low;
-                --prev;
-                if ((output->origin.x - prev->first) < (low->first - output->origin.x)){
-                    value1 = prev->first;
-                } else {
-                    value1 = low->first;
-                }
-            }
-
-            // find lowest bound y value
-            std::map<float, std::vector<AtPoint2>>::iterator low2, prev2;
-            low2 = low->second.lower_bound(output->origin.y);
-            float value2;
-
-            // search for closest value, not just lower bound
-            if (low2 == low->second.end()) {
-                // check for last value
-                --low2;
-                value2 = low2->first;
-            } else if (low2 == low->second.begin()) {
-                // check for start value
-                value2 = low2->first;
-            } else {
-                prev2 = low2;
-                --prev2;
-                if ((output->origin.y - prev2->first) < (low2->first - output->origin.y)){
-                    value2 = prev2->first;
-                } else {
-                    value2 = low2->first;
-                }
-            }
-            */
             
+            // lowest bound x value
+            std::map<float, std::map<float, std::vector<AtPoint2>>>::iterator low;
+            low = ld.apertureMap.lower_bound(output->origin.x);
+            float value1 = low->first;
+
+            // lowest bound y value
+            std::map<float, std::vector<AtPoint2>>::iterator low2;
+            low2 = low->second.lower_bound(output->origin.y);
+            float value2 = low2->first;
+
+            // go back 1 element in sorted map
+            --low;
+            float value3 = low->first;
+
+            --low2;
+            float value4 = low2->first;
+
+            // percentage of x inbetween two stored LUT entries
+            float xpercentage = (output->origin.x - value1) / (value3 - value1);
+            float ypercentage = (output->origin.y - value2) / (value4 - value2);
+
+
             // scale
-            lens *= ld.apertureMap[value1][value2][33];
+            lens *= {BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][33].x, ld.apertureMap[value3][value2][33].x, 
+                                                      ld.apertureMap[value1][value4][33].x, ld.apertureMap[value3][value4][33].x), 
+                     BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][33].y, ld.apertureMap[value3][value2][33].y,
+                                                      ld.apertureMap[value1][value4][33].y, ld.apertureMap[value3][value4][33].y)};
+
+            // rotation
+            float interpolatedRotation = BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][34].x, ld.apertureMap[value3][value2][34].x, 
+                                                                          ld.apertureMap[value1][value4][34].x, ld.apertureMap[value3][value4][34].x);
+            AtPoint2 tmpPoint = lens;
+            lens.x = tmpPoint.x * std::cos(interpolatedRotation) - tmpPoint.y * std::sin(interpolatedRotation);
+            lens.y = tmpPoint.x * std::sin(interpolatedRotation) + tmpPoint.y * std::cos(interpolatedRotation);
+
+
+            // translation
+            lens *= {BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][32].x, ld.apertureMap[value3][value2][32].x, 
+                                                      ld.apertureMap[value1][value4][32].x, ld.apertureMap[value3][value4][32].x),
+                     BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][32].y, ld.apertureMap[value3][value2][32].y,
+                                                      ld.apertureMap[value1][value4][32].y, ld.apertureMap[value3][value4][32].y)};
+            
+
+
+            // scale
+            //lens *= ld.apertureMap[value1][value2][33];
 
             // rotate
-            float theta = ld.apertureMap[value1][value2][34].x;
-            AtPoint2 tmpPoint = lens;
-            lens.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
-            lens.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
+            //float theta = ld.apertureMap[value1][value2][34].x;
+            //AtPoint2 tmpPoint = lens;
+            //lens.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
+            //lens.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
 
             // translate to new midpoint
-            lens += ld.apertureMap[value1][value2][32];
+            //lens += ld.apertureMap[value1][value2][32];
 
             output->dir.x = lens.x - output->origin.x;
             output->dir.y = lens.y - output->origin.y;

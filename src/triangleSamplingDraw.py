@@ -23,8 +23,8 @@ GREY = (150, 150, 150)
 DARKGREY = (120, 120, 120)
 
 
-"""dataFile = open('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic', 'r')"""
-dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/testApertures.zoic', 'r')
+dataFile = open('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic', 'r')
+"""dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/testApertures.zoic', 'r')"""
 POINTSLIST = []
 
 
@@ -90,5 +90,5 @@ print "PYTHON: ---- Anti-aliasing image"
 img.thumbnail(SIZE, Image.ANTIALIAS)
 
 print "PYTHON: Saving image"
-"""img.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_new.png','png')"""
-img.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling.png','png')
+img.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_new.png','png')
+"""img.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling.png','png')"""
