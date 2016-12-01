@@ -15,7 +15,6 @@
 // Make it work with other lens profiles
 // Find answer to: Should I scale the film plane along with the focal length?
 // LUT
-    // linear interpolation
     // account for sampling error
 // Thin lens optical vignetting LUT
 // Make visualisation for all parameters for website
@@ -1212,26 +1211,26 @@ void testAperturesSmarter(Lensdata *ld){
 
 
                 // scale
-                lens *= {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][33].x, ld->apertureMap[value3][value2][33].x, 
-                                                          ld->apertureMap[value1][value4][33].x, ld->apertureMap[value3][value4][33].x), 
-                         BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][33].y, ld->apertureMap[value3][value2][33].y,
-                                                          ld->apertureMap[value1][value4][33].y, ld->apertureMap[value3][value4][33].y)};
+                lens *= {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][33].x, ld->apertureMap[value3][value4][33].x, 
+                                                          ld->apertureMap[value1][value4][33].x, ld->apertureMap[value3][value2][33].x), 
+                         BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][33].y, ld->apertureMap[value3][value4][33].y,
+                                                          ld->apertureMap[value1][value4][33].y, ld->apertureMap[value3][value2][33].y)};
+                
+
 
                 // rotation
-                float interpolatedRotation = BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][34].x, ld->apertureMap[value3][value2][34].x, 
-                                                                              ld->apertureMap[value1][value4][34].x, ld->apertureMap[value3][value4][34].x);
+                float interpolatedRotation = BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][34].x, ld->apertureMap[value3][value4][34].x, 
+                                                                              ld->apertureMap[value1][value4][34].x, ld->apertureMap[value3][value2][34].x);
                 AtPoint2 tmpPoint = lens;
                 lens.x = tmpPoint.x * std::cos(interpolatedRotation) - tmpPoint.y * std::sin(interpolatedRotation);
                 lens.y = tmpPoint.x * std::sin(interpolatedRotation) + tmpPoint.y * std::cos(interpolatedRotation);
 
 
                 // translation
-                lens *= {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][32].x, ld->apertureMap[value3][value2][32].x, 
-                                                          ld->apertureMap[value1][value4][32].x, ld->apertureMap[value3][value4][32].x),
-                         BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][32].y, ld->apertureMap[value3][value2][32].y,
-                                                          ld->apertureMap[value1][value4][32].y, ld->apertureMap[value3][value4][32].y)};
-
-
+                lens += {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][32].x, ld->apertureMap[value3][value4][32].x, 
+                                                          ld->apertureMap[value1][value4][32].x, ld->apertureMap[value3][value2][32].x),
+                         BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][32].y, ld->apertureMap[value3][value4][32].y,
+                                                          ld->apertureMap[value1][value4][32].y, ld->apertureMap[value3][value2][32].y)};
 
                 direction.x = lens.x - origin.x;
                 direction.y = lens.y - origin.y;
@@ -2066,30 +2065,17 @@ camera_create_ray {
             // rotation
             float interpolatedRotation = BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][34].x, ld.apertureMap[value3][value2][34].x, 
                                                                           ld.apertureMap[value1][value4][34].x, ld.apertureMap[value3][value4][34].x);
+            
             AtPoint2 tmpPoint = lens;
             lens.x = tmpPoint.x * std::cos(interpolatedRotation) - tmpPoint.y * std::sin(interpolatedRotation);
             lens.y = tmpPoint.x * std::sin(interpolatedRotation) + tmpPoint.y * std::cos(interpolatedRotation);
 
-
             // translation
-            lens *= {BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][32].x, ld.apertureMap[value3][value2][32].x, 
+            lens += {BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][32].x, ld.apertureMap[value3][value2][32].x, 
                                                       ld.apertureMap[value1][value4][32].x, ld.apertureMap[value3][value4][32].x),
                      BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][32].y, ld.apertureMap[value3][value2][32].y,
                                                       ld.apertureMap[value1][value4][32].y, ld.apertureMap[value3][value4][32].y)};
             
-
-
-            // scale
-            //lens *= ld.apertureMap[value1][value2][33];
-
-            // rotate
-            //float theta = ld.apertureMap[value1][value2][34].x;
-            //AtPoint2 tmpPoint = lens;
-            //lens.x = tmpPoint.x * std::cos(theta) - tmpPoint.y * std::sin(theta);
-            //lens.y = tmpPoint.x * std::sin(theta) + tmpPoint.y * std::cos(theta);
-
-            // translate to new midpoint
-            //lens += ld.apertureMap[value1][value2][32];
 
             output->dir.x = lens.x - output->origin.x;
             output->dir.y = lens.y - output->origin.y;
