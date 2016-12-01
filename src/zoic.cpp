@@ -17,6 +17,7 @@
 // LUT
     // linear interpolation
     // account for sampling error
+// Thin lens optical vignetting LUT
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // Support lens files with extra information (abbe number, kind of glass)
@@ -1455,56 +1456,38 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSamp
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
 
-// camera tan fov?
-bool traceThinLens(AtPoint origin, float sx, float sy, float randomNumber1, float randomNumber2, ){
-    // create point on lens
-    AtPoint p = {sx * camera->tan_fov, input->sy * camera->tan_fov, 1.0};
 
-    AtVector dir;
-    // compute direction
-    dir = AiV3Normalize(p - origin);
-
-    // Initialize point on lens
-    AtPoint2 lens = {0.0, 0.0};
-
-    // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
-    concentricDiskSample(input->lensx, input->lensy, &lens);
-    
-    // scale new lens coordinates by the aperture radius
+/*
+bool traceThinLens(AtPoint origin, AtPoint2 lens, float sx, float sy, float tan_fov, float apertureRadius, float focalDistance, float opticalVignettingDistance, float opticalVignettingRadius){
+    AtPoint p = {sx * tan_fov, sy * tan_fov, 1.0};
+    AtVector dir = AiV3Normalize(p - origin);
     lens *= camera->apertureRadius;
 
-    // update arnold ray origin
     origin = {lens.x, lens.y, 0.0};
 
-    // Compute point on plane of focus, intersection on z axis
-    float intersection = std::abs(_focalDistance / dir.z);
+    float intersection = std::abs(focalDistance / dir.z);
     AtPoint focusPoint = dir * intersection;
 
-    // update arnold ray direction, normalize
     dir = AiV3Normalize(focusPoint - origin);
 
-    // Emperical optical vignetting (cat eye effect)
     if (_opticalVignettingDistance > 0.0f){
-        // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
         AtPoint opticalVignetPoint;
-        opticalVignetPoint = dir * _opticalVignettingDistance;
-
-        // re-center point
+        opticalVignetPoint = dir * opticalVignettingDistance;
         opticalVignetPoint -= origin;
 
-        // find hypotenuse of x, y points.
         float pointHypotenuse = std::sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
+        float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
 
-        // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
-        float virtualApertureTrueRadius = camera->apertureRadius * _opticalVignettingRadius;
-
-        // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
         if (ABS(pointHypotenuse) > virtualApertureTrueRadius){
             return false;
         }
     }
+
+    return true;
 }
 
+
+// still needs converting
 void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSamples, int boundsSamples, bool print){
     int samplingDirections = 32;
 
@@ -1693,6 +1676,7 @@ void thinlensLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSampl
 
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
+*/
 
 /*
 typedef long long int64;
@@ -2065,6 +2049,9 @@ camera_create_ray {
             low = ld.apertureMap.lower_bound(output->origin.x);
             float value1;
 
+
+
+            /*
             // search for closest value, not just lower bound
             if (low == ld.apertureMap.end()) {
                 // check for last value
@@ -2105,6 +2092,7 @@ camera_create_ray {
                     value2 = low2->first;
                 }
             }
+            */
             
             // scale
             lens *= ld.apertureMap[value1][value2][33];
