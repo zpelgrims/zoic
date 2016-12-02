@@ -10,6 +10,7 @@
 // Make it work with other lens profiles
 // Find answer to: Should I scale the film plane along with the focal length?
 // LUT: account for sampling error, fix strange rotation issue
+// Make bokeh sampling work with kolb
 // Thin lens optical vignetting LUT
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
@@ -1437,20 +1438,17 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSamp
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
 
-
-
+/*
 bool traceThinLens(AtPoint origin, AtVector dir, float apertureRadius, float opticalVignettingDistance, float opticalVignettingRadius){
-    if (opticalVignettingDistance > 0.0f){
-        AtPoint opticalVignetPoint;
-        opticalVignetPoint = dir * opticalVignettingDistance;
-        opticalVignetPoint -= origin;
+    AtPoint opticalVignetPoint;
+    opticalVignetPoint = dir * opticalVignettingDistance;
+    opticalVignetPoint -= origin;
 
-        float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
-        float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
+    float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
+    float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
 
-        if (ABS(pointHypotenuse) > virtualApertureTrueRadius){
-            return false;
-        }
+    if (ABS(pointHypotenuse) > virtualApertureTrueRadius){
+        return false;
     }
 
     return true;
@@ -1541,9 +1539,6 @@ void thinlensLUT(int filmSamplesX, int filmSamplesY, int lensSamples, int bounds
                                  static_cast<float>((minBounds.y + maxBounds.y) * 0.5)};
 
 
-            //STILL NEED TO CONVERT EVERYTHING BELOW
-
-
             // find edges of shape, so no samples are wasted (bounding box would be very wasteful in many cases)
             for(int sd = 0; sd < samplingDirections; sd++){
                 float theta = (samplingDirectionSpacing * static_cast<float>(sd)) * AI_DTOR; // degrees to radians
@@ -1559,18 +1554,17 @@ void thinlensLUT(int filmSamplesX, int filmSamplesY, int lensSamples, int bounds
 
                     rotatedPoint += centroid;
 
-                    AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, 
-                                                rotatedPoint.y - sampleOrigin.y, 
-                                                static_cast<float>(- ld->lensThickness[0])};
+                    // what do i put in z??
+                    AtVector sampleDirection = rotatedPoint - sampleDirection;
 
-                    if (!traceThinLens()){
+                    if (!traceThinLens(sampleOrigin, sampleDirection, apertureRadius, opticalVignettingDistance, opticalVignettingRadius)){
                         maxAperturesPerDirection.push_back(rotatedPoint); // exact coordinates on first lens element
                         break;
                     }
                 }
 
                 // if all rays get through, append the last tried point
-                if (traceThinLens()){
+                if (traceThinLens(sampleOrigin, sampleDirection, apertureRadius, opticalVignettingDistance, opticalVignettingRadius)){
                     maxAperturesPerDirection.push_back(rotatedPoint);
                 }
 
@@ -1615,12 +1609,10 @@ void thinlensLUT(int filmSamplesX, int filmSamplesY, int lensSamples, int bounds
                 // translate point
                 rotatedPoint += midPoint;
 
-                AtVector sampleDirection = {rotatedPoint.x - sampleOrigin.x, 
-                                            rotatedPoint.y - sampleOrigin.y, 
-                                            static_cast<float>(- ld->lensThickness[0])};
+                AtVector sampleDirection = rotatedPoint - sampleDirection;
 
                 // find scale
-                if (!traceThinLens()){
+                if (!traceThinLens(sampleOrigin, sampleDirection, apertureRadius, opticalVignettingDistance, opticalVignettingRadius)){
                     maxAperturesPerDirection.push_back({AiV2Dist(rotatedPoint, midPoint), AiV2Dist(outerPoint2, outerPoint1) * 0.5f}); // distance
                     break;
                 }
@@ -1635,7 +1627,7 @@ void thinlensLUT(int filmSamplesX, int filmSamplesY, int lensSamples, int bounds
 
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
-
+*/
 
 
 /*
@@ -1670,19 +1662,19 @@ uint64 GetTimeMs64(){
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
-    AiParameterFLT("focalLength", 10.0); // distance between sensor and lens in cm
+    AiParameterFLT("focalLength", 10.0);
     AiParameterFLT("fStop", 1.4);
-    AiParameterFLT("focalDistance", 100.0); // distance from lens to focal point
+    AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
-    AiParameterStr("bokehPath", ""); // bokeh shape image location
+    AiParameterStr("bokehPath", "");
     AiParameterBOOL("kolb", true);
-    AiParameterStr("lensDataPath", ""); // lens data file location
+    AiParameterStr("lensDataPath", "");
     AiParameterBOOL("kolbSamplingMethod", true);
     AiParameterBOOL("useDof", true);
-    AiParameterFLT("opticalVignettingDistance", 0.0); // distance of the opticalVignetting virtual aperture
-    AiParameterFLT("opticalVignettingRadius", 0.0); // 1.0 - .. range float, to multiply with the actual aperture radius
+    AiParameterFLT("opticalVignettingDistance", 20.0); // distance of the opticalVignetting virtual aperture
+    AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
     AiParameterFLT("highlightWidth", 0.2);
-    AiParameterFLT("highlightStrength", 10.0);
+    AiParameterFLT("highlightStrength", 0.0);
     AiParameterFLT("exposureControl", 0.0);
 }
  
@@ -1705,9 +1697,11 @@ node_update {
  
     DRAW_ONLY({
         // create file to transfer data to python drawing module
-        // myfile.open ("/Volumes/ZENO_2016/projects/zoic/src/draw.zoic");
-        myfile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.zoic", std::ofstream::out | std::ofstream::trunc);
+        MACBOOK_ONLY(myfile.open("/Volumes/ZENO_2016/projects/zoic/src/draw.zoic");)
+        WORK_ONLY(myfile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.zoic", std::ofstream::out | std::ofstream::trunc);)
     })
+
+    ld.apertureMap.clear();
  
     // make probability functions of the bokeh image
     if (_useImage == true){
@@ -1724,7 +1718,7 @@ node_update {
         DRAW_ONLY({
             myfile << "LENSMODEL{THINLENS}";
             myfile << "\n";
-            myfile << "RAYS{";
+            myfile << "RAYS{" ;
         })
  
         //theta = 2arctan*(sensorSize/focalLength)
@@ -1733,6 +1727,14 @@ node_update {
  
         // apertureRadius = focalLength / 2*fStop
         camera->apertureRadius = (_focalLength) / (2.0f * _fStop);
+
+
+        /*
+        if (opticalVignettingDistance > 0.0f){ 
+            thinlensLUT(32, 32, 128, 1024, camera->apertureRadius, camera->tan_fov, _focalDistance, _opticalVignettingDistance, _opticalVignettingRadius);
+        }
+        */
+
     }
  
     if (_kolb){
@@ -1860,8 +1862,8 @@ node_finish {
         myfile.close();
  
         // execute python drawing
-        // std::string filename = "/Volumes/ZENO_2016/projects/zoic/src/draw.py";
-        std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.py";
+        MACBOOK_ONLY(std::string filename = "/Volumes/ZENO_2016/projects/zoic/src/draw.py";)
+        WORK_ONLY(std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.py";)
         std::string command = "python ";
         command += filename;
         system(command.c_str());

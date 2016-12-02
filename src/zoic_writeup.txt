@@ -8,7 +8,7 @@ v2.0:
 	- Smarter sampling approach for thin-lens model when using optical vignetting
 
 
-ZOIC 2.0 now provides two different lens models, a new raytraced model which reads in lens description files often found in optics literature and lens patents, and the classical thin lens approximation. These are two completely different ways of calculating the camera rays, and therefore will have different documentation. Both models serve their own purposes, but in general the new raytraced model should be preferred at all times where photorealism is required. It comes with a slight increase in camera ray creation times , which scales linearly with the amount of lens elements in the lens description file since the rays are traced through the lens system.
+ZOIC 2.0 provides two different lens models, a new raytraced model which reads in lens description files often found in optics literature and lens patents, and the classical thin lens approximation. These are two completely different ways of calculating the camera rays, and therefore will have different documentation. Both models serve their own purposes, but in general the new raytraced model should be preferred at all times where photorealism is required. It comes with a slight increase in camera ray creation times, which scales linearly with the amount of lens elements in the lens description file since the rays are traced through the lens system.
 
 
 RAYTRACED CAMERA MODEL:
@@ -24,7 +24,7 @@ This raytraced model, based on the paper "A Realistic Camera Model For Computer 
 ### IMAGES OF THIN-LENS TO RAYTRACED COMPARISON ###
 
 
-My implementation of this paper is slightly different from other implementations in respect to the sampling approach. Instead of opting for rejection-sampling, where rays get killed when they either hit the aperture or don´t reach the exit pupil, ZOIC pre-calculates a lookup table which finds and stores the ideal aperture at certain points on the film plane and then bilinearly interpolates between those values. This is more efficient since far less rays are created and then killed halfway through the tracing process. Since practically all rays make it through, you won´t find darkening around the edges of the image (I am reluctant to use the word vignetting since there still is optical vignetting).
+My implementation of this paper is slightly different from other implementations in respect to the sampling approach. Instead of opting for rejection-sampling, where rays get killed when they either hit the aperture or don´t reach the exit pupil, ZOIC pre-calculates a lookup table which finds and stores the ideal aperture at certain points on the film plane and then bilinearly interpolates between those values. This is more efficient since far less rays are created and then killed halfway through the tracing process. Since practically all rays make it through, you won´t find darkening around the edges of the image (I am reluctant to use the word vignetting since there still is optical vignetting present).
 
 I went this route since I think the in-render vignetting is an absolute pain in the ass, as it introduces extra, unwanted noise. Since it´s just a weighting on the ray color, this can be recreated exactly in a compositing package with much more control.
 
@@ -32,7 +32,7 @@ I went this route since I think the in-render vignetting is an absolute pain in 
 ### picture of comparison of sampling approaches ###
 
 
-The lens model doesn´t work without tabular lens description files, which unfortunately are rather sparsely distributed on the internet. I did some digging into optics literature and wrote some description files myself. ZOIC accepts both lens descriptions with 4 columns:
+The lens model requires tabular lens description files, which unfortunately are rather sparsely distributed around the internet. I did some digging into optics literature and wrote some description files myself. ZOIC accepts both lens descriptions with 4 columns:
 
 	[RADIUS OF CURVATURE | THICKNESS | IOR | APERTURE]
 
@@ -50,3 +50,10 @@ Some lenses:
 - xxx
 - xxx
 - xxx
+
+
+
+THIN-LENS APPROXIMATION:
+
+This lens model is very similar to the camera system that ships with Arnold, but extends it in a few ways. There are options for both image-based bokeh shapes and emperical optical vignetting.
+
