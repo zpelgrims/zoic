@@ -8,11 +8,6 @@
  
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
-// Find answer to: Should I scale the film plane along with the focal length?
-// LUT: what to do with very small apertures, or if it can´t get through at all?
-// LUT: account for sampling error, fix strange rotation issue, improve lut accuracy for very small apertures....
-// LUT: not sure why there is perlin-noise like variation in alpha, is related to bilinear interpolation, i think this is caused by inaccuracies in certain areas
-    // maybe some nan values somewhere?
 // Make bokeh sampling work with kolb
 // Thin lens optical vignetting LUT
 // Make visualisation for all parameters for website
@@ -71,11 +66,6 @@ std::ofstream myfile;
 std::ofstream testAperturesFile;
 bool draw = false;
 int counter = 0;
-
-std::random_device rd;
-std::mt19937 gen(rd());
-std::uniform_real_distribution<> dis(0.0, 1.0);
-
  
 // Arnold methods
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
@@ -543,7 +533,21 @@ struct Lensdata{
     std::map<float, std::map<float, std::vector<AtPoint2>>> apertureMap;
 } ld;
  
+
+// xorshift random number generator
+uint32_t xor128(void) {
+    static uint32_t x = 123456789;
+    static uint32_t y = 362436069;
+    static uint32_t z = 521288629;
+    static uint32_t w = 88675123;
+    uint32_t t;
+
+    t = x ^ (x << 11);
+    x = y; y = z; z = w;
+    return w = (w ^ (w >> 19) ^ t ^ (t >> 8));
+} 
  
+
 // Improved concentric mapping code by Dave Cline [peter shirley´s blog]
 inline void concentricDiskSample(float ox, float oy, AtPoint2 *lens) {
     float phi;
@@ -1078,35 +1082,6 @@ void writeToFile(Lensdata *ld){
 }
 
 
-/*
-typedef long long int64;
-typedef unsigned long long uint64;
-// Returns the amount of milliseconds elapsed since the UNIX epoch. Works on both windows and linux. 
-uint64 GetTimeMs64(){
-    #ifdef _WIN32
-        // Windows
-        FILETIME ft;
-        LARGE_INTEGER li;
-        GetSystemTimeAsFileTime(&ft);
-        li.LowPart = ft.dwLowDateTime;
-        li.HighPart = ft.dwHighDateTime;
-        uint64 ret = li.QuadPart;
-        ret -= 116444736000000000LL;
-        ret /= 10000;
-        return ret;
-    #else
-        // Linux
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        uint64 ret = tv.tv_usec;
-        ret /= 1000;
-        ret += (tv.tv_sec * 1000);
-        return ret;
-    #endif
-}
-*/
-
-
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
@@ -1411,11 +1386,10 @@ camera_create_ray {
  
         // now looking down -Z
         output->dir.z *= -1.0;
-   }
+    }
  
  
     if(_kolb){
-
         // not sure if this is correct, i´d like to use the diagonal since that seems to be the standard
         output->origin.x = input->sx * (_sensorWidth * 0.5);
         output->origin.y = input->sy * (_sensorWidth * 0.5);
@@ -1433,44 +1407,42 @@ camera_create_ray {
         AtPoint2 lens = {0.0, 0.0};
 
         if (_useImage == false){
-            //concentricDiskSample(input->lensx, input->lensy, &lens);
+            concentricDiskSample(input->lensx, input->lensy, &lens);
         } else {
             camera->image.bokehSample(input->lensx, input->lensy, &lens);
         }
-        
-        // pick between different sampling methods (change to enum)
-        // sampling first element is "ground truth" but wastes a lot of rays
-        if (_kolbSamplingMethod == false){ // using noisy ground truth
-
-            // not sure if all the rays are actually hitting the first lens element here, modify drawing function and check?
-            output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-            output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-            output->dir.z = - ld.lensThickness[0];
-
-        } else {
 			
-			output->origin.x = input->sx * (_sensorWidth * 0.5);
+		output->origin.x = input->sx * (_sensorWidth * 0.5);
+        output->origin.y = input->sy * (_sensorWidth * 0.5);
+        output->origin.z = ld.originShift;
+
+        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
+        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
+        output->dir.z = -ld.lensThickness[0];
+
+        int tries = 0;
+
+        while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 50){
+	        output->origin.x = input->sx * (_sensorWidth * 0.5);
 	        output->origin.y = input->sy * (_sensorWidth * 0.5);
 	        output->origin.z = ld.originShift;
-
-	        concentricDiskSample(input->lensx, input->lensy, &lens);
+	 
+        	concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
 
 	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
 	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
 	        output->dir.z = - ld.lensThickness[0];
 
-	        while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw)){
-		        output->origin.x = input->sx * (_sensorWidth * 0.5);
-		        output->origin.y = input->sy * (_sensorWidth * 0.5);
-		        output->origin.z = ld.originShift;
-		 
-	        	concentricDiskSample(dis(gen), dis(gen), &lens);
-
-		        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-		        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-		        output->dir.z = - ld.lensThickness[0];
-	        }
+	        ++tries;
         }
+
+        if(tries == 50){
+        	output->weight = 0.0f;
+        	++ld.vignettedRays;
+        } else {
+        	++ld.succesRays;
+        }
+        
 
         // looks cleaner in 2d when rays are aligned on axis
         DRAW_ONLY(output->dir.x = 0.0;)
