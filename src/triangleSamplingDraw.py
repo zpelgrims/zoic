@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageFont, ImageChops
+from PIL import Image, ImageDraw
 import math
 import re
  
@@ -159,12 +159,10 @@ img_ss_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling
 
 
 # ----------------------------- COMBINED SAMPLING DRAWING -------------------------------------
-img_combined_bg = img_bg.copy()
+img_combined_bg_mask = Image.new("L", (SIZE[0] * AAS, SIZE[1] * AAS), 120)
+img_combined_bg_mask.thumbnail(SIZE, Image.ANTIALIAS)
 
-img_combined_bg.paste(img_ss, (0, 0), img_ss)
-
-img_combined_bg.paste(img_gt, (0, 0), img_gt)
-
+img_combined_bg = Image.composite(img_ss_bg, img_gt_bg, img_combined_bg_mask)
 
 print "PYTHON: ---- Anti-aliasing image"
 img_combined_bg.thumbnail(SIZE, Image.ANTIALIAS)

@@ -9,8 +9,7 @@
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
 // Find answer to: Should I scale the film plane along with the focal length?
-// LUT: unify truth and new sampling method into one drawing for comparison
-    // draw them seperately and combine them in another image using pillow
+// LUT: what to do with very small apertures, or if it can´t get through at all?
 // LUT: account for sampling error, fix strange rotation issue, improve lut accuracy for very small apertures....
 // LUT: not sure why there is perlin-noise like variation in alpha, is related to bilinear interpolation, i think this is caused by inaccuracies in certain areas
     // maybe some nan values somewhere?
@@ -1669,8 +1668,8 @@ uint64 GetTimeMs64(){
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
-    AiParameterFLT("focalLength", 2.2);
-    AiParameterFLT("fStop", 1.4);
+    AiParameterFLT("focalLength", 10.0);
+    AiParameterFLT("fStop", 2.4);
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
