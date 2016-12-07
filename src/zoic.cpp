@@ -8,7 +8,7 @@
  
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
-// Thin lens optical vignetting recursive tracing
+// Thin lens optical vignetting recursive tracing make work
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // Support lens files with extra information (abbe number, kind of glass)
@@ -1038,6 +1038,35 @@ void writeToFile(Lensdata *ld){
 }
 
 
+// Emperical optical vignetting (cat eye effect)
+bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertureRadius, float opticalVignettingRadius, float opticalVignettingDistance){
+
+	// because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
+    AtPoint opticalVignetPoint;
+    opticalVignetPoint = direction * opticalVignettingDistance;
+
+    // re-center point
+    opticalVignetPoint -= origin;
+
+    // find hypotenuse of x, y points.
+    float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
+
+    // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
+    float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
+
+    // return false if statement no true
+    return !(ABS(pointHypotenuse) > virtualApertureTrueRadius);
+
+    /*
+    // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
+    // adding weight to opposite edges to get nice rim on the highlights
+    else if (ABS(pointHypotenuse) < virtualApertureTrueRadius && ABS(pointHypotenuse) > (virtualApertureTrueRadius - _highlightWidth)){
+        output->weight *= _highlightStrength * (1.0 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) * std::sqrt(SQR(input->sx) + SQR(input->sy));
+    }
+    */
+}
+
+
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
@@ -1046,11 +1075,11 @@ node_parameters {
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
-    AiParameterBOOL("kolb", true);
+    AiParameterBOOL("kolb", false);
     AiParameterStr("lensDataPath", "");
     AiParameterBOOL("kolbSamplingMethod", true);
     AiParameterBOOL("useDof", true);
-    AiParameterFLT("opticalVignettingDistance", 20.0); // distance of the opticalVignetting virtual aperture
+    AiParameterFLT("opticalVignettingDistance", 70.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
     AiParameterFLT("highlightWidth", 0.2);
     AiParameterFLT("highlightStrength", 0.0);
@@ -1274,55 +1303,64 @@ camera_create_ray {
  
         // DOF CALCULATIONS
         if (_useDof == true) {
-            // Initialize point on lens
-            AtPoint2 lens = {0.0, 0.0};
- 
-            // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
+
+        	bool succes = false;
+        	int tries = 0;
+
+        	// Initialize point on lens
+	        AtPoint2 lens = {0.0, 0.0};
+
+	        // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
             if (_useImage == false){
                 concentricDiskSample(input->lensx, input->lensy, &lens);
             } else { // sample bokeh image
                 camera->image.bokehSample(input->lensx, input->lensy, &lens);
             }
- 
-            // scale new lens coordinates by the aperture radius
-            lens *= camera->apertureRadius;
- 
-            // update arnold ray origin
-            output->origin = {lens.x, lens.y, 0.0};
- 
-            // Compute point on plane of focus, intersection on z axis
-            float intersection = std::abs(_focalDistance / output->dir.z);
-            AtPoint focusPoint = output->dir * intersection;
- 
-            // update arnold ray direction, normalize
-            output->dir = AiV3Normalize(focusPoint - output->origin);
- 
-            // Emperical optical vignetting (cat eye effect)
+
             if (_opticalVignettingDistance > 0.0f){
-                // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
-                AtPoint opticalVignetPoint;
-                opticalVignetPoint = output->dir * _opticalVignettingDistance;
- 
-                // re-center point
-                opticalVignetPoint -= output->origin;
- 
-                // find hypotenuse of x, y points.
-                float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
- 
-                // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
-                float virtualApertureTrueRadius = camera->apertureRadius * _opticalVignettingRadius;
- 
-                // set ray weight to 0, there is an optimisation inside Arnold that doesn't send rays if they will return black anyway.
-                if (ABS(pointHypotenuse) > virtualApertureTrueRadius){
-                    output->weight = 0.0f;
-                }
- 
-                // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
-                // adding weight to opposite edges to get nice rim on the highlights
-                else if (ABS(pointHypotenuse) < virtualApertureTrueRadius && ABS(pointHypotenuse) > (virtualApertureTrueRadius - _highlightWidth)){
-                    output->weight *= _highlightStrength * (1.0 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) * std::sqrt(SQR(input->sx) + SQR(input->sy));
-                }
-            }
+	        	while(!succes && tries <= 50){
+	        		concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+		            
+		            // scale new lens coordinates by the aperture radius
+		            lens *= camera->apertureRadius;
+		 
+		            // update arnold ray origin
+		            output->origin = {lens.x, lens.y, 0.0};
+		 
+		            // Compute point on plane of focus, intersection on z axis
+		            float intersection = std::abs(_focalDistance / output->dir.z);
+		            AtPoint focusPoint = output->dir * intersection;
+		 
+		            // update arnold ray direction, normalize
+		            output->dir = AiV3Normalize(focusPoint - output->origin);
+		            
+	            	if(empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance)){
+	            		succes = true;
+	            	}
+		            
+		            ++tries;
+	        	}
+        	} else { // standard thin lens model
+        		// scale new lens coordinates by the aperture radius
+	            lens *= camera->apertureRadius;
+	 
+	            // update arnold ray origin
+	            output->origin = {lens.x, lens.y, 0.0};
+	 
+	            // Compute point on plane of focus, intersection on z axis
+	            float intersection = std::abs(_focalDistance / output->dir.z);
+	            AtPoint focusPoint = output->dir * intersection;
+	 
+	            // update arnold ray direction, normalize
+	            output->dir = AiV3Normalize(focusPoint - output->origin);
+        	}
+
+        	if(tries == 50){
+	        	output->weight = 0.0f;
+	        	++ld.vignettedRays;
+	        } else {
+	        	++ld.succesRays;
+	        }  
         }
  
         DRAW_ONLY({
