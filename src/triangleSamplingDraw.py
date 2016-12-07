@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageChops
 import math
 import re
  
@@ -13,7 +13,6 @@ TRANSLATEY = (SIZE[1] * AAS) / 2
 
 SCALE = 70
 
-
 WHITE = (255, 255, 255)
 RED = (int(0.9 * 255), int(0.4 * 255), int(0.5 * 255))
 BLUE = (36, 71, 91)
@@ -23,60 +22,66 @@ GREY = (150, 150, 150)
 DARKGREY = (120, 120, 120)
 
 
+
+
+
+# ----------------------------------- READ IN DATA -----------------------------------------
 dataFile = open('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic', 'r')
 """dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/testApertures.zoic', 'r')"""
-POINTSLIST = []
 
+GTPOINTSLIST = []
+SSPOINTSLIST = []
 
 i = 0
-while i < 49:
+while i < 99:
 	POINTS = dataFile.readline()
-	POINTSLIST.append([float(n) for n in POINTS.split()])
+	if POINTS.startswith('G'):
+		GTPOINTSSTRING = POINTS[3:]
+		GTPOINTSLIST.append([float(n) for n in GTPOINTSSTRING.split()])
+	else:
+		SSPOINTSSTRING = POINTS[3:]
+		SSPOINTSLIST.append([float(n) for n in SSPOINTSSTRING.split()])
 	i = i + 1
 
 
-# IMAGE WITH ACTUAL RAYS
-img = Image.new('RGB', (SIZE[0] * AAS, SIZE[1] * AAS), BLUE)
-d = ImageDraw.Draw(img)
 
+# ----------------------------- BG DRAWING -------------------------------------
+img_bg = Image.new('RGBA', (SIZE[0] * AAS, SIZE[1] * AAS), BLUE)
+d_bg = ImageDraw.Draw(img_bg)
 
 i = 0
 posx = -12
 posy = -12
 
+while i < 49:
+	d_bg.ellipse([((-1.5 + posx) * AAS * SCALE + TRANSLATEX), ((-1.5 + posy) * AAS * SCALE + TRANSLATEY), ((1.5 + posx) * AAS * SCALE + TRANSLATEX), ((1.5 + posy) * AAS * SCALE + TRANSLATEY)], DARKGREY, DARKGREY)
+	posy = posy + 4
+	i += 1
 
-while i < len(POINTSLIST):
+	if i % 7 == 0:
+		posx = posx + 4
+		posy = -12
 
-	print "DRAW PERCENTAGE: ", int(float(i) / float(len(POINTSLIST)) * 100.0)
+
+
+# ----------------------------- GROUND TRUTH DRAWING -------------------------------------
+img_gt = Image.new('RGBA', (SIZE[0] * AAS, SIZE[1] * AAS))
+img_gt_bg = img_bg.copy()
+d_gt = ImageDraw.Draw(img_gt)
+
+i = 0
+posx = -12
+posy = -12
+
+while i < len(GTPOINTSLIST):
+
+	print "GT DRAW PERCENTAGE: ", int(float(i) / float(len(SSPOINTSLIST)) * 100.0)
 
 	j = 0
-
-	d.ellipse([((-1.5 + posx) * AAS * SCALE + TRANSLATEX), ((-1.5 + posy) * AAS * SCALE + TRANSLATEY), ((1.5 + posx) * AAS * SCALE + TRANSLATEX), ((1.5 + posy) * AAS * SCALE + TRANSLATEY)], DARKGREY, DARKGREY)
-
 	
-	while j < len(POINTSLIST[i]):
-		#points
-		d.ellipse([((POINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) - 5, ((POINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) - 5, ((POINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) + 5, ((POINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) + 5], ORANGE,ORANGE)
-		#centroids
-		# d.ellipse([((POINTSLIST[i][j+2] + posx) * AAS * SCALE + TRANSLATEX) - 20, ((POINTSLIST[i][j+3] + posy) * AAS * SCALE + TRANSLATEY) - 20, ((POINTSLIST[i][j+2] + posx) * AAS * SCALE + TRANSLATEX) + 20, ((POINTSLIST[i][j+3] + posy) * AAS * SCALE + TRANSLATEY) + 20], WHITE,WHITE)
-		# vertices
-		#d.ellipse([((POINTSLIST[i][j+4] + posx) * AAS * SCALE + TRANSLATEX) - 10, ((POINTSLIST[i][j+5] + posy) * AAS * SCALE + TRANSLATEY) - 10, ((POINTSLIST[i][j+4] + posx) * AAS * SCALE + TRANSLATEX) + 10, ((POINTSLIST[i][j+5] + posy) * AAS * SCALE + TRANSLATEY) + 10], WHITE,WHITE)
-		#d.ellipse([((POINTSLIST[i][j+6] + posx) * AAS * SCALE + TRANSLATEX) - 10, ((POINTSLIST[i][j+7] + posy) * AAS * SCALE + TRANSLATEY) - 10, ((POINTSLIST[i][j+6] + posx) * AAS * SCALE + TRANSLATEX) + 10, ((POINTSLIST[i][j+7] + posy) * AAS * SCALE + TRANSLATEY) + 10], WHITE,WHITE)
-
-		#d.rectangle([((POINTSLIST[i][j+8] + posx) * AAS * SCALE + TRANSLATEX), ((POINTSLIST[i][j+9] + posy) * AAS * SCALE + TRANSLATEY), ((POINTSLIST[i][j+10] + posx) * AAS * SCALE + TRANSLATEX), ((POINTSLIST[i][j+11] + posy) * AAS * SCALE + TRANSLATEY)], 0, WHITE)
-		#j += 12
-
+	while j < len(GTPOINTSLIST[i]):
+		d_gt.ellipse([((GTPOINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) - 5, ((GTPOINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) - 5, ((GTPOINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) + 5, ((GTPOINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) + 5], ORANGE, ORANGE)
 		j+=2
-
-
-	""" ground truth drawing
-	while j < len(POINTSLIST[i]):
-		#points
-		d.ellipse([((POINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) - 5, ((POINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) - 5, ((POINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) + 5, ((POINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) + 5], ORANGE,ORANGE)
-		j += 2
-	"""
-
-
 
 	posy = posy + 4
 	i += 1
@@ -86,9 +91,84 @@ while i < len(POINTSLIST):
 		posy = -12
 
 
+img_gt_bg.paste(img_gt, (0, 0), img_gt)
+
+
 print "PYTHON: ---- Anti-aliasing image"
-img.thumbnail(SIZE, Image.ANTIALIAS)
+img_gt_bg.thumbnail(SIZE, Image.ANTIALIAS)
 
 print "PYTHON: Saving image"
-img.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_new.png','png')
-"""img.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling.png','png')"""
+img_gt_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_GT.png','png')
+"""img_gt_bg.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling_GT.png','png')"""
+
+
+
+
+
+
+# ----------------------------- SMART SAMPLING DRAWING -------------------------------------
+img_ss = Image.new('RGBA', (SIZE[0] * AAS, SIZE[1] * AAS))
+d_ss = ImageDraw.Draw(img_ss)
+img_ss_bg = img_bg.copy()
+
+
+i = 0
+posx = -12
+posy = -12
+
+while i < len(SSPOINTSLIST):
+
+	print "SS DRAW PERCENTAGE: ", int(float(i) / float(len(SSPOINTSLIST)) * 100.0)
+
+	j = 0
+	
+	while j < len(SSPOINTSLIST[i]):
+		#points
+		d_ss.ellipse([((SSPOINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) - 5, ((SSPOINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) - 5, ((SSPOINTSLIST[i][j] + posx) * AAS * SCALE + TRANSLATEX) + 5, ((SSPOINTSLIST[i][j+1] + posy) * AAS * SCALE + TRANSLATEY) + 5], WHITE, WHITE)
+		#centroids
+		# d_ss.ellipse([((POINTSLIST[i][j+2] + posx) * AAS * SCALE + TRANSLATEX) - 20, ((POINTSLIST[i][j+3] + posy) * AAS * SCALE + TRANSLATEY) - 20, ((POINTSLIST[i][j+2] + posx) * AAS * SCALE + TRANSLATEX) + 20, ((POINTSLIST[i][j+3] + posy) * AAS * SCALE + TRANSLATEY) + 20], WHITE,WHITE)
+		# vertices
+		#d_ss.ellipse([((POINTSLIST[i][j+4] + posx) * AAS * SCALE + TRANSLATEX) - 10, ((POINTSLIST[i][j+5] + posy) * AAS * SCALE + TRANSLATEY) - 10, ((POINTSLIST[i][j+4] + posx) * AAS * SCALE + TRANSLATEX) + 10, ((POINTSLIST[i][j+5] + posy) * AAS * SCALE + TRANSLATEY) + 10], WHITE,WHITE)
+		#d_ss.ellipse([((POINTSLIST[i][j+6] + posx) * AAS * SCALE + TRANSLATEX) - 10, ((POINTSLIST[i][j+7] + posy) * AAS * SCALE + TRANSLATEY) - 10, ((POINTSLIST[i][j+6] + posx) * AAS * SCALE + TRANSLATEX) + 10, ((POINTSLIST[i][j+7] + posy) * AAS * SCALE + TRANSLATEY) + 10], WHITE,WHITE)
+
+		#d_ss.rectangle([((POINTSLIST[i][j+8] + posx) * AAS * SCALE + TRANSLATEX), ((POINTSLIST[i][j+9] + posy) * AAS * SCALE + TRANSLATEY), ((POINTSLIST[i][j+10] + posx) * AAS * SCALE + TRANSLATEX), ((POINTSLIST[i][j+11] + posy) * AAS * SCALE + TRANSLATEY)], 0, WHITE)
+		#j += 12
+
+		j+=2
+
+	posy = posy + 4
+	i += 1
+
+	if i % 7 == 0:
+		posx = posx + 4
+		posy = -12
+
+
+
+img_ss_bg.paste(img_ss, (0, 0), img_ss)
+
+print "PYTHON: ---- Anti-aliasing image"
+img_ss_bg.thumbnail(SIZE, Image.ANTIALIAS)
+
+print "PYTHON: Saving image"
+img_ss_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_SS.png','png')
+"""img_ss_bg.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling_SS.png','png')"""
+
+
+
+
+
+# ----------------------------- COMBINED SAMPLING DRAWING -------------------------------------
+img_combined_bg = img_bg.copy()
+
+img_combined_bg.paste(img_ss, (0, 0), img_ss)
+
+img_combined_bg.paste(img_gt, (0, 0), img_gt)
+
+
+print "PYTHON: ---- Anti-aliasing image"
+img_combined_bg.thumbnail(SIZE, Image.ANTIALIAS)
+
+print "PYTHON: Saving image"
+img_combined_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_COMPARISON.png','png')
+"""img_combined_bg.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling_COMPARISON.png','png')"""

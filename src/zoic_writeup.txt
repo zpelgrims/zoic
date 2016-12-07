@@ -8,7 +8,7 @@ v2.0:
 	- Smarter sampling approach for thin-lens model when using optical vignetting
 
 
-ZOIC 2.0 provides two different lens models, a new raytraced model which reads in lens description files often found in optics literature and lens patents, and the classical thin lens approximation. These are two completely different ways of calculating the camera rays, and therefore will have different documentation. Both models serve their own purposes, but in general the new raytraced model should be preferred at all times where photorealism is required. It comes with a slight increase in camera ray creation times, which scales linearly with the amount of lens elements in the lens description file since the rays are traced through the lens system.
+ZOIC 2.0 provides two different lens models, a new raytraced model which reads in lens description files often found in optics literature and lens patents, and the classical thin lens approximation. These are two completely different ways of calculating the camera rays and therefore have different documentation. Both models serve their own purposes, but in general the new raytraced model should be preferred at all times where photorealism is required. It comes with a slight increase in camera ray creation times, which scales linearly with the amount of lens elements in the lens description file since the rays are traced through the lens system.
 
 
 RAYTRACED CAMERA MODEL:
@@ -32,13 +32,20 @@ I went this route since I think the in-render vignetting is an absolute pain in 
 ### picture of comparison of sampling approaches ###
 
 
-The lens model requires tabular lens description files, which unfortunately are rather sparsely distributed around the internet. I did some digging into optics literature and wrote some description files myself. ZOIC accepts both lens descriptions with 4 columns:
+The lens model requires tabular lens description files, which unfortunately are rather sparsely distributed around the internet. I did some digging into optics literature and wrote some description files myself from the data I found. ZOIC accepts both lens descriptions with 4 or 7 columns:
+	
+	...
+	# lines starting with hash are ignored
+	# seperation between numbers can be tab, space or comma
+	# the order of elements needs to be in the following sequence
 
-	[RADIUS OF CURVATURE | THICKNESS | IOR | APERTURE]
+	RADIUS OF CURVATURE, THICKNESS, IOR, APERTURE
+	
+	or
 
-.. or 7 columns (this is for future features):
+	RADIUS OF CURVATURE, THICKNESS, MATERIAL, IOR, V-NUMBER, APERTURE
 
-	[RADIUS OF CURVATURE | THICKNESS | MATERIAL | IOR | V-NUMBER | APERTURE]
+
 
 
 Some lenses:

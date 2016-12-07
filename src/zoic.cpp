@@ -7,9 +7,13 @@
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
  
 // TODO
-// Make it work with other lens profiles
+// Make it work with other lens profiles, test fisheye drawing
 // Find answer to: Should I scale the film plane along with the focal length?
-// LUT: account for sampling error, fix strange rotation issue
+// LUT: unify truth and new sampling method into one drawing for comparison
+    // draw them seperately and combine them in another image using pillow
+// LUT: account for sampling error, fix strange rotation issue, improve lut accuracy for very small apertures....
+// LUT: not sure why there is perlin-noise like variation in alpha, is related to bilinear interpolation, i think this is caused by inaccuracies in certain areas
+    // maybe some nan values somewhere?
 // Make bokeh sampling work with kolb
 // Thin lens optical vignetting LUT
 // Make visualisation for all parameters for website
@@ -539,13 +543,14 @@ struct Lensdata{
  
 // Improved concentric mapping code by Dave Cline [peter shirley´s blog]
 inline void concentricDiskSample(float ox, float oy, AtPoint2 *lens) {
-    float phi, r;
+    float phi;
+    float r;
 
     // switch coordinate space from [0, 1] to [-1, 1]
     float a = 2.0 * ox - 1.0;
     float b = 2.0 * oy - 1.0;
 
-    if (SQR(a) > SQR(b)) {
+    if (SQR(a) > SQR(b)){
         r = a;
         phi = (AI_PIOVER4) * (b / a);
     } else {
@@ -1078,7 +1083,7 @@ void testAperturesTruth(Lensdata *ld){
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 30000;
+    int apertureSamples = 20000;
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -1087,6 +1092,7 @@ void testAperturesTruth(Lensdata *ld){
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
             AtPoint2 lens = {0.0, 0.0};
+            testAperturesFile << "GT: ";
 
             for (int k = 0; k < apertureSamples; k++){
                 concentricDiskSample(dis(gen), dis(gen), &lens);
@@ -1105,10 +1111,9 @@ void testAperturesTruth(Lensdata *ld){
             }
 
             testAperturesFile << std::endl;
+
         }
     }
-
-    testAperturesFile.close();
 }
 
 
@@ -1154,14 +1159,12 @@ void testAperturesNaive(Lensdata *ld){
 
 
 void testAperturesSmarter(Lensdata *ld){
-    WORK_ONLY(testAperturesFile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);)
-    MACBOOK_ONLY(testAperturesFile.open("/Volumes/ZENO_2016/projects/zoic/src/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);)
 
     AtVector origin;
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 5000;
+    int apertureSamples = 500;
 
     int randomNumberCounter = 0;
     int randomNumber = 0;
@@ -1172,6 +1175,9 @@ void testAperturesSmarter(Lensdata *ld){
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
+            
+            testAperturesFile << "SS: ";
+
             for (int k = 0; k < apertureSamples; k++){
 
                 origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
@@ -1438,6 +1444,7 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int lensSamp
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
 
+
 /*
 bool traceThinLens(AtPoint origin, AtVector dir, float apertureRadius, float opticalVignettingDistance, float opticalVignettingRadius){
     AtPoint opticalVignetPoint;
@@ -1662,7 +1669,7 @@ uint64 GetTimeMs64(){
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
-    AiParameterFLT("focalLength", 10.0);
+    AiParameterFLT("focalLength", 2.2);
     AiParameterFLT("fStop", 1.4);
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
@@ -1832,9 +1839,11 @@ node_update {
         computeLensCenters(&ld);
 
         // calculate lookup table for vignetting-free sampling
-        exitPupilLUT(&ld, 32, 32, 128, 1024, false);
-
-        //testAperturesSmarter(&ld);
+        exitPupilLUT(&ld, 32, 32, 128, 10024, false);
+        
+        testAperturesTruth(&ld);
+        testAperturesSmarter(&ld);
+        
 
         DRAW_ONLY({
             // write to file for lens drawing
@@ -1933,7 +1942,7 @@ camera_create_ray {
                 opticalVignetPoint -= output->origin;
  
                 // find hypotenuse of x, y points.
-                float pointHypotenuse = std::sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
+                float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
  
                 // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
                 float virtualApertureTrueRadius = camera->apertureRadius * _opticalVignettingRadius;
@@ -1946,9 +1955,7 @@ camera_create_ray {
                 // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
                 // adding weight to opposite edges to get nice rim on the highlights
                 else if (ABS(pointHypotenuse) < virtualApertureTrueRadius && ABS(pointHypotenuse) > (virtualApertureTrueRadius - _highlightWidth)){
-                    output->weight *= _highlightStrength *
-                                      (1.0 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) *
-                                     std::sqrt(input->sx * input->sx + input->sy * input->sy);
+                    output->weight *= _highlightStrength * (1.0 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) * std::sqrt(SQR(input->sx) + SQR(input->sy));
                 }
             }
         }
@@ -1979,13 +1986,13 @@ camera_create_ray {
         output->origin.y = input->sy * (_sensorWidth * 0.5);
         output->origin.z = ld.originShift;
  
-        
-         DRAW_ONLY({
-             // looks cleaner in 2d when rays are aligned on axis
-             output->origin.x = 0.0;
-             output->origin.y = 0.0;
-         })
-        
+        /*
+        DRAW_ONLY({
+            // looks cleaner in 2d when rays are aligned on axis
+            output->origin.x = 0.0;
+            output->origin.y = 0.0;
+        })
+        */
 
         // sample disk with proper sample distribution
         AtPoint2 lens = {0.0, 0.0};
@@ -2055,9 +2062,12 @@ camera_create_ray {
 
         }
  
+        /*
         // looks cleaner in 2d when rays are aligned on axis
         DRAW_ONLY(output->dir.x = 0.0;)
- 
+        */
+
+
         if(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw)){
             ++ld.vignettedRays;
             output->weight = 0.0;
