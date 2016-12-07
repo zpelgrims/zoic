@@ -8,8 +8,7 @@
  
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
-// Make bokeh sampling work with kolb
-// Thin lens optical vignetting LUT
+// Thin lens optical vignetting recursive tracing
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // Support lens files with extra information (abbe number, kind of glass)
@@ -906,49 +905,6 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
  
      return true;
 }
- 
-
-bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld){
-    AtVector hit_point;
-    AtVector hit_point_normal;
-    AtVector sphere_center;
- 
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        sphere_center = {0.0, 0.0, ld->lensCenter[i]};
-
-        if(!raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true)){
-            return false;
-        }
-
-        float hitPoint2 = SQR(hit_point.x) + SQR(hit_point.y);
- 
-        // check if ray hits lens boundary or aperture
-        if ((hitPoint2 > (ld->lensAperture[i] * 0.5) * (ld->lensAperture[i] * 0.5)) ||
-            ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
-                return false;
-        }
-        
-        intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
- 
-        ray_origin = hit_point;
- 
-        // if not last lens element
-        if(i != (int)ld->lensRadiusCurvature.size() - 1){
-            // ray direction gets modified
-            if(!calculateTransmissionVector(&ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true)){
-                return false;
-            }
-        } else { // last lens element
-            // assuming the material outside the lens is air [ior 1.0]
-            // ray direction gets modified
-            if(!calculateTransmissionVector(&ray_direction, ld->lensIOR[i], 1.0, ray_direction, hit_point_normal, true)){
-                return false;
-            }
-        }
-    }
- 
-     return true;
-}
 
 
 float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
@@ -1394,7 +1350,6 @@ camera_create_ray {
         output->origin.x = input->sx * (_sensorWidth * 0.5);
         output->origin.y = input->sy * (_sensorWidth * 0.5);
         output->origin.z = ld.originShift;
- 
         
         DRAW_ONLY({
             // looks cleaner in 2d when rays are aligned on axis
@@ -1402,7 +1357,6 @@ camera_create_ray {
             output->origin.y = 0.0;
         })
         
-
         // sample disk with proper sample distribution
         AtPoint2 lens = {0.0, 0.0};
 
