@@ -1082,7 +1082,7 @@ void testAperturesTruth(Lensdata *ld){
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 20000;
+    int apertureSamples = 100000;
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -1158,15 +1158,16 @@ void testAperturesNaive(Lensdata *ld){
 
 
 void testAperturesSmarter(Lensdata *ld){
-
     AtVector origin;
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 500;
+    int apertureSamples = 5000;
 
     int randomNumberCounter = 0;
     int randomNumber = 0;
+
+    float samplingErrorCorrection = 0.8;
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -1212,9 +1213,9 @@ void testAperturesSmarter(Lensdata *ld){
 
                 // scale
                 lens *= {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][33].x, ld->apertureMap[value3][value4][33].x, 
-                                                          ld->apertureMap[value1][value4][33].x, ld->apertureMap[value3][value2][33].x), 
+                                                          ld->apertureMap[value1][value4][33].x, ld->apertureMap[value3][value2][33].x) * samplingErrorCorrection, 
                          BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2][33].y, ld->apertureMap[value3][value4][33].y,
-                                                          ld->apertureMap[value1][value4][33].y, ld->apertureMap[value3][value2][33].y)};
+                                                          ld->apertureMap[value1][value4][33].y, ld->apertureMap[value3][value2][33].y) * samplingErrorCorrection};
                 
 
 
@@ -1669,7 +1670,7 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0);
-    AiParameterFLT("fStop", 2.4);
+    AiParameterFLT("fStop", 1.0);
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
@@ -1838,7 +1839,7 @@ node_update {
         computeLensCenters(&ld);
 
         // calculate lookup table for vignetting-free sampling
-        exitPupilLUT(&ld, 32, 32, 128, 10024, false);
+        exitPupilLUT(&ld, 64, 64, 128, 10024, false);
         
         testAperturesTruth(&ld);
         testAperturesSmarter(&ld);
@@ -2033,11 +2034,13 @@ camera_create_ray {
             float xpercentage = (output->origin.x - value1) / (value3 - value1);
             float ypercentage = (output->origin.y - value2) / (value4 - value2);
 
+            float samplingErrorCorrection = 0.8f;
+
             // scale aperture
             lens *= {BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][33].x, ld.apertureMap[value3][value2][33].x, 
-                                                      ld.apertureMap[value1][value4][33].x, ld.apertureMap[value3][value4][33].x), 
+                                                      ld.apertureMap[value1][value4][33].x, ld.apertureMap[value3][value4][33].x) * samplingErrorCorrection, 
                      BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][33].y, ld.apertureMap[value3][value2][33].y,
-                                                      ld.apertureMap[value1][value4][33].y, ld.apertureMap[value3][value4][33].y)};
+                                                      ld.apertureMap[value1][value4][33].y, ld.apertureMap[value3][value4][33].y) * samplingErrorCorrection};
 
             // rotate aperture
             float interpolatedRotation = BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2][34].x, ld.apertureMap[value3][value2][34].x, 
