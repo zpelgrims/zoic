@@ -8,6 +8,7 @@
  
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
+// Rudimentary bounding box lut
 // Thin lens optical vignetting recursive tracing make work
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
@@ -1075,7 +1076,7 @@ node_parameters {
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
-    AiParameterBOOL("kolb", false);
+    AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", "");
     AiParameterBOOL("kolbSamplingMethod", true);
     AiParameterBOOL("useDof", true);
@@ -1310,37 +1311,47 @@ camera_create_ray {
         	// Initialize point on lens
 	        AtPoint2 lens = {0.0, 0.0};
 
-	        // sample disk with proper sample distribution, lensU & lensV (positions on lens) are updated.
-            if (_useImage == false){
-                concentricDiskSample(input->lensx, input->lensy, &lens);
-            } else { // sample bokeh image
-                camera->image.bokehSample(input->lensx, input->lensy, &lens);
-            }
+            !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
+
+            // scale new lens coordinates by the aperture radius
+            lens *= camera->apertureRadius;
+ 
+            // update arnold ray origin
+            output->origin = {lens.x, lens.y, 0.0};
+ 
+            // Compute point on plane of focus, intersection on z axis
+            float intersection = std::abs(_focalDistance / output->dir.z);
+            AtPoint focusPoint = output->dir * intersection;
+ 
+            // update arnold ray direction, normalize
+            output->dir = AiV3Normalize(focusPoint - output->origin);
+
 
             if (_opticalVignettingDistance > 0.0f){
-	        	while(!succes && tries <= 50){
-	        		concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+	        	
+                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance) && tries <= 50){
+	        		
+                    if(tries > 0){
+                        concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+                    }
 		            
-		            // scale new lens coordinates by the aperture radius
-		            lens *= camera->apertureRadius;
-		 
-		            // update arnold ray origin
-		            output->origin = {lens.x, lens.y, 0.0};
-		 
-		            // Compute point on plane of focus, intersection on z axis
-		            float intersection = std::abs(_focalDistance / output->dir.z);
-		            AtPoint focusPoint = output->dir * intersection;
-		 
-		            // update arnold ray direction, normalize
-		            output->dir = AiV3Normalize(focusPoint - output->origin);
-		            
-	            	if(empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance)){
-	            		succes = true;
-	            	}
+                    // scale new lens coordinates by the aperture radius
+                    lens *= camera->apertureRadius;
+         
+                    // update arnold ray origin
+                    output->origin = {lens.x, lens.y, 0.0};
+         
+                    // Compute point on plane of focus, intersection on z axis
+                    float intersection = std::abs(_focalDistance / output->dir.z);
+                    AtPoint focusPoint = output->dir * intersection;
+         
+                    // update arnold ray direction, normalize
+                    output->dir = AiV3Normalize(focusPoint - output->origin);
 		            
 		            ++tries;
 	        	}
-        	} else { // standard thin lens model
+        	} /*else { // standard thin lens model
+
         		// scale new lens coordinates by the aperture radius
 	            lens *= camera->apertureRadius;
 	 
@@ -1353,7 +1364,7 @@ camera_create_ray {
 	 
 	            // update arnold ray direction, normalize
 	            output->dir = AiV3Normalize(focusPoint - output->origin);
-        	}
+        	}*/
 
         	if(tries == 50){
 	        	output->weight = 0.0f;
@@ -1398,12 +1409,8 @@ camera_create_ray {
         // sample disk with proper sample distribution
         AtPoint2 lens = {0.0, 0.0};
 
-        if (_useImage == false){
-            concentricDiskSample(input->lensx, input->lensy, &lens);
-        } else {
-            camera->image.bokehSample(input->lensx, input->lensy, &lens);
-        }
-			
+        !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
+	
 		output->origin.x = input->sx * (_sensorWidth * 0.5);
         output->origin.y = input->sy * (_sensorWidth * 0.5);
         output->origin.z = ld.originShift;
