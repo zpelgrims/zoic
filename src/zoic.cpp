@@ -11,7 +11,7 @@
 // test bounding box with other lenses
 // test kolb with image based bokeh, should work but ya never know
 // recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that? ask solidangle
-// If no rays can get through, implement a check for that to return black weight
+// If no rays can get through, implement a check for that to return black weight, maybe modify map to contain another bool?
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // Support lens files with extra information (abbe number, kind of glass)
