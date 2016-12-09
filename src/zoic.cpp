@@ -8,6 +8,7 @@
  
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
+// test kolb with image based bokeh, should work but ya never know
 // recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that? ask solidangle
 // If no rays can get through, implement a check for that to return black weight
 // Make visualisation for all parameters for website
@@ -1382,12 +1383,12 @@ node_parameters {
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
-    AiParameterBOOL("kolb", false);
+    AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", "");
     AiParameterBOOL("kolbSamplingLUT", true);
     AiParameterBOOL("useDof", true);
-    AiParameterBOOL("vignetting", false);
-    AiParameterFLT("opticalVignettingDistance", 15.0); // distance of the opticalVignetting virtual aperture
+    AiParameterBOOL("vignetting", true);
+    AiParameterFLT("opticalVignettingDistance", 25.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
     AiParameterFLT("highlightWidth", 0.2);
     AiParameterFLT("highlightStrength", 0.0);
@@ -1620,34 +1621,28 @@ camera_create_ray {
             output->dir = AiV3Normalize(focusPoint - output->origin);
             if (_opticalVignettingDistance > 0.0f){
 
-                if (!_vignetting){
-                    if(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance)){
-                        output->weight = 0.0f;
-                    }
+                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance) && tries <= 15){
+                    output->dir = AiV3Normalize(p - originOriginal);
+                    
+                    lens = {0.0f, 0.0f};
+                    !(_useImage) ? concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens) : camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+        
+                    lens *= camera->apertureRadius;
+
+                    output->dir = AiV3Normalize(p - originOriginal);
+                    output->origin = {lens.x, lens.y, 0.0};
+                    float intersection = ABS(_focalDistance / output->dir.z);
+                    AtPoint focusPoint = output->dir * intersection;
+                    output->dir = AiV3Normalize(focusPoint - output->origin);
+                    
+                    ++tries;
+                }
+
+                if(tries > 15){
+                    output->weight = 0.0f;
+                    ++ld.vignettedRays;
                 } else {
-                    while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance) && tries <= 15){
-                        output->dir = AiV3Normalize(p - originOriginal);
-                        
-                        lens = {0.0f, 0.0f};
-                        concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
-            
-                        lens *= camera->apertureRadius;
-
-                        output->dir = AiV3Normalize(p - originOriginal);
-                        output->origin = {lens.x, lens.y, 0.0};
-                        float intersection = ABS(_focalDistance / output->dir.z);
-                        AtPoint focusPoint = output->dir * intersection;
-                        output->dir = AiV3Normalize(focusPoint - output->origin);
-                        
-                        ++tries;
-                    }
-
-                    if(tries == 15){
-                        output->weight = 0.0f;
-                        ++ld.vignettedRays;
-                    } else {
-                        ++ld.succesRays;
-                    }
+                    ++ld.succesRays;
                 }
             }
         }
@@ -1685,13 +1680,14 @@ camera_create_ray {
         })
 
         AtPoint2 lens = {0.0, 0.0};
+        
+        // sample disk with proper sample distribution
+        !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
+        
         int tries = 0;
         
         if (!_kolbSamplingLUT){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
 
-            // sample disk with proper sample distribution
-            !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
-    	
     		output->origin.x = input->sx * (_sensorWidth * 0.5);
             output->origin.y = input->sy * (_sensorWidth * 0.5);
             output->origin.z = ld.originShift;
@@ -1700,18 +1696,17 @@ camera_create_ray {
             output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
             output->dir.z = -ld.lensThickness[0];
 
-            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 20){
-    	        if(tries > 0){
-                    output->origin.x = input->sx * (_sensorWidth * 0.5);
-        	        output->origin.y = input->sy * (_sensorWidth * 0.5);
-        	        output->origin.z = ld.originShift;
-        	 
-                	concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 15){
 
-        	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-        	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-        	        output->dir.z = - ld.lensThickness[0];
-                }
+                output->origin.x = input->sx * (_sensorWidth * 0.5);
+    	        output->origin.y = input->sy * (_sensorWidth * 0.5);
+    	        output->origin.z = ld.originShift;
+    	 
+                !(_useImage) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+
+    	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
+    	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
+    	        output->dir.z = - ld.lensThickness[0];
 
     	        ++tries;
             }
@@ -1730,8 +1725,6 @@ camera_create_ray {
             std::map<float, boundingBox2d>::iterator low2;
             low2 = low->second.lower_bound(output->origin.y);
             float value2 = low2->first;
-
-            concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
 
             // go back 1 element in sorted map
             --low;
@@ -1772,7 +1765,7 @@ camera_create_ray {
                 output->origin.y = input->sy * (_sensorWidth * 0.5);
                 output->origin.z = ld.originShift;
 
-                concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+                !(_useImage) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
 
                 lens *= maxScale;
                 lens += translation;
@@ -1785,7 +1778,7 @@ camera_create_ray {
             }
         }
 
-        if(tries == 15){
+        if(tries > 15){
             output->weight = 0.0f;
             ++ld.vignettedRays;
         } else {

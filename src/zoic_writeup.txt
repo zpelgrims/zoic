@@ -24,7 +24,7 @@ This raytraced model, based on the paper "A Realistic Camera Model For Computer 
 ### IMAGES OF THIN-LENS TO RAYTRACED COMPARISON ###
 
 
-My implementation of this paper is slightly different from other implementations in respect to the sampling approach. Instead of opting for rejection-sampling, where rays get killed when they either hit the aperture or don´t reach the exit pupil, ZOIC pre-calculates a lookup table which finds and stores the ideal aperture at certain points on the film plane and then bilinearly interpolates between those values. This is more efficient since far less rays are created and then killed halfway through the tracing process. Since practically all rays make it through, you won´t find darkening around the edges of the image (I am reluctant to use the word vignetting since there still is optical vignetting present).
+My implementation of this paper is slightly different from other implementations in respect to the sampling approach. Instead of opting for rejection-sampling, where rays get killed when they either hit the aperture or don´t reach the exit pupil, ZOIC pre-calculates a lookup table which finds and stores the ideal aperture at certain points on the film plane and then bilinearly interpolates between those values. This is more efficient since far less rays are created and then killed halfway through the tracing process.
 
 I went this route since I think the in-render vignetting is an absolute pain in the ass, as it introduces extra, unwanted noise. Since it´s just a weighting on the ray color, this can be recreated exactly in a compositing package with much more control.
 
