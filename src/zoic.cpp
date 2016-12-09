@@ -8,6 +8,7 @@
  
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
+// recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that?
 // Rudimentary bounding box lut
 // Thin lens optical vignetting recursive tracing make work
 // Make visualisation for all parameters for website
@@ -509,6 +510,35 @@ struct cameraData{
      ~cameraData(){
      }
 };
+
+
+class boundingBox2d{
+public:
+    AtPoint2 max;
+    AtPoint2 min;
+
+    AtPoint2 getCentroid();
+    float getMaxScale();
+};
+
+
+AtPoint2 boundingBox2d::getCentroid(){
+    AtPoint2 centroid = {(min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f};
+    return centroid;
+}
+
+
+float boundingBox2d::getMaxScale(){
+    float scaleX = AiV2Dist( getCentroid(), {max.x, getCentroid().y});
+    float scaleY = AiV2Dist( getCentroid(), {getCentroid().x, max.y});
+    //(scaleX >= scaleY) ? return scaleX : return scaleY;
+
+    if (scaleX >= scaleY){
+        return scaleX;
+    } else {
+        return scaleY;
+    }
+}
  
  
 struct Lensdata{
@@ -530,7 +560,7 @@ struct Lensdata{
     float filmDiagonal;
     float originShift;
     float focalDistance; 
-    std::map<float, std::map<float, std::vector<AtPoint2>>> apertureMap;
+    std::map<float, std::map<float, boundingBox2d>> apertureMap;
 } ld;
  
 
@@ -1068,6 +1098,233 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
 }
 
 
+bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld){
+    AtVector hit_point;
+    AtVector hit_point_normal;
+    AtVector sphere_center;
+ 
+    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
+        sphere_center = {0.0, 0.0, ld->lensCenter[i]};
+
+        if(!raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true)){
+            return false;
+        }
+
+        float hitPoint2 = SQR(hit_point.x) + SQR(hit_point.y);
+ 
+        // check if ray hits lens boundary or aperture
+        if ((hitPoint2 > (ld->lensAperture[i] * 0.5) * (ld->lensAperture[i] * 0.5)) ||
+            ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
+                return false;
+        }
+        
+        intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
+ 
+        ray_origin = hit_point;
+ 
+        // if not last lens element
+        if(i != (int)ld->lensRadiusCurvature.size() - 1){
+            // ray direction gets modified
+            if(!calculateTransmissionVector(&ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true)){
+                return false;
+            }
+        } else { // last lens element
+            // assuming the material outside the lens is air [ior 1.0]
+            // ray direction gets modified
+            if(!calculateTransmissionVector(&ray_direction, ld->lensIOR[i], 1.0, ray_direction, hit_point_normal, true)){
+                return false;
+            }
+        }
+    }
+ 
+     return true;
+}
+
+
+void testAperturesTruth(Lensdata *ld){
+    WORK_ONLY(testAperturesFile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);)
+    MACBOOK_ONLY(testAperturesFile.open ("/Volumes/ZENO_2016/projects/zoic/src/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);)
+
+    AtVector origin;
+    AtVector direction;
+
+    int filmSamples = 3;
+    int apertureSamples = 100000;
+
+    for (int i = - filmSamples; i < filmSamples + 1; i++){
+        for (int j = -filmSamples; j < filmSamples + 1; j++){
+            AtPoint2 lens = {0.0, 0.0};
+            testAperturesFile << "GT: ";
+
+            for (int k = 0; k < apertureSamples; k++){
+                concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+
+                origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.z = ld->originShift;
+            
+                direction.x = (lens.x * ld->lensAperture[0]) - origin.x;
+                direction.y = (lens.y * ld->lensAperture[0]) - origin.y;
+                direction.z = - ld->lensThickness[0];
+
+                if(traceThroughLensElements(&origin, &direction, ld, false)){
+                    testAperturesFile << lens.x * ld->lensAperture[0] << " " << lens.y * ld->lensAperture[0] << " ";
+                }
+            }
+
+            testAperturesFile << std::endl;
+
+        }
+    }
+}
+
+
+void testAperturesLUT(Lensdata *ld){
+    AtVector origin;
+    AtVector direction;
+
+    int filmSamples = 3;
+    int apertureSamples = 5000;
+
+    float samplingErrorCorrection = 1.2;
+
+    for (int i = - filmSamples; i < filmSamples + 1; i++){
+        for (int j = -filmSamples; j < filmSamples + 1; j++){
+            
+            testAperturesFile << "SS: ";
+
+            for (int k = 0; k < apertureSamples; k++){
+
+                origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+                origin.z = ld->originShift;
+
+                // lowest bound x value
+                std::map<float, std::map<float, boundingBox2d>>::iterator low;
+                low = ld->apertureMap.lower_bound(origin.x);
+                float value1 = low->first;
+
+                // lowest bound y value
+                std::map<float, boundingBox2d>::iterator low2;
+                low2 = low->second.lower_bound(origin.y);
+                float value2 = low2->first;
+
+
+                AtPoint2 lens = {0.0, 0.0};
+                concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+                
+
+                // go back 1 element in sorted map
+                --low;
+                float value3 = low->first;
+                
+                --low2;
+                float value4 = low2->first;
+
+                // percentage of x inbetween two stored LUT entries
+                float xpercentage = (origin.x - value1) / (value3 - value1);
+                float ypercentage = (origin.y - value2) / (value4 - value2);
+
+                // scale
+                float maxScale = BILERP(xpercentage, ypercentage, 
+                                        ld->apertureMap[value1][value2].getMaxScale(), ld->apertureMap[value3][value4].getMaxScale(),
+                                        ld->apertureMap[value1][value4].getMaxScale(), ld->apertureMap[value3][value2].getMaxScale()) * samplingErrorCorrection;
+
+                lens *= {maxScale, maxScale};
+
+                // translation
+                lens += {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2].getCentroid().x, ld->apertureMap[value3][value4].getCentroid().x, 
+                                                          ld->apertureMap[value1][value4].getCentroid().x, ld->apertureMap[value3][value2].getCentroid().x),
+                         BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2].getCentroid().y, ld->apertureMap[value3][value4].getCentroid().y,
+                                                          ld->apertureMap[value1][value4].getCentroid().y, ld->apertureMap[value3][value2].getCentroid().y)};
+
+                direction.x = lens.x - origin.x;
+                direction.y = lens.y - origin.y;
+                direction.z = - ld->lensThickness[0];
+
+                testAperturesFile << lens.x << " " << lens.y << " ";
+            }
+
+            testAperturesFile << std::endl;
+        }
+    }
+
+    testAperturesFile.close();
+
+    // execute python drawing
+    WORK_ONLY(std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic/zoic/src/triangleSamplingDraw.py";)
+    MACBOOK_ONLY(std::string filename = "/Volumes/ZENO_2016/projects/zoic/src/triangleSamplingDraw.py";)
+    std::string command = "python "; command += filename; system(command.c_str());
+}
+
+
+void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSamples){
+    
+    float filmWidth = 6.0;
+    float filmHeight = 6.0;
+
+    float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
+    float filmSpacingY = filmHeight / static_cast<float>(filmSamplesY);
+
+    for(int i = 0; i < filmSamplesX + 1; i++){
+        for(int j = 0; j < filmSamplesY + 1; j++){
+            AtVector sampleOrigin = {static_cast<float>((filmSpacingX * static_cast<float>(i) * 2.0) - filmWidth / 2.0), 
+                                     static_cast<float>((filmSpacingY * static_cast<float>(j) * 2.0) - filmHeight / 2.0), 
+                                     ld->originShift};
+
+
+            // calculate bounds of aperture, to find centroid
+            boundingBox2d apertureBounds;
+            apertureBounds.min = {0.0, 0.0};
+            apertureBounds.max = {0.0, 0.0};
+
+            AtVector boundsDirection;
+
+            float lensU = 0.0;
+            float lensV = 0.0;
+
+            for(int b = 0; b < boundsSamples; b++){
+                lensU = ((xor128() / 4294967296.0f) * 2.0f) - 1.0f;
+                lensV = ((xor128() / 4294967296.0f) * 2.0f) - 1.0f;
+
+                boundsDirection.x = (lensU * ld->lensAperture[0]) - sampleOrigin.x;
+                boundsDirection.y = (lensV * ld->lensAperture[0]) - sampleOrigin.y;
+                boundsDirection.z = - ld->lensThickness[0];
+
+                if(traceThroughLensElementsForApertureSize(sampleOrigin, boundsDirection, ld)){
+                    if((apertureBounds.min.x + apertureBounds.min.y) == 0.0){
+                        apertureBounds.min = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
+                        apertureBounds.max = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
+                    }
+
+                    if((lensU * ld->lensAperture[0]) > apertureBounds.max.x){
+                        apertureBounds.max.x = lensU * ld->lensAperture[0];
+                    }
+
+                    if((lensV * ld->lensAperture[0]) > apertureBounds.max.y){
+                        apertureBounds.max.y = lensV * ld->lensAperture[0];
+                    }
+
+                    if((lensU * ld->lensAperture[0]) < apertureBounds.min.x){
+                        apertureBounds.min.x = lensU * ld->lensAperture[0];
+                    }
+
+                    if((lensV * ld->lensAperture[0]) < apertureBounds.min.y){
+                        apertureBounds.min.y = lensV * ld->lensAperture[0];
+                    }
+                }
+            }
+            
+            std::cout << apertureBounds.max.x << std::endl;
+
+            ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, apertureBounds));            
+        }
+    }
+
+    AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
+}
+
+
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
@@ -1238,7 +1495,11 @@ node_update {
         }
  
         // precompute lens centers
-        computeLensCenters(&ld);        
+        computeLensCenters(&ld);
+
+        testAperturesTruth(&ld);
+        exitPupilLUT(&ld, 32, 32, 50000);
+        testAperturesLUT(&ld);      
 
         DRAW_ONLY({
             // write to file for lens drawing
