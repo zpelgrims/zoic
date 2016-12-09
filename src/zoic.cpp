@@ -8,9 +8,8 @@
  
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
-// recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that?
+// recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that? ask solidangle
 // If no rays can get through, implement a check for that to return black weight
-// Thin lens optical vignetting recursive tracing make work
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
 // Support lens files with extra information (abbe number, kind of glass)
@@ -82,11 +81,12 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 #define _lensDataPath (params[8].STR)
 #define _kolbSamplingLUT (params[9].BOOL)
 #define _useDof (params[10].BOOL)
-#define _opticalVignettingDistance (params[11].FLT)
-#define _opticalVignettingRadius (params[12].FLT)
-#define _highlightWidth (params[13].FLT)
-#define _highlightStrength (params[14].FLT)
-#define _exposureControl (params[15].FLT)
+#define _vignetting (params[11].BOOL)
+#define _opticalVignettingDistance (params[12].FLT)
+#define _opticalVignettingRadius (params[13].FLT)
+#define _highlightWidth (params[14].FLT)
+#define _highlightStrength (params[15].FLT)
+#define _exposureControl (params[16].FLT)
 
 #define AI_PIOVER4 (0.78539816339f)
  
@@ -554,7 +554,6 @@ struct Lensdata{
     int vignettedRays, succesRays, drawRays;
     int totalInternalReflection;
     float apertureDistance;
-    float xres, yres;
     float optimalAperture;
     float focalLengthRatio;
     float filmDiagonal;
@@ -1085,8 +1084,12 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
     // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
     float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
 
-    // return false if statement no true
-    return !(ABS(pointHypotenuse) > virtualApertureTrueRadius);
+    // should this not be turned around? false <> true
+    if (ABS(pointHypotenuse) <= virtualApertureTrueRadius){
+        return true;
+    } else {
+        return false;
+    }
 
     /*
     // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
@@ -1110,6 +1113,10 @@ inline void printProgress(float progress, int barWidth){
         } else {
             std::cout << " ";
         }
+    }
+
+    if (progress > 1.0){
+        progress = 1.0;
     }
 
     std::cout << std::fixed << std::setprecision(2) << "] % " << progress * 100.0 << "\r";
@@ -1283,7 +1290,7 @@ void testAperturesLUT(Lensdata *ld){
 void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSamples){
     
     float progress = 0.0;
-    int barWidth = 72;
+    int barWidth = 71;
     int progressPrintCounter = 0;
     
     float filmWidth = 6.0;
@@ -1342,6 +1349,12 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
                     }
                 }
             }
+
+            // check if any changes were made at all
+            if (apertureBounds.min.x == 0.0 && apertureBounds.min.y == 0.0 && 
+                apertureBounds.max.x == 0.0 && apertureBounds.max.y == 0.0){
+                    // do something
+            }
             
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, apertureBounds));
 
@@ -1365,21 +1378,21 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0);
-    AiParameterFLT("fStop", 1.0);
+    AiParameterFLT("fStop", 3.4);
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
-    AiParameterBOOL("kolb", true);
+    AiParameterBOOL("kolb", false);
     AiParameterStr("lensDataPath", "");
     AiParameterBOOL("kolbSamplingLUT", true);
     AiParameterBOOL("useDof", true);
-    AiParameterFLT("opticalVignettingDistance", 70.0); // distance of the opticalVignetting virtual aperture
+    AiParameterBOOL("vignetting", false);
+    AiParameterFLT("opticalVignettingDistance", 15.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
     AiParameterFLT("highlightWidth", 0.2);
     AiParameterFLT("highlightStrength", 0.0);
     AiParameterFLT("exposureControl", 0.0);
 }
- 
  
  
 node_initialize {
@@ -1428,16 +1441,8 @@ node_update {
         // apertureRadius = focalLength / 2*fStop
         camera->apertureRadius = (_focalLength) / (2.0f * _fStop);
 
+    } else {
 
-        /*
-        if (opticalVignettingDistance > 0.0f){ 
-            thinlensLUT(32, 32, 128, 1024, camera->apertureRadius, camera->tan_fov, _focalDistance, _opticalVignettingDistance, _opticalVignettingRadius);
-        }
-        */
-
-    }
- 
-    if (_kolb){
          DRAW_ONLY({
              myfile << "LENSMODEL{KOLB}";
              myfile << "\n";
@@ -1459,10 +1464,6 @@ node_update {
         ld.focalLengthRatio = 0.0;
         ld.originShift = 0.0;
         ld.apertureMap.clear();
- 
-        // Update shaderData variables
-        ld.xres = static_cast<float>(AiNodeGetInt(options,"xres"));
-        ld.yres = static_cast<float>(AiNodeGetInt(options,"yres"));
  
         // not sure if this is the right way to do it.. probably more to it than this!
         ld.filmDiagonal = std::sqrt(SQR(_sensorWidth) + SQR(_sensorHeight));
@@ -1548,7 +1549,6 @@ node_update {
 }
  
 
-
 node_finish {
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
  
@@ -1578,7 +1578,6 @@ node_finish {
 }
 
 
-
 camera_create_ray {
     // get values
     const AtParamValue* params = AiNodeGetParams(node);
@@ -1594,11 +1593,12 @@ camera_create_ray {
  
     // chang this to an enum, thinlens, raytraced
     if(!_kolb){
+
         // create point on lens
         AtPoint p = {input->sx * camera->tan_fov, input->sy * camera->tan_fov, 1.0};
- 
-        // compute direction
         output->dir = AiV3Normalize(p - output->origin);
+
+        AtPoint originOriginal = output->origin;
  
         // DOF CALCULATIONS
         if (_useDof == true) {
@@ -1606,70 +1606,50 @@ camera_create_ray {
         	bool succes = false;
         	int tries = 0;
 
-        	// Initialize point on lens
-	        AtPoint2 lens = {0.0, 0.0};
+	        AtPoint2 lens = {0.0f, 0.0f};
 
             !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
 
-            // scale new lens coordinates by the aperture radius
             lens *= camera->apertureRadius;
- 
-            // update arnold ray origin
             output->origin = {lens.x, lens.y, 0.0};
  
             // Compute point on plane of focus, intersection on z axis
-            float intersection = std::abs(_focalDistance / output->dir.z);
+            float intersection = ABS(_focalDistance / output->dir.z);
             AtPoint focusPoint = output->dir * intersection;
- 
-            // update arnold ray direction, normalize
+
             output->dir = AiV3Normalize(focusPoint - output->origin);
-
-
             if (_opticalVignettingDistance > 0.0f){
-	        	
-                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance) && tries <= 20){
-	        		
-                    if(tries > 0){
-                        concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+
+                if (!_vignetting){
+                    if(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance)){
+                        output->weight = 0.0f;
                     }
-		            
-                    // scale new lens coordinates by the aperture radius
-                    lens *= camera->apertureRadius;
-         
-                    // update arnold ray origin
-                    output->origin = {lens.x, lens.y, 0.0};
-         
-                    // Compute point on plane of focus, intersection on z axis
-                    float intersection = std::abs(_focalDistance / output->dir.z);
-                    AtPoint focusPoint = output->dir * intersection;
-         
-                    // update arnold ray direction, normalize
-                    output->dir = AiV3Normalize(focusPoint - output->origin);
-		            
-		            ++tries;
-	        	}
-        	} /*else { // standard thin lens model
+                } else {
+                    while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance) && tries <= 15){
+                        output->dir = AiV3Normalize(p - originOriginal);
+                        
+                        lens = {0.0f, 0.0f};
+                        concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+            
+                        lens *= camera->apertureRadius;
 
-        		// scale new lens coordinates by the aperture radius
-	            lens *= camera->apertureRadius;
-	 
-	            // update arnold ray origin
-	            output->origin = {lens.x, lens.y, 0.0};
-	 
-	            // Compute point on plane of focus, intersection on z axis
-	            float intersection = std::abs(_focalDistance / output->dir.z);
-	            AtPoint focusPoint = output->dir * intersection;
-	 
-	            // update arnold ray direction, normalize
-	            output->dir = AiV3Normalize(focusPoint - output->origin);
-        	}*/
+                        output->dir = AiV3Normalize(p - originOriginal);
+                        output->origin = {lens.x, lens.y, 0.0};
+                        float intersection = ABS(_focalDistance / output->dir.z);
+                        AtPoint focusPoint = output->dir * intersection;
+                        output->dir = AiV3Normalize(focusPoint - output->origin);
+                        
+                        ++tries;
+                    }
 
-        	if(tries == 20){
-	        	output->weight = 0.0f;
-	        	++ld.vignettedRays;
-	        } else {
-	        	++ld.succesRays;
-	        }  
+                    if(tries == 15){
+                        output->weight = 0.0f;
+                        ++ld.vignettedRays;
+                    } else {
+                        ++ld.succesRays;
+                    }
+                }
+            }
         }
  
         DRAW_ONLY({
@@ -1721,15 +1701,17 @@ camera_create_ray {
             output->dir.z = -ld.lensThickness[0];
 
             while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 20){
-    	        output->origin.x = input->sx * (_sensorWidth * 0.5);
-    	        output->origin.y = input->sy * (_sensorWidth * 0.5);
-    	        output->origin.z = ld.originShift;
-    	 
-            	concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+    	        if(tries > 0){
+                    output->origin.x = input->sx * (_sensorWidth * 0.5);
+        	        output->origin.y = input->sy * (_sensorWidth * 0.5);
+        	        output->origin.z = ld.originShift;
+        	 
+                	concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
 
-    	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-    	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-    	        output->dir.z = - ld.lensThickness[0];
+        	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
+        	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
+        	        output->dir.z = - ld.lensThickness[0];
+                }
 
     	        ++tries;
             }
@@ -1767,35 +1749,33 @@ camera_create_ray {
                                     ld.apertureMap[value1][value2].getMaxScale(), ld.apertureMap[value3][value4].getMaxScale(),
                                     ld.apertureMap[value1][value4].getMaxScale(), ld.apertureMap[value3][value2].getMaxScale()) * samplingErrorCorrection;
 
-            lens *= {maxScale, maxScale};
+            lens *= maxScale;
 
+            // translation
             AtPoint2 centroid1 = ld.apertureMap[value1][value2].getCentroid();
             AtPoint2 centroid2 = ld.apertureMap[value1][value4].getCentroid();
             AtPoint2 centroid3 = ld.apertureMap[value3][value4].getCentroid();
             AtPoint2 centroid4 = ld.apertureMap[value3][value2].getCentroid();
 
-            // translation
-            lens += {BILERP(xpercentage, ypercentage, centroid1.x, centroid3.x, centroid2.x, centroid4.x),
-                     BILERP(xpercentage, ypercentage, centroid1.y, centroid3.y, centroid2.y, centroid4.y)};
+            AtPoint2 translation = {BILERP(xpercentage, ypercentage, centroid1.x, centroid3.x, centroid2.x, centroid4.x),
+                                    BILERP(xpercentage, ypercentage, centroid1.y, centroid3.y, centroid2.y, centroid4.y)};
+
+            lens += translation;
 
             output->dir.x = lens.x - output->origin.x;
             output->dir.y = lens.y - output->origin.y;
             output->dir.z = - ld.lensThickness[0];
 
 
-
-            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 20){
+            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 15){
                 output->origin.x = input->sx * (_sensorWidth * 0.5);
                 output->origin.y = input->sy * (_sensorWidth * 0.5);
                 output->origin.z = ld.originShift;
 
                 concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
 
-                lens *= {maxScale, maxScale};
-
-                // translation
-                lens += {BILERP(xpercentage, ypercentage, centroid1.x, centroid3.x, centroid2.x, centroid4.x),
-                         BILERP(xpercentage, ypercentage, centroid1.y, centroid3.y, centroid2.y, centroid4.y)};
+                lens *= maxScale;
+                lens += translation;
 
                 output->dir.x = lens.x - output->origin.x;
                 output->dir.y = lens.y - output->origin.y;
@@ -1805,7 +1785,7 @@ camera_create_ray {
             }
         }
 
-        if(tries == 20){
+        if(tries == 15){
             output->weight = 0.0f;
             ++ld.vignettedRays;
         } else {
@@ -1825,9 +1805,9 @@ camera_create_ray {
  
     // control to go light stops up and down
     float e2 = SQR(_exposureControl);
-    if (_exposureControl > 0){
+    if (_exposureControl > 0.0f){
         output->weight *= 1.0f + e2;
-    } else if (_exposureControl < 0){
+    } else if (_exposureControl < 0.0f){
         output->weight *= 1.0f / (1.0f + e2);
     }
  
