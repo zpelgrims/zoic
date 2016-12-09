@@ -1368,7 +1368,7 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
-    AiParameterFLT("focalLength", 7.5);
+    AiParameterFLT("focalLength", 10.0);
     AiParameterFLT("fStop", 1.4);
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
@@ -1693,7 +1693,7 @@ camera_create_ray {
             }
         } 
 
-        else { // USING LUT
+        else { // USING LOOKUP TABLE
             
             float samplingErrorCorrection = 1.4;
 
