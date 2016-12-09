@@ -8,6 +8,7 @@
  
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
+// test bounding box with other lenses
 // test kolb with image based bokeh, should work but ya never know
 // recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that? ask solidangle
 // If no rays can get through, implement a check for that to return black weight
@@ -82,18 +83,17 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 #define _lensDataPath (params[8].STR)
 #define _kolbSamplingLUT (params[9].BOOL)
 #define _useDof (params[10].BOOL)
-#define _vignetting (params[11].BOOL)
-#define _opticalVignettingDistance (params[12].FLT)
-#define _opticalVignettingRadius (params[13].FLT)
-#define _highlightWidth (params[14].FLT)
-#define _highlightStrength (params[15].FLT)
-#define _exposureControl (params[16].FLT)
+#define _opticalVignettingDistance (params[11].FLT)
+#define _opticalVignettingRadius (params[12].FLT)
+#define _highlightWidth (params[13].FLT)
+#define _highlightStrength (params[14].FLT)
+#define _exposureControl (params[15].FLT)
 
 #define AI_PIOVER4 (0.78539816339f)
  
  
 inline bool LoadTexture(const AtString path, void *pixelData){
-     return AiTextureLoad(path, true, 0, pixelData);
+    return AiTextureLoad(path, true, 0, pixelData);
 }
 
 
@@ -1069,23 +1069,14 @@ void writeToFile(Lensdata *ld){
 }
 
 
-// Emperical optical vignetting (cat eye effect)
 bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertureRadius, float opticalVignettingRadius, float opticalVignettingDistance){
 
 	// because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
     AtPoint opticalVignetPoint;
-    opticalVignetPoint = direction * opticalVignettingDistance;
-
-    // re-center point
-    opticalVignetPoint -= origin;
-
-    // find hypotenuse of x, y points.
+    opticalVignetPoint = (direction * opticalVignettingDistance) - origin;
     float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
-
-    // if intersection point on the optical vignetting virtual aperture is within the radius of the aperture from the plane origin, kill ray
     float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
 
-    // should this not be turned around? false <> true
     if (ABS(pointHypotenuse) <= virtualApertureTrueRadius){
         return true;
     } else {
@@ -1102,7 +1093,7 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
 }
 
 
-inline void printProgress(float progress, int barWidth){
+inline void printProgressBar(float progress, int barWidth){
     std::cout << "[";
     int pos = barWidth * progress;
 
@@ -1351,6 +1342,7 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
                 }
             }
 
+
             // check if any changes were made at all
             if (apertureBounds.min.x == 0.0 && apertureBounds.min.y == 0.0 && 
                 apertureBounds.max.x == 0.0 && apertureBounds.max.y == 0.0){
@@ -1361,7 +1353,7 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
 
 
             if (progressPrintCounter == (filmSamplesX * filmSamplesY) / 100){
-                printProgress(progress, barWidth);
+                printProgressBar(progress, barWidth);
                 progress = static_cast<float>((i * filmSamplesX) + j) / static_cast<float>(filmSamplesX * filmSamplesY);
                 progressPrintCounter = 0; 
             } else {
@@ -1383,11 +1375,10 @@ node_parameters {
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
-    AiParameterBOOL("kolb", true);
+    AiParameterBOOL("kolb", false);
     AiParameterStr("lensDataPath", "");
     AiParameterBOOL("kolbSamplingLUT", true);
     AiParameterBOOL("useDof", true);
-    AiParameterBOOL("vignetting", true);
     AiParameterFLT("opticalVignettingDistance", 25.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
     AiParameterFLT("highlightWidth", 0.2);
