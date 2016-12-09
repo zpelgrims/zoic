@@ -26,9 +26,8 @@ DARKGREY = (120, 120, 120)
 
 
 # ----------------------------------- READ IN DATA -----------------------------------------
-dataFile = open('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic', 'r')
-"""dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/testApertures.zoic', 'r')"""
-
+"""dataFile = open('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic', 'r')"""
+dataFile = open('/Volumes/ZENO_2016/projects/zoic/src/testApertures.zoic', 'r')
 GTPOINTSLIST = []
 SSPOINTSLIST = []
 
@@ -98,8 +97,8 @@ print "PYTHON: ---- Anti-aliasing image"
 img_gt_bg.thumbnail(SIZE, Image.ANTIALIAS)
 
 print "PYTHON: Saving image"
-img_gt_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_GT.png','png')
-"""img_gt_bg.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling_GT.png','png')"""
+"""img_gt_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_GT.png','png')"""
+img_gt_bg.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling_GT.png','png')
 
 
 
@@ -151,8 +150,8 @@ print "PYTHON: ---- Anti-aliasing image"
 img_ss_bg.thumbnail(SIZE, Image.ANTIALIAS)
 
 print "PYTHON: Saving image"
-img_ss_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_SS.png','png')
-"""img_ss_bg.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling_SS.png','png')"""
+"""img_ss_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_SS.png','png')"""
+img_ss_bg.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling_SS.png','png')
 
 
 
@@ -168,5 +167,5 @@ print "PYTHON: ---- Anti-aliasing image"
 img_combined_bg.thumbnail(SIZE, Image.ANTIALIAS)
 
 print "PYTHON: Saving image"
-img_combined_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_COMPARISON.png','png')
-"""img_combined_bg.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling_COMPARISON.png','png')"""
+"""img_combined_bg.save('C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/sampling_COMPARISON.png','png')"""
+img_combined_bg.save('/Volumes/ZENO_2016/projects/zoic/tests/images/sampling_COMPARISON.png','png')

@@ -3,17 +3,15 @@
         // Physically plausible lens distortion and optical vignetting
 // Image based bokeh shapes
 // Emperical optical vignetting using the thin-lens equation
- 
+
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
  
-// TODO
 // Make it work with other lens profiles, test fisheye drawing
 // test bounding box with other lenses
 // test kolb with image based bokeh, should work but ya never know
 // recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that? ask solidangle
 // If no rays can get through, implement a check for that to return black weight, maybe modify map to contain another bool?
 // Make visualisation for all parameters for website
-// Add colours to output ("\x1b[1;36m ..... \e[0m")
 // Support lens files with extra information (abbe number, kind of glass)
  
 #include <ai.h>
@@ -68,6 +66,7 @@ std::ofstream myfile;
 std::ofstream testAperturesFile;
 bool draw = false;
 int counter = 0;
+
  
 // Arnold methods
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
@@ -555,7 +554,6 @@ struct Lensdata{
     int vignettedRays, succesRays, drawRays;
     int totalInternalReflection;
     float apertureDistance;
-    float optimalAperture;
     float focalLengthRatio;
     float filmDiagonal;
     float originShift;
@@ -1094,7 +1092,7 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
 
 
 inline void printProgressBar(float progress, int barWidth){
-    std::cout << "[";
+    std::cout << "\x1b[1;32m[";
     int pos = barWidth * progress;
 
     for (int i = 0; i < barWidth; ++i) {
@@ -1362,7 +1360,7 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
         }
     }
 
-    std::cout << std::endl;
+    std::cout << "\e[0m" << std::endl;
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
 
@@ -1370,12 +1368,12 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
-    AiParameterFLT("focalLength", 10.0);
-    AiParameterFLT("fStop", 3.4);
+    AiParameterFLT("focalLength", 7.5);
+    AiParameterFLT("fStop", 1.4);
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
-    AiParameterBOOL("kolb", false);
+    AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", "");
     AiParameterBOOL("kolbSamplingLUT", true);
     AiParameterBOOL("useDof", true);
@@ -1425,12 +1423,9 @@ node_update {
             myfile << "\n";
             myfile << "RAYS{" ;
         })
- 
-        //theta = 2arctan*(sensorSize/focalLength)
+
         camera->fov = 2.0f * atan((_sensorWidth / (2.0f * _focalLength))); // in radians
         camera->tan_fov = tanf(camera->fov/ 2.0f);
- 
-        // apertureRadius = focalLength / 2*fStop
         camera->apertureRadius = (_focalLength) / (2.0f * _fStop);
 
     } else {
@@ -1449,11 +1444,6 @@ node_update {
         ld.vignettedRays = 0;
         ld.succesRays = 0;
         ld.totalInternalReflection = 0;
-        ld.userApertureRadius = 0.0;
-        ld.apertureElement = 0;
-        ld.apertureDistance = 0.0;
-        ld.optimalAperture = 0.0;
-        ld.focalLengthRatio = 0.0;
         ld.originShift = 0.0;
         ld.apertureMap.clear();
  
@@ -1526,9 +1516,9 @@ node_update {
         computeLensCenters(&ld);
 
         if (_kolbSamplingLUT){
-            //testAperturesTruth(&ld);
+            testAperturesTruth(&ld);
             exitPupilLUT(&ld, 64, 64, 25000);
-            //testAperturesLUT(&ld); 
+            testAperturesLUT(&ld); 
         }
              
 
