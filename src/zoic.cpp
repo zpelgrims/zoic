@@ -9,7 +9,7 @@
 // TODO
 // Make it work with other lens profiles, test fisheye drawing
 // recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that?
-// Rudimentary bounding box lut
+// If no rays can get through, implement a check for that to return black weight
 // Thin lens optical vignetting recursive tracing make work
 // Make visualisation for all parameters for website
 // Add colours to output ("\x1b[1;36m ..... \e[0m")
@@ -80,7 +80,7 @@ AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 #define _bokehPath (params[6].STR)
 #define _kolb (params[7].BOOL)
 #define _lensDataPath (params[8].STR)
-#define _kolbSamplingMethod (params[9].BOOL)
+#define _kolbSamplingLUT (params[9].BOOL)
 #define _useDof (params[10].BOOL)
 #define _opticalVignettingDistance (params[11].FLT)
 #define _opticalVignettingRadius (params[12].FLT)
@@ -1098,6 +1098,25 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
 }
 
 
+inline void printProgress(float progress, int barWidth){
+    std::cout << "[";
+    int pos = barWidth * progress;
+
+    for (int i = 0; i < barWidth; ++i) {
+        if (i < pos){
+            std::cout << "=";
+        } else if (i == pos){
+            std::cout << ">";
+        } else {
+            std::cout << " ";
+        }
+    }
+
+    std::cout << std::fixed << std::setprecision(2) << "] % " << progress * 100.0 << "\r";
+    std::cout.flush();
+}
+
+
 bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld){
     AtVector hit_point;
     AtVector hit_point_normal;
@@ -1149,7 +1168,7 @@ void testAperturesTruth(Lensdata *ld){
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 100000;
+    int apertureSamples = 50000;
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
@@ -1173,9 +1192,10 @@ void testAperturesTruth(Lensdata *ld){
             }
 
             testAperturesFile << std::endl;
-
         }
     }
+
+    AiMsgInfo( "%-40s", "[ZOIC] Tested Ground Truth");
 }
 
 
@@ -1186,7 +1206,7 @@ void testAperturesLUT(Lensdata *ld){
     int filmSamples = 3;
     int apertureSamples = 5000;
 
-    float samplingErrorCorrection = 1.2;
+    float samplingErrorCorrection = 1.4;
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
@@ -1255,16 +1275,24 @@ void testAperturesLUT(Lensdata *ld){
     WORK_ONLY(std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic/zoic/src/triangleSamplingDraw.py";)
     MACBOOK_ONLY(std::string filename = "/Volumes/ZENO_2016/projects/zoic/src/triangleSamplingDraw.py";)
     std::string command = "python "; command += filename; system(command.c_str());
+
+    AiMsgInfo( "%-40s", "[ZOIC] Tested LUT");
 }
 
 
 void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSamples){
+    
+    float progress = 0.0;
+    int barWidth = 72;
+    int progressPrintCounter = 0;
     
     float filmWidth = 6.0;
     float filmHeight = 6.0;
 
     float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
     float filmSpacingY = filmHeight / static_cast<float>(filmSamplesY);
+
+    AiMsgInfo( "%-40s %12d", "[ZOIC] Calculating LUT of size ^ 2", filmSamplesX);
 
     for(int i = 0; i < filmSamplesX + 1; i++){
         for(int j = 0; j < filmSamplesY + 1; j++){
@@ -1315,12 +1343,20 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
                 }
             }
             
-            std::cout << apertureBounds.max.x << std::endl;
+            ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, apertureBounds));
 
-            ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, apertureBounds));            
+
+            if (progressPrintCounter == (filmSamplesX * filmSamplesY) / 100){
+                printProgress(progress, barWidth);
+                progress = static_cast<float>((i * filmSamplesX) + j) / static_cast<float>(filmSamplesX * filmSamplesY);
+                progressPrintCounter = 0; 
+            } else {
+                ++progressPrintCounter;
+            }
         }
     }
 
+    std::cout << std::endl;
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
 
@@ -1335,7 +1371,7 @@ node_parameters {
     AiParameterStr("bokehPath", "");
     AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", "");
-    AiParameterBOOL("kolbSamplingMethod", true);
+    AiParameterBOOL("kolbSamplingLUT", true);
     AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 70.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
@@ -1366,8 +1402,6 @@ node_update {
         MACBOOK_ONLY(myfile.open("/Volumes/ZENO_2016/projects/zoic/src/draw.zoic");)
         WORK_ONLY(myfile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.zoic", std::ofstream::out | std::ofstream::trunc);)
     })
-
-    ld.apertureMap.clear();
  
     // make probability functions of the bokeh image
     if (_useImage == true){
@@ -1424,6 +1458,7 @@ node_update {
         ld.optimalAperture = 0.0;
         ld.focalLengthRatio = 0.0;
         ld.originShift = 0.0;
+        ld.apertureMap.clear();
  
         // Update shaderData variables
         ld.xres = static_cast<float>(AiNodeGetInt(options,"xres"));
@@ -1497,16 +1532,18 @@ node_update {
         // precompute lens centers
         computeLensCenters(&ld);
 
-        testAperturesTruth(&ld);
-        exitPupilLUT(&ld, 32, 32, 50000);
-        testAperturesLUT(&ld);      
+        if (_kolbSamplingLUT){
+            //testAperturesTruth(&ld);
+            exitPupilLUT(&ld, 64, 64, 25000);
+            //testAperturesLUT(&ld); 
+        }
+             
 
         DRAW_ONLY({
             // write to file for lens drawing
             writeToFile(&ld);
             myfile << "RAYS{";
         })
- 
     }
 }
  
@@ -1590,7 +1627,7 @@ camera_create_ray {
 
             if (_opticalVignettingDistance > 0.0f){
 	        	
-                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance) && tries <= 50){
+                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance) && tries <= 20){
 	        		
                     if(tries > 0){
                         concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
@@ -1627,7 +1664,7 @@ camera_create_ray {
 	            output->dir = AiV3Normalize(focusPoint - output->origin);
         	}*/
 
-        	if(tries == 50){
+        	if(tries == 20){
 	        	output->weight = 0.0f;
 	        	++ld.vignettedRays;
 	        } else {
@@ -1666,43 +1703,115 @@ camera_create_ray {
             output->origin.x = 0.0;
             output->origin.y = 0.0;
         })
-        
-        // sample disk with proper sample distribution
+
         AtPoint2 lens = {0.0, 0.0};
-
-        !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
-	
-		output->origin.x = input->sx * (_sensorWidth * 0.5);
-        output->origin.y = input->sy * (_sensorWidth * 0.5);
-        output->origin.z = ld.originShift;
-
-        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-        output->dir.z = -ld.lensThickness[0];
-
         int tries = 0;
-
-        while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 50){
-	        output->origin.x = input->sx * (_sensorWidth * 0.5);
-	        output->origin.y = input->sy * (_sensorWidth * 0.5);
-	        output->origin.z = ld.originShift;
-	 
-        	concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
-
-	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-	        output->dir.z = - ld.lensThickness[0];
-
-	        ++tries;
-        }
-
-        if(tries == 50){
-        	output->weight = 0.0f;
-        	++ld.vignettedRays;
-        } else {
-        	++ld.succesRays;
-        }
         
+        if (!_kolbSamplingLUT){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
+
+            // sample disk with proper sample distribution
+            !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
+    	
+    		output->origin.x = input->sx * (_sensorWidth * 0.5);
+            output->origin.y = input->sy * (_sensorWidth * 0.5);
+            output->origin.z = ld.originShift;
+
+            output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
+            output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
+            output->dir.z = -ld.lensThickness[0];
+
+            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 20){
+    	        output->origin.x = input->sx * (_sensorWidth * 0.5);
+    	        output->origin.y = input->sy * (_sensorWidth * 0.5);
+    	        output->origin.z = ld.originShift;
+    	 
+            	concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+
+    	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
+    	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
+    	        output->dir.z = - ld.lensThickness[0];
+
+    	        ++tries;
+            }
+        } 
+
+        else { // USING LUT
+            
+            float samplingErrorCorrection = 1.4;
+
+            // lowest bound x value
+            std::map<float, std::map<float, boundingBox2d>>::iterator low;
+            low = ld.apertureMap.lower_bound(output->origin.x);
+            float value1 = low->first;
+
+            // lowest bound y value
+            std::map<float, boundingBox2d>::iterator low2;
+            low2 = low->second.lower_bound(output->origin.y);
+            float value2 = low2->first;
+
+            concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+
+            // go back 1 element in sorted map
+            --low;
+            float value3 = low->first;
+            
+            --low2;
+            float value4 = low2->first;
+
+            // percentage of x inbetween two stored LUT entries
+            float xpercentage = (output->origin.x - value1) / (value3 - value1);
+            float ypercentage = (output->origin.y - value2) / (value4 - value2);
+
+            // scale
+            float maxScale = BILERP(xpercentage, ypercentage, 
+                                    ld.apertureMap[value1][value2].getMaxScale(), ld.apertureMap[value3][value4].getMaxScale(),
+                                    ld.apertureMap[value1][value4].getMaxScale(), ld.apertureMap[value3][value2].getMaxScale()) * samplingErrorCorrection;
+
+            lens *= {maxScale, maxScale};
+
+            AtPoint2 centroid1 = ld.apertureMap[value1][value2].getCentroid();
+            AtPoint2 centroid2 = ld.apertureMap[value1][value4].getCentroid();
+            AtPoint2 centroid3 = ld.apertureMap[value3][value4].getCentroid();
+            AtPoint2 centroid4 = ld.apertureMap[value3][value2].getCentroid();
+
+            // translation
+            lens += {BILERP(xpercentage, ypercentage, centroid1.x, centroid3.x, centroid2.x, centroid4.x),
+                     BILERP(xpercentage, ypercentage, centroid1.y, centroid3.y, centroid2.y, centroid4.y)};
+
+            output->dir.x = lens.x - output->origin.x;
+            output->dir.y = lens.y - output->origin.y;
+            output->dir.z = - ld.lensThickness[0];
+
+
+
+            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 20){
+                output->origin.x = input->sx * (_sensorWidth * 0.5);
+                output->origin.y = input->sy * (_sensorWidth * 0.5);
+                output->origin.z = ld.originShift;
+
+                concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+
+                lens *= {maxScale, maxScale};
+
+                // translation
+                lens += {BILERP(xpercentage, ypercentage, centroid1.x, centroid3.x, centroid2.x, centroid4.x),
+                         BILERP(xpercentage, ypercentage, centroid1.y, centroid3.y, centroid2.y, centroid4.y)};
+
+                output->dir.x = lens.x - output->origin.x;
+                output->dir.y = lens.y - output->origin.y;
+                output->dir.z = - ld.lensThickness[0];
+
+                ++tries;
+            }
+        }
+
+        if(tries == 20){
+            output->weight = 0.0f;
+            ++ld.vignettedRays;
+        } else {
+            ++ld.succesRays;
+        }
+
 
         // looks cleaner in 2d when rays are aligned on axis
         DRAW_ONLY(output->dir.x = 0.0;)
