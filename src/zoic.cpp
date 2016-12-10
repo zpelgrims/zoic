@@ -5,15 +5,8 @@
 // Emperical optical vignetting using the thin-lens equation
 
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
- 
-// Make it work with other lens profiles, test fisheye drawing
-// test bounding box with other lenses
-// lut cancelling takes too long.. kinda annoying
+
 // ray derivatives problem with textures?
-// test kolb with image based bokeh, should work but ya never know
-// recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that? ask solidangle
-// If no rays can get through, implement a check for that to return black weight, maybe modify map to contain another bool?
-	// the edges are a bit odd but it seems to cover all of the ground truth data..
 // Make visualisation for all parameters for website
 // Support lens files with extra information (abbe number, kind of glass)
  
@@ -520,28 +513,21 @@ public:
     AtPoint2 max;
     AtPoint2 min;
 
-    AtPoint2 getCentroid();
-    float getMaxScale();
-};
-
-
-AtPoint2 boundingBox2d::getCentroid(){
-    AtPoint2 centroid = {(min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f};
-    return centroid;
-}
-
-
-float boundingBox2d::getMaxScale(){
-    float scaleX = AiV2Dist( getCentroid(), {max.x, getCentroid().y});
-    float scaleY = AiV2Dist( getCentroid(), {getCentroid().x, max.y});
-    //(scaleX >= scaleY) ? return scaleX : return scaleY;
-
-    if (scaleX >= scaleY){
-        return scaleX;
-    } else {
-        return scaleY;
+    AtPoint2 getCentroid(){
+    	return {(min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f};
     }
-}
+
+    float getMaxScale(){
+	    float scaleX = AiV2Dist( getCentroid(), {max.x, getCentroid().y});
+	    float scaleY = AiV2Dist( getCentroid(), {getCentroid().x, max.y});
+
+	    if (scaleX >= scaleY){
+	        return scaleX;
+	    } else {
+	        return scaleY;
+	    }
+    }
+};
  
  
 struct Lensdata{
@@ -1377,21 +1363,20 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
     }
 
     std::cout << "\e[0m" << std::endl;
-    AiMsgInfo( "%-40s %12d", "[ZOIC] Calculated LUT of size ^ 2", filmSamplesX);
 }
 
 
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
-    AiParameterFLT("focalLength", 10.0);
-    AiParameterFLT("fStop", 16.0);
-    AiParameterFLT("focalDistance", 100.0);
+    AiParameterFLT("focalLength", 12.5);
+    AiParameterFLT("fStop", 2.8);
+    AiParameterFLT("focalDistance", 120.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
     AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", "");
-    AiParameterBOOL("kolbSamplingLUT", false);
+    AiParameterBOOL("kolbSamplingLUT", true);
     AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 25.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
@@ -1443,6 +1428,7 @@ node_update {
         camera->apertureRadius = (_focalLength) / (2.0f * _fStop);
 
     } else {
+    	
     	// check if i actually need to recalculate everything, or parameters didn't change on update
     	if(!(ldCheckUpdate.stored_sensorWidth == _sensorWidth && ldCheckUpdate.stored_sensorHeight == _sensorHeight &&
     		ldCheckUpdate.stored_focalLength == _focalLength && ldCheckUpdate.stored_fStop == _fStop &&
@@ -1585,9 +1571,7 @@ node_finish {
         // execute python drawing
         MACBOOK_ONLY(std::string filename = "/Volumes/ZENO_2016/projects/zoic/src/draw.py";)
         WORK_ONLY(std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.py";)
-        std::string command = "python ";
-        command += filename;
-        system(command.c_str());
+        std::string command = "python "; command += filename; system(command.c_str());
  
         AiMsgInfo("[ZOIC] Drawing finished");
     })
