@@ -8,6 +8,8 @@
  
 // Make it work with other lens profiles, test fisheye drawing
 // test bounding box with other lenses
+// lut cancelling takes too long.. kinda annoying
+// ray derivatives problem with textures?
 // test kolb with image based bokeh, should work but ya never know
 // recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that? ask solidangle
 // If no rays can get through, implement a check for that to return black weight, maybe modify map to contain another bool?
@@ -560,6 +562,19 @@ struct Lensdata{
     float focalDistance; 
     std::map<float, std::map<float, boundingBox2d>> apertureMap;
 } ld;
+
+
+struct LensdataCheckUpdate{
+	float stored_sensorWidth = 0.0f;
+    float stored_sensorHeight = 0.0f;
+    float stored_focalLength = 0.0f;
+    float stored_fStop = 0.0f;
+    float stored_focalDistance = 0.0f;
+    bool stored_useImage = false;
+    std::string stored_bokehPath = "";
+    std::string stored_lensDataPath = "";
+    bool stored_kolbSamplingLUT = false;
+} ldCheckUpdate;
  
 
 // xorshift random number generator
@@ -855,7 +870,7 @@ float calculateImageDistance(float objectDistance, Lensdata *ld){
              calculateTransmissionVector(&ray_direction_focus, ld->lensIOR[ld->lensRadiusCurvature.size() - i], ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal, false);
          }
         
-         if(i == (int)ld->lensRadiusCurvature.size() - 1){
+         if(i == static_cast<int>(ld->lensRadiusCurvature.size()) - 1){
              imageDistance = linePlaneIntersection(hit_point, ray_direction_focus).z;
          }
  
@@ -932,7 +947,7 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
         }
     }
  
-     return true;
+    return true;
 }
 
 
@@ -1429,104 +1444,128 @@ node_update {
         camera->apertureRadius = (_focalLength) / (2.0f * _fStop);
 
     } else {
+    	// check if i actually need to recalculate everything, or parameters didn't change on update
+    	if(!(ldCheckUpdate.stored_sensorWidth == _sensorWidth && ldCheckUpdate.stored_sensorHeight == _sensorHeight &&
+    		ldCheckUpdate.stored_focalLength == _focalLength && ldCheckUpdate.stored_fStop == _fStop &&
+    		ldCheckUpdate.stored_focalDistance == _focalDistance && ldCheckUpdate.stored_useImage == _useImage &&
+    		ldCheckUpdate.stored_bokehPath == _bokehPath && ldCheckUpdate.stored_lensDataPath == _lensDataPath &&
+    		ldCheckUpdate.stored_kolbSamplingLUT == _kolbSamplingLUT)){
 
-         DRAW_ONLY({
-             myfile << "LENSMODEL{KOLB}";
-             myfile << "\n";
-         })
- 
-        // reset variables
-        ld.lensRadiusCurvature.clear();
-        ld.lensThickness.clear();
-        ld.lensIOR.clear();
-        ld.lensAperture.clear();
-        ld.lensCenter.clear();
-        ld.vignettedRays = 0;
-        ld.succesRays = 0;
-        ld.totalInternalReflection = 0;
-        ld.originShift = 0.0;
-        ld.apertureMap.clear();
- 
-        // not sure if this is the right way to do it.. probably more to it than this!
-        ld.filmDiagonal = std::sqrt(SQR(_sensorWidth) + SQR(_sensorHeight));
- 
-        ld.focalDistance = _focalDistance;
- 
-        // check if file is supplied
-        // string is const char* so have to do it the oldskool way
-        if ((_lensDataPath != NULL) && (_lensDataPath[0] == '\0')){
-           AiMsgError("[ZOIC] Lens Data Path is empty");
-           AiRenderAbort();
-        } else {
-           AiMsgInfo("[ZOIC] Lens Data Path = [%s]", _lensDataPath);
-           readTabularLensData(_lensDataPath, &ld);
-        }
- 
-        // bail out if something is incorrect with the vectors
-        if ((int)ld.lensRadiusCurvature.size() == 0 ||
-            ld.lensRadiusCurvature.size() != ld.lensAperture.size() ||
-            ld.lensThickness.size() != ld.lensIOR.size()){
-            AiMsgError("[ZOIC] Failed to read lens data file.");
-            AiMsgError("[ZOIC] ... Is it the path correct?");
-            AiMsgError("[ZOIC] ... Does it have 4 tabbed columns?");
-            AiRenderAbort();
-        }
- 
-        // look for invalid numbers that would mess it all up bro
-        cleanupLensData(&ld);
- 
-        // calculate focal length by tracing a parallel ray through the lens system
-        float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, false);
- 
-        // find by how much all lens elements should be scaled
-        ld.focalLengthRatio = _focalLength / kolbFocalLength;
-        AiMsgInfo( "%-40s %12.8f", "[ZOIC] Focal length ratio", ld.focalLengthRatio);
- 
-        // scale lens elements
-        adjustFocalLength(&ld);
- 
-        // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
-        kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, true);
- 
-        // user specified aperture radius from fstop
-        ld.userApertureRadius = kolbFocalLength / (2.0 * _fStop);
-        AiMsgInfo( "%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
- 
-        // clamp aperture if fstop is wider than max aperture given by lens description
-        if (ld.userApertureRadius > ld.lensAperture[ld.apertureElement]){
-            AiMsgWarning("[ZOIC] Given FSTOP wider than maximum aperture radius provided by lens data.");
-            AiMsgWarning("[ZOIC] Clamping aperture radius from [%.9f] to [%.9f]", ld.userApertureRadius, ld.lensAperture[ld.apertureElement]);
-            ld.userApertureRadius = ld.lensAperture[ld.apertureElement];
-        }
-       
-        // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
-        ld.originShift = calculateImageDistance(_focalDistance, &ld);
- 
-        // calculate distance between film plane and aperture
-        ld.apertureDistance = 0.0;
-        for(int i = 0; i < (int)ld.lensRadiusCurvature.size(); i++){
-            ld.apertureDistance += ld.lensThickness[i];
-            if(i == ld.apertureElement){
-                AiMsgInfo( "%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
-                break;
-            }
-        }
- 
-        // precompute lens centers
-        computeLensCenters(&ld);
+    		// update everything
+    		ldCheckUpdate.stored_sensorWidth = _sensorWidth;
+    		ldCheckUpdate.stored_sensorHeight = _sensorHeight;
+    		ldCheckUpdate.stored_focalLength = _focalLength;
+    		ldCheckUpdate.stored_fStop = _fStop;
+    		ldCheckUpdate.stored_focalDistance = _focalDistance;
+    		ldCheckUpdate.stored_useImage = _useImage;
+    		ldCheckUpdate.stored_bokehPath = _bokehPath;
+    		ldCheckUpdate.stored_lensDataPath = _lensDataPath;
+    		ldCheckUpdate.stored_kolbSamplingLUT = _kolbSamplingLUT;
 
-        if (_kolbSamplingLUT){
-            testAperturesTruth(&ld);
-            exitPupilLUT(&ld, 64, 64, 25000);
-            testAperturesLUT(&ld); 
-        }
-             
 
-        DRAW_ONLY({
-            // write to file for lens drawing
-            writeToFile(&ld);
-            myfile << "RAYS{";
-        })
+    		DRAW_ONLY({
+	             myfile << "LENSMODEL{KOLB}";
+	             myfile << "\n";
+	         })
+	 
+	        // reset variables
+	        ld.lensRadiusCurvature.clear();
+	        ld.lensThickness.clear();
+	        ld.lensIOR.clear();
+	        ld.lensAperture.clear();
+	        ld.lensCenter.clear();
+	        ld.vignettedRays = 0;
+	        ld.succesRays = 0;
+	        ld.totalInternalReflection = 0;
+	        ld.originShift = 0.0;
+	        ld.apertureMap.clear();
+	 
+	        // not sure if this is the right way to do it.. probably more to it than this!
+	        ld.filmDiagonal = std::sqrt(SQR(_sensorWidth) + SQR(_sensorHeight));
+	 
+	        ld.focalDistance = _focalDistance;
+	 
+	        // check if file is supplied
+	        // string is const char* so have to do it the oldskool way
+	        if ((_lensDataPath != NULL) && (_lensDataPath[0] == '\0')){
+	           AiMsgError("[ZOIC] Lens Data Path is empty");
+	           AiRenderAbort();
+	        } else {
+	           AiMsgInfo("[ZOIC] Lens Data Path = [%s]", _lensDataPath);
+	           readTabularLensData(_lensDataPath, &ld);
+	        }
+	 
+	        // bail out if something is incorrect with the vectors
+	        if ((int)ld.lensRadiusCurvature.size() == 0 ||
+	            ld.lensRadiusCurvature.size() != ld.lensAperture.size() ||
+	            ld.lensThickness.size() != ld.lensIOR.size()){
+	            AiMsgError("[ZOIC] Failed to read lens data file.");
+	            AiMsgError("[ZOIC] ... Is it the path correct?");
+	            AiMsgError("[ZOIC] ... Does it have 4 tabbed columns?");
+	            AiRenderAbort();
+	        }
+	 
+	        // look for invalid numbers that would mess it all up bro
+	        cleanupLensData(&ld);
+	 
+	        // calculate focal length by tracing a parallel ray through the lens system
+	        float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, false);
+	 
+	        // find by how much all lens elements should be scaled
+	        ld.focalLengthRatio = _focalLength / kolbFocalLength;
+	        AiMsgInfo( "%-40s %12.8f", "[ZOIC] Focal length ratio", ld.focalLengthRatio);
+	 
+	        // scale lens elements
+	        adjustFocalLength(&ld);
+	 
+	        // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
+	        kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, true);
+	 
+	        // user specified aperture radius from fstop
+	        ld.userApertureRadius = kolbFocalLength / (2.0 * _fStop);
+	        AiMsgInfo( "%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
+	 
+	        // clamp aperture if fstop is wider than max aperture given by lens description
+	        if (ld.userApertureRadius > ld.lensAperture[ld.apertureElement]){
+	            AiMsgWarning("[ZOIC] Given FSTOP wider than maximum aperture radius provided by lens data.");
+	            AiMsgWarning("[ZOIC] Clamping aperture radius from [%.9f] to [%.9f]", ld.userApertureRadius, ld.lensAperture[ld.apertureElement]);
+	            ld.userApertureRadius = ld.lensAperture[ld.apertureElement];
+	        }
+	       
+	        // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
+	        ld.originShift = calculateImageDistance(_focalDistance, &ld);
+	 
+	        // calculate distance between film plane and aperture
+	        ld.apertureDistance = 0.0;
+	        for(int i = 0; i < (int)ld.lensRadiusCurvature.size(); i++){
+	            ld.apertureDistance += ld.lensThickness[i];
+	            if(i == ld.apertureElement){
+	                AiMsgInfo( "%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
+	                break;
+	            }
+	        }
+	 
+	        // precompute lens centers
+	        computeLensCenters(&ld);
+
+	        if (_kolbSamplingLUT){
+	            exitPupilLUT(&ld, 64, 64, 25000);
+
+	            DRAW_ONLY({
+		            testAperturesTruth(&ld);
+		            testAperturesLUT(&ld);
+	           	}) 
+	        }
+	             
+
+	        DRAW_ONLY({
+	            // write to file for lens drawing
+	            writeToFile(&ld);
+	            myfile << "RAYS{";
+	        })
+    	} else {
+    		AiMsgWarning("[ZOIC] Skipping node update, parameters didn't change.");
+    	}
     }
 }
  
@@ -1601,7 +1640,7 @@ camera_create_ray {
 
             output->dir = AiV3Normalize(focusPoint - output->origin);
             if (_opticalVignettingDistance > 0.0f){
-
+            	
                 while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance) && tries <= 15){
                     output->dir = AiV3Normalize(p - originOriginal);
                     
@@ -1625,6 +1664,12 @@ camera_create_ray {
                 } else {
                     ++ld.succesRays;
                 }
+                
+				/*
+                if(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance)){
+                	output->weight = 0.0f;
+                }
+                */
             }
         }
  
@@ -1695,7 +1740,7 @@ camera_create_ray {
 
         else { // USING LOOKUP TABLE
             
-            float samplingErrorCorrection = 1.4;
+            float samplingErrorCorrection = 1.5;
 
             // lowest bound x value
             std::map<float, std::map<float, boundingBox2d>>::iterator low;
