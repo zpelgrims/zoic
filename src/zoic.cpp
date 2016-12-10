@@ -1384,13 +1384,13 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0);
-    AiParameterFLT("fStop", 1.4);
+    AiParameterFLT("fStop", 10.4);
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
     AiParameterBOOL("kolb", true);
     AiParameterStr("lensDataPath", "");
-    AiParameterBOOL("kolbSamplingLUT", true);
+    AiParameterBOOL("kolbSamplingLUT", false);
     AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 25.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
@@ -1461,7 +1461,6 @@ node_update {
     		ldCheckUpdate.stored_bokehPath = _bokehPath;
     		ldCheckUpdate.stored_lensDataPath = _lensDataPath;
     		ldCheckUpdate.stored_kolbSamplingLUT = _kolbSamplingLUT;
-
 
     		DRAW_ONLY({
 	             myfile << "LENSMODEL{KOLB}";
