@@ -13,6 +13,7 @@
 // test kolb with image based bokeh, should work but ya never know
 // recursive tracing seems to work for distance test but not light test? How can an image be greyed out like that? ask solidangle
 // If no rays can get through, implement a check for that to return black weight, maybe modify map to contain another bool?
+	// the edges are a bit odd but it seems to cover all of the ground truth data..
 // Make visualisation for all parameters for website
 // Support lens files with extra information (abbe number, kind of glass)
  
@@ -1384,7 +1385,7 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0);
-    AiParameterFLT("fStop", 10.4);
+    AiParameterFLT("fStop", 16.0);
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
@@ -1404,9 +1405,7 @@ node_initialize {
      cameraData *camera = new cameraData();
      AiCameraInitialize(node, (void*)camera);
  
-     DRAW_ONLY({
-         AiMsgInfo("[ZOIC] ---- IMAGE DRAWING ENABLED @ COMPILE TIME ----");
-     })
+     DRAW_ONLY(AiMsgInfo("[ZOIC] ---- IMAGE DRAWING ENABLED @ COMPILE TIME ----");)
 }
  
  
@@ -1495,7 +1494,7 @@ node_update {
 	        }
 	 
 	        // bail out if something is incorrect with the vectors
-	        if ((int)ld.lensRadiusCurvature.size() == 0 ||
+	        if (static_cast<int>(ld.lensRadiusCurvature.size()) == 0 ||
 	            ld.lensRadiusCurvature.size() != ld.lensAperture.size() ||
 	            ld.lensThickness.size() != ld.lensIOR.size()){
 	            AiMsgError("[ZOIC] Failed to read lens data file.");
@@ -1536,7 +1535,7 @@ node_update {
 	 
 	        // calculate distance between film plane and aperture
 	        ld.apertureDistance = 0.0;
-	        for(int i = 0; i < (int)ld.lensRadiusCurvature.size(); i++){
+	        for(int i = 0; i < static_cast<int>(ld.lensRadiusCurvature.size()); i++){
 	            ld.apertureDistance += ld.lensThickness[i];
 	            if(i == ld.apertureElement){
 	                AiMsgInfo( "%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
@@ -1710,6 +1709,7 @@ camera_create_ray {
         !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
         
         int tries = 0;
+        int maxtries = 15;
         
         if (!_kolbSamplingLUT){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
 
@@ -1721,7 +1721,7 @@ camera_create_ray {
             output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
             output->dir.z = -ld.lensThickness[0];
 
-            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 15){
+            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
 
                 output->origin.x = input->sx * (_sensorWidth * 0.5);
     	        output->origin.y = input->sy * (_sensorWidth * 0.5);
@@ -1763,9 +1763,12 @@ camera_create_ray {
             float ypercentage = (output->origin.y - value2) / (value4 - value2);
 
             // scale
-            float maxScale = BILERP(xpercentage, ypercentage, 
-                                    ld.apertureMap[value1][value2].getMaxScale(), ld.apertureMap[value3][value4].getMaxScale(),
-                                    ld.apertureMap[value1][value4].getMaxScale(), ld.apertureMap[value3][value2].getMaxScale()) * samplingErrorCorrection;
+            float scale1 = ld.apertureMap[value1][value2].getMaxScale();
+            float scale2 = ld.apertureMap[value3][value4].getMaxScale();
+            float scale3 = ld.apertureMap[value1][value4].getMaxScale();
+            float scale4 = ld.apertureMap[value3][value2].getMaxScale();
+
+        	float maxScale = BILERP(xpercentage, ypercentage, scale1, scale2, scale3, scale4) * samplingErrorCorrection;
 
             lens *= maxScale;
 
@@ -1785,7 +1788,7 @@ camera_create_ray {
             output->dir.z = - ld.lensThickness[0];
 
 
-            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= 15){
+            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
                 output->origin.x = input->sx * (_sensorWidth * 0.5);
                 output->origin.y = input->sy * (_sensorWidth * 0.5);
                 output->origin.z = ld.originShift;
@@ -1801,9 +1804,10 @@ camera_create_ray {
 
                 ++tries;
             }
+	        
         }
 
-        if(tries > 15){
+        if(tries > maxtries){
             output->weight = 0.0f;
             ++ld.vignettedRays;
         } else {
