@@ -33,14 +33,10 @@ It’s also possible to copy the files into your MtoA install, but I personally 
 - Files in the 'maya/ae' folder go to [$MTOA_LOCATION]/scripts/mtoa/ui/ae 
 
 
-## Credits
+## Thanks to
 
-Special thanks to Marc-Antoine Desjardins for the help with the image sampling. I owe this guy quite a few beers by now.
-
-Special thanks to Benedikt Bitterli for the information on optical vignetting.
-
-Special thanks to Tom Minor for the major help with C++ (it was needed!)
-
-Special thanks to Brian Scherbinski for the windows compile.
-
-Special thanks to Gaetan Guidet for the C++ cleanup and improvements.
+Marc-Antoine Desjardins for the help with the image sampling. I owe this guy quite a few beers by now.
+Benedikt Bitterli for the information on optical vignetting.
+Tom Minor for the major help with C++ (it was needed!)
+Brian Scherbinski for the windows compile.
+Gaetan Guidet for the C++ cleanup and improvements.
