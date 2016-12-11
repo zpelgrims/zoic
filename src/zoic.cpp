@@ -66,23 +66,27 @@ int counter = 0;
  
 // Arnold methods
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
- 
-#define _sensorWidth (params[0].FLT)
-#define _sensorHeight (params[1].FLT)
-#define _focalLength (params[2].FLT)
-#define _fStop (params[3].FLT)
-#define _focalDistance (params[4].FLT)
-#define _useImage (params[5].BOOL)
-#define _bokehPath (params[6].STR)
-#define _kolb (params[7].BOOL)
-#define _lensDataPath (params[8].STR)
-#define _kolbSamplingLUT (params[9].BOOL)
-#define _useDof (params[10].BOOL)
-#define _opticalVignettingDistance (params[11].FLT)
-#define _opticalVignettingRadius (params[12].FLT)
-#define _highlightWidth (params[13].FLT)
-#define _highlightStrength (params[14].FLT)
-#define _exposureControl (params[15].FLT)
+
+
+enum params{
+	p_sensorWidth,
+	p_sensorHeight,
+	p_focalLength,
+	p_fStop,
+	p_focalDistance,
+	p_useImage,
+	p_bokehPath,
+	p_kolb,
+	p_lensDataPath,
+	p_kolbSamplingLUT,
+	p_useDof,
+	p_opticalVignettingDistance,
+	p_opticalVignettingRadius,
+	p_highlightWidth,
+	p_highlightStrength,
+	p_exposureControl
+};
+
 
 #define AI_PIOVER4 (0.78539816339f)
  
@@ -1406,8 +1410,8 @@ node_update {
     })
  
     // make probability functions of the bokeh image
-    if (_useImage == true){
-        if (!camera->image.read(_bokehPath)){
+    if (params[p_useImage].BOOL == true){
+        if (!camera->image.read(params[p_bokehPath].STR)){
             AiMsgError("[ZOIC] Couldn't open bokeh image!");
             AiRenderAbort();
         }
@@ -1416,36 +1420,36 @@ node_update {
     camera->image.invalidate();
  
  
-    if(!_kolb){
+    if(!params[p_kolb].BOOL){
         DRAW_ONLY({
             myfile << "LENSMODEL{THINLENS}";
             myfile << "\n";
             myfile << "RAYS{" ;
         })
 
-        camera->fov = 2.0f * atan((_sensorWidth / (2.0f * _focalLength))); // in radians
+        camera->fov = 2.0f * atan((params[p_sensorWidth].FLT / (2.0f * params[p_focalLength].FLT))); // in radians
         camera->tan_fov = tanf(camera->fov/ 2.0f);
-        camera->apertureRadius = (_focalLength) / (2.0f * _fStop);
+        camera->apertureRadius = (params[p_focalLength].FLT) / (2.0f * params[p_fStop].FLT);
 
     } else {
     	
     	// check if i actually need to recalculate everything, or parameters didn't change on update
-    	if(!(ldCheckUpdate.stored_sensorWidth == _sensorWidth && ldCheckUpdate.stored_sensorHeight == _sensorHeight &&
-    		ldCheckUpdate.stored_focalLength == _focalLength && ldCheckUpdate.stored_fStop == _fStop &&
-    		ldCheckUpdate.stored_focalDistance == _focalDistance && ldCheckUpdate.stored_useImage == _useImage &&
-    		ldCheckUpdate.stored_bokehPath == _bokehPath && ldCheckUpdate.stored_lensDataPath == _lensDataPath &&
-    		ldCheckUpdate.stored_kolbSamplingLUT == _kolbSamplingLUT)){
+    	if(!(ldCheckUpdate.stored_sensorWidth == params[p_sensorWidth].FLT && ldCheckUpdate.stored_sensorHeight == params[p_sensorHeight].FLT  &&
+    		ldCheckUpdate.stored_focalLength == params[p_focalLength].FLT && ldCheckUpdate.stored_fStop == params[p_fStop].FLT &&
+    		ldCheckUpdate.stored_focalDistance == params[p_focalDistance].FLT && ldCheckUpdate.stored_useImage == params[p_useImage].BOOL &&
+    		ldCheckUpdate.stored_bokehPath == params[p_bokehPath].STR && ldCheckUpdate.stored_lensDataPath == params[p_lensDataPath].STR &&
+    		ldCheckUpdate.stored_kolbSamplingLUT == params[p_kolbSamplingLUT].BOOL)){
 
     		// update everything
-    		ldCheckUpdate.stored_sensorWidth = _sensorWidth;
-    		ldCheckUpdate.stored_sensorHeight = _sensorHeight;
-    		ldCheckUpdate.stored_focalLength = _focalLength;
-    		ldCheckUpdate.stored_fStop = _fStop;
-    		ldCheckUpdate.stored_focalDistance = _focalDistance;
-    		ldCheckUpdate.stored_useImage = _useImage;
-    		ldCheckUpdate.stored_bokehPath = _bokehPath;
-    		ldCheckUpdate.stored_lensDataPath = _lensDataPath;
-    		ldCheckUpdate.stored_kolbSamplingLUT = _kolbSamplingLUT;
+    		ldCheckUpdate.stored_sensorWidth = params[p_sensorWidth].FLT;
+    		ldCheckUpdate.stored_sensorHeight = params[p_sensorHeight].FLT;
+    		ldCheckUpdate.stored_focalLength = params[p_focalLength].FLT;
+    		ldCheckUpdate.stored_fStop = params[p_fStop].FLT;
+    		ldCheckUpdate.stored_focalDistance = params[p_focalDistance].FLT;
+    		ldCheckUpdate.stored_useImage = params[p_useImage].BOOL;
+    		ldCheckUpdate.stored_bokehPath = params[p_bokehPath].STR;
+    		ldCheckUpdate.stored_lensDataPath = params[p_lensDataPath].STR;
+    		ldCheckUpdate.stored_kolbSamplingLUT = params[p_kolbSamplingLUT].BOOL;
 
     		DRAW_ONLY({
 	             myfile << "LENSMODEL{KOLB}";
@@ -1465,18 +1469,18 @@ node_update {
 	        ld.apertureMap.clear();
 	 
 	        // not sure if this is the right way to do it.. probably more to it than this!
-	        ld.filmDiagonal = std::sqrt(SQR(_sensorWidth) + SQR(_sensorHeight));
+	        ld.filmDiagonal = std::sqrt(SQR(params[p_sensorWidth].FLT) + SQR(params[p_sensorHeight].FLT));
 	 
-	        ld.focalDistance = _focalDistance;
+	        ld.focalDistance = params[p_focalDistance].FLT;
 	 
 	        // check if file is supplied
 	        // string is const char* so have to do it the oldskool way
-	        if ((_lensDataPath != NULL) && (_lensDataPath[0] == '\0')){
+	        if ((params[p_lensDataPath].STR != NULL) && (params[p_lensDataPath].STR[0] == '\0')){
 	           AiMsgError("[ZOIC] Lens Data Path is empty");
 	           AiRenderAbort();
 	        } else {
-	           AiMsgInfo("[ZOIC] Lens Data Path = [%s]", _lensDataPath);
-	           readTabularLensData(_lensDataPath, &ld);
+	           AiMsgInfo("[ZOIC] Lens Data Path = [%s]", params[p_lensDataPath].STR);
+	           readTabularLensData(params[p_lensDataPath].STR, &ld);
 	        }
 	 
 	        // bail out if something is incorrect with the vectors
@@ -1496,7 +1500,7 @@ node_update {
 	        float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, false);
 	 
 	        // find by how much all lens elements should be scaled
-	        ld.focalLengthRatio = _focalLength / kolbFocalLength;
+	        ld.focalLengthRatio = params[p_focalLength].FLT / kolbFocalLength;
 	        AiMsgInfo( "%-40s %12.8f", "[ZOIC] Focal length ratio", ld.focalLengthRatio);
 	 
 	        // scale lens elements
@@ -1506,7 +1510,7 @@ node_update {
 	        kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, true);
 	 
 	        // user specified aperture radius from fstop
-	        ld.userApertureRadius = kolbFocalLength / (2.0 * _fStop);
+	        ld.userApertureRadius = kolbFocalLength / (2.0 * params[p_fStop].FLT);
 	        AiMsgInfo( "%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
 	 
 	        // clamp aperture if fstop is wider than max aperture given by lens description
@@ -1517,7 +1521,7 @@ node_update {
 	        }
 	       
 	        // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
-	        ld.originShift = calculateImageDistance(_focalDistance, &ld);
+	        ld.originShift = calculateImageDistance(params[p_focalDistance].FLT, &ld);
 	 
 	        // calculate distance between film plane and aperture
 	        ld.apertureDistance = 0.0;
@@ -1532,7 +1536,7 @@ node_update {
 	        // precompute lens centers
 	        computeLensCenters(&ld);
 
-	        if (_kolbSamplingLUT){
+	        if (params[p_kolbSamplingLUT].BOOL){
 	            exitPupilLUT(&ld, 64, 64, 25000);
 
 	            DRAW_ONLY({
@@ -1595,7 +1599,7 @@ camera_create_ray {
     })
  
     // chang this to an enum, thinlens, raytraced
-    if(!_kolb){
+    if (!params[p_kolb].BOOL){
 
         // create point on lens
         AtPoint p = {input->sx * camera->tan_fov, input->sy * camera->tan_fov, 1.0};
@@ -1604,36 +1608,36 @@ camera_create_ray {
         AtPoint originOriginal = output->origin;
  
         // DOF CALCULATIONS
-        if (_useDof == true) {
+        if (params[p_useDof].BOOL == true) {
 
         	bool succes = false;
         	int tries = 0;
 
 	        AtPoint2 lens = {0.0f, 0.0f};
 
-            !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
+            !(params[p_useImage].BOOL) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
 
             lens *= camera->apertureRadius;
             output->origin = {lens.x, lens.y, 0.0};
  
             // Compute point on plane of focus, intersection on z axis
-            float intersection = ABS(_focalDistance / output->dir.z);
+            float intersection = ABS(params[p_focalDistance].FLT / output->dir.z);
             AtPoint focusPoint = output->dir * intersection;
 
             output->dir = AiV3Normalize(focusPoint - output->origin);
-            if (_opticalVignettingDistance > 0.0f){
+            if (params[p_opticalVignettingDistance].FLT > 0.0f){
             	
-                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance) && tries <= 15){
+                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, params[p_opticalVignettingRadius].FLT, params[p_opticalVignettingDistance].FLT) && tries <= 15){
                     output->dir = AiV3Normalize(p - originOriginal);
                     
                     lens = {0.0f, 0.0f};
-                    !(_useImage) ? concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens) : camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+                    !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens) : camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
         		
                     lens *= camera->apertureRadius;
 
                     output->dir = AiV3Normalize(p - originOriginal);
                     output->origin = {lens.x, lens.y, 0.0};
-                    float intersection = ABS(_focalDistance / output->dir.z);
+                    float intersection = ABS(params[p_focalDistance].FLT / output->dir.z);
                     AtPoint focusPoint = output->dir * intersection;
                     output->dir = AiV3Normalize(focusPoint - output->origin);
                     
@@ -1675,10 +1679,10 @@ camera_create_ray {
     }
  
  
-    if(_kolb){
+    if(params[p_kolb].BOOL){
         // not sure if this is correct, i´d like to use the diagonal since that seems to be the standard
-        output->origin.x = input->sx * (_sensorWidth * 0.5);
-        output->origin.y = input->sy * (_sensorWidth * 0.5);
+        output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
+        output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
         output->origin.z = ld.originShift;
         
         DRAW_ONLY({
@@ -1690,15 +1694,15 @@ camera_create_ray {
         AtPoint2 lens = {0.0, 0.0};
         
         // sample disk with proper sample distribution
-        !(_useImage) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
+        !(params[p_useImage].BOOL) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
         
         int tries = 0;
         int maxtries = 15;
         
-        if (!_kolbSamplingLUT){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
+        if (!params[p_kolbSamplingLUT].BOOL){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
 
-    		output->origin.x = input->sx * (_sensorWidth * 0.5);
-            output->origin.y = input->sy * (_sensorWidth * 0.5);
+    		output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
+            output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
             output->origin.z = ld.originShift;
 
             output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
@@ -1707,11 +1711,11 @@ camera_create_ray {
 
             while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
 
-                output->origin.x = input->sx * (_sensorWidth * 0.5);
-    	        output->origin.y = input->sy * (_sensorWidth * 0.5);
+                output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
+    	        output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
     	        output->origin.z = ld.originShift;
     	 
-                !(_useImage) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
 
     	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
     	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
@@ -1773,11 +1777,11 @@ camera_create_ray {
 
 
             while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
-                output->origin.x = input->sx * (_sensorWidth * 0.5);
-                output->origin.y = input->sy * (_sensorWidth * 0.5);
+                output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
+                output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
                 output->origin.z = ld.originShift;
 
-                !(_useImage) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
 
                 lens *= maxScale;
                 lens += translation;
@@ -1810,10 +1814,10 @@ camera_create_ray {
     }
  
     // control to go light stops up and down
-    float e2 = SQR(_exposureControl);
-    if (_exposureControl > 0.0f){
+    float e2 = SQR(params[p_exposureControl].FLT);
+    if (params[p_exposureControl].FLT > 0.0f){
         output->weight *= 1.0f + e2;
-    } else if (_exposureControl < 0.0f){
+    } else if (params[p_exposureControl].FLT < 0.0f){
         output->weight *= 1.0f / (1.0f + e2);
     }
  
