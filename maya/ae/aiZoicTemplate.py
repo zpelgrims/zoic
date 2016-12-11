@@ -46,42 +46,67 @@ class aiZoicTemplate(templates.AttributeTemplate):
         cmds.textFieldButtonGrp("filenameLensDataGrp", edit=True, text=cmds.getAttr(nodeName) )
 
 
-
-
     def setup(self):
+        self.beginLayout("General", collapse=False)
         self.addControl("aiSensorWidth", label="Sensor Width (cm)")
         self.addControl("aiSensorHeight", label="Sensor Height (cm)")
-        self.addControl("aiFocalLength", label="Focal Length (mm)")
+        self.addControl("aiFocalLength", label="Focal Length (cm)", annotation="")
         self.addControl("aiFStop", label="F-stop")
         self.addControl("aiFocalDistance", label="Focus distance (cm)")
+        self.addControl("aiLensModel", label="Lens Model", annotation="RAYTRACED:\n\n Reads in a lens data file and traces rays through that lens. \nThis model is generally preferred, but a bit slower. \nFeatures physically plausible optical vignetting and lens distortions. \n\n\nThin-Lens: \n\nThe classic lens approximation found in all renderers.\nFeatures emperical hack to achieve optical vignetting.")
+        self.endLayout()
 
         self.addSeparator()
-
-        self.addControl("aiUseImage", label="Enable Image based bokeh")
-        self.addCustom('aiBokehPath', self.filenameNewBokeh, self.filenameReplaceBokeh)
-
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
         self.addSeparator()
 
-        self.addControl("aiKolb", label="Camera model [off = thin-lens / on = raytraced]")
+
+        self.beginLayout("Image based bokeh shape", collapse=False)
+        self.addControl("aiUseImage", label="Enable Image based bokeh", annotation="Uses an image as bokeh shape. \n\nThis can be used with both models, but keep in mind that the raytraced model will already produce a non-constant bokeh shape due to the lens geometry.")
+        self.addCustom("aiBokehPath", self.filenameNewBokeh, self.filenameReplaceBokeh, annotation="Path to bokeh shape image")
+        self.endLayout()
 
         self.addSeparator()
-
-        self.addCustom('aiLensDataPath', self.filenameNewLensData, self.filenameReplaceLensData)
-        self.addControl("aiKolbSamplingMethod", label="Raytraced Sampling Method")
-
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
         self.addSeparator()
 
-        self.addControl("aiUseDof", label="Enable thin-lens depth of field")
+
+        self.beginLayout("Raytraced model", collapse=False)
+        self.addCustom("aiLensDataPath", self.filenameNewLensData, self.filenameReplaceLensData, annotation="Path to lens description file [.dat].")
+        self.addControl("aiKolbSamplingLUT", label="Precalculate LUT", annotation="When enabling the LUT, zoic will precalculate the aperture shape at certain points on the sensor. \n\nThis speeds up the rendering process significantly, especially with small aperture sizes.")
+        self.endLayout()
+
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
+
+
+        self.beginLayout("Thin-lens model", collapse=False)
+        self.addControl("aiUseDof", label="Enable thin-lens depth of field", annotation="Enable depth of field")
         self.addControl("aiOpticalVignettingDistance", label="Optical Vignetting Distance")
         self.addControl("aiOpticalVignettingRadius", label="Optical Vignetting Radius")
         self.addControl("aiHighlightWidth", label="Highlight Width")
         self.addControl("aiHighlightStrength", label="Highlight Strength")
+        self.endLayout()
 
         self.addSeparator()
-
-        self.addControl("aiExposureControl", label="Exposure")
-
         self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
+        self.addSeparator()
+
+        self.addControl("aiExposureControl", label="Exposure", annotation="Multiplier on the ray weight")
+
 
 
 templates.registerTranslatorUI(aiZoicTemplate, "camera", "zoic")

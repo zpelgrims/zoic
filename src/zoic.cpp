@@ -68,7 +68,7 @@ int counter = 0;
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 
 
-enum params{
+enum zoicParams{
 	p_sensorWidth,
 	p_sensorHeight,
 	p_focalLength,
@@ -76,7 +76,7 @@ enum params{
 	p_focalDistance,
 	p_useImage,
 	p_bokehPath,
-	p_kolb,
+	p_lensModel,
 	p_lensDataPath,
 	p_kolbSamplingLUT,
 	p_useDof,
@@ -85,6 +85,19 @@ enum params{
 	p_highlightWidth,
 	p_highlightStrength,
 	p_exposureControl
+};
+
+enum LensModel{
+	THINLENS,
+	RAYTRACED,
+	NONE
+};
+
+static const char* LensModelNames[] = 
+{
+	"THINLENS",
+    "RAYTRACED",
+    NULL
 };
 
 
@@ -1378,7 +1391,7 @@ node_parameters {
     AiParameterFLT("focalDistance", 120.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
-    AiParameterBOOL("kolb", true);
+    AiParameterENUM("lensModel", RAYTRACED, LensModelNames);
     AiParameterStr("lensDataPath", "");
     AiParameterBOOL("kolbSamplingLUT", true);
     AiParameterBOOL("useDof", true);
@@ -1419,9 +1432,12 @@ node_update {
  
     camera->image.invalidate();
  
- 
-    if(!params[p_kolb].BOOL){
-        DRAW_ONLY({
+
+ 	switch(params[p_lensModel].INT)
+ 	{
+	case THINLENS:
+		{
+			DRAW_ONLY({
             myfile << "LENSMODEL{THINLENS}";
             myfile << "\n";
             myfile << "RAYS{" ;
@@ -1430,131 +1446,137 @@ node_update {
         camera->fov = 2.0f * atan((params[p_sensorWidth].FLT / (2.0f * params[p_focalLength].FLT))); // in radians
         camera->tan_fov = tanf(camera->fov/ 2.0f);
         camera->apertureRadius = (params[p_focalLength].FLT) / (2.0f * params[p_fStop].FLT);
+		}
+		break;
 
-    } else {
-    	
-    	// check if i actually need to recalculate everything, or parameters didn't change on update
-    	if(!(ldCheckUpdate.stored_sensorWidth == params[p_sensorWidth].FLT && ldCheckUpdate.stored_sensorHeight == params[p_sensorHeight].FLT  &&
-    		ldCheckUpdate.stored_focalLength == params[p_focalLength].FLT && ldCheckUpdate.stored_fStop == params[p_fStop].FLT &&
-    		ldCheckUpdate.stored_focalDistance == params[p_focalDistance].FLT && ldCheckUpdate.stored_useImage == params[p_useImage].BOOL &&
-    		ldCheckUpdate.stored_bokehPath == params[p_bokehPath].STR && ldCheckUpdate.stored_lensDataPath == params[p_lensDataPath].STR &&
-    		ldCheckUpdate.stored_kolbSamplingLUT == params[p_kolbSamplingLUT].BOOL)){
+	case RAYTRACED:
+		{
+			// check if i actually need to recalculate everything, or parameters didn't change on update
+	    	if(!(ldCheckUpdate.stored_sensorWidth == params[p_sensorWidth].FLT && ldCheckUpdate.stored_sensorHeight == params[p_sensorHeight].FLT  &&
+	    		ldCheckUpdate.stored_focalLength == params[p_focalLength].FLT && ldCheckUpdate.stored_fStop == params[p_fStop].FLT &&
+	    		ldCheckUpdate.stored_focalDistance == params[p_focalDistance].FLT && ldCheckUpdate.stored_useImage == params[p_useImage].BOOL &&
+	    		ldCheckUpdate.stored_bokehPath == params[p_bokehPath].STR && ldCheckUpdate.stored_lensDataPath == params[p_lensDataPath].STR &&
+	    		ldCheckUpdate.stored_kolbSamplingLUT == params[p_kolbSamplingLUT].BOOL)){
 
-    		// update everything
-    		ldCheckUpdate.stored_sensorWidth = params[p_sensorWidth].FLT;
-    		ldCheckUpdate.stored_sensorHeight = params[p_sensorHeight].FLT;
-    		ldCheckUpdate.stored_focalLength = params[p_focalLength].FLT;
-    		ldCheckUpdate.stored_fStop = params[p_fStop].FLT;
-    		ldCheckUpdate.stored_focalDistance = params[p_focalDistance].FLT;
-    		ldCheckUpdate.stored_useImage = params[p_useImage].BOOL;
-    		ldCheckUpdate.stored_bokehPath = params[p_bokehPath].STR;
-    		ldCheckUpdate.stored_lensDataPath = params[p_lensDataPath].STR;
-    		ldCheckUpdate.stored_kolbSamplingLUT = params[p_kolbSamplingLUT].BOOL;
+	    		// update everything
+	    		ldCheckUpdate.stored_sensorWidth = params[p_sensorWidth].FLT;
+	    		ldCheckUpdate.stored_sensorHeight = params[p_sensorHeight].FLT;
+	    		ldCheckUpdate.stored_focalLength = params[p_focalLength].FLT;
+	    		ldCheckUpdate.stored_fStop = params[p_fStop].FLT;
+	    		ldCheckUpdate.stored_focalDistance = params[p_focalDistance].FLT;
+	    		ldCheckUpdate.stored_useImage = params[p_useImage].BOOL;
+	    		ldCheckUpdate.stored_bokehPath = params[p_bokehPath].STR;
+	    		ldCheckUpdate.stored_lensDataPath = params[p_lensDataPath].STR;
+	    		ldCheckUpdate.stored_kolbSamplingLUT = params[p_kolbSamplingLUT].BOOL;
 
-    		DRAW_ONLY({
-	             myfile << "LENSMODEL{KOLB}";
-	             myfile << "\n";
-	         })
-	 
-	        // reset variables
-	        ld.lensRadiusCurvature.clear();
-	        ld.lensThickness.clear();
-	        ld.lensIOR.clear();
-	        ld.lensAperture.clear();
-	        ld.lensCenter.clear();
-	        ld.vignettedRays = 0;
-	        ld.succesRays = 0;
-	        ld.totalInternalReflection = 0;
-	        ld.originShift = 0.0;
-	        ld.apertureMap.clear();
-	 
-	        // not sure if this is the right way to do it.. probably more to it than this!
-	        ld.filmDiagonal = std::sqrt(SQR(params[p_sensorWidth].FLT) + SQR(params[p_sensorHeight].FLT));
-	 
-	        ld.focalDistance = params[p_focalDistance].FLT;
-	 
-	        // check if file is supplied
-	        // string is const char* so have to do it the oldskool way
-	        if ((params[p_lensDataPath].STR != NULL) && (params[p_lensDataPath].STR[0] == '\0')){
-	           AiMsgError("[ZOIC] Lens Data Path is empty");
-	           AiRenderAbort();
-	        } else {
-	           AiMsgInfo("[ZOIC] Lens Data Path = [%s]", params[p_lensDataPath].STR);
-	           readTabularLensData(params[p_lensDataPath].STR, &ld);
-	        }
-	 
-	        // bail out if something is incorrect with the vectors
-	        if (static_cast<int>(ld.lensRadiusCurvature.size()) == 0 ||
-	            ld.lensRadiusCurvature.size() != ld.lensAperture.size() ||
-	            ld.lensThickness.size() != ld.lensIOR.size()){
-	            AiMsgError("[ZOIC] Failed to read lens data file.");
-	            AiMsgError("[ZOIC] ... Is it the path correct?");
-	            AiMsgError("[ZOIC] ... Does it have 4 tabbed columns?");
-	            AiRenderAbort();
-	        }
-	 
-	        // look for invalid numbers that would mess it all up bro
-	        cleanupLensData(&ld);
-	 
-	        // calculate focal length by tracing a parallel ray through the lens system
-	        float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, false);
-	 
-	        // find by how much all lens elements should be scaled
-	        ld.focalLengthRatio = params[p_focalLength].FLT / kolbFocalLength;
-	        AiMsgInfo( "%-40s %12.8f", "[ZOIC] Focal length ratio", ld.focalLengthRatio);
-	 
-	        // scale lens elements
-	        adjustFocalLength(&ld);
-	 
-	        // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
-	        kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, true);
-	 
-	        // user specified aperture radius from fstop
-	        ld.userApertureRadius = kolbFocalLength / (2.0 * params[p_fStop].FLT);
-	        AiMsgInfo( "%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
-	 
-	        // clamp aperture if fstop is wider than max aperture given by lens description
-	        if (ld.userApertureRadius > ld.lensAperture[ld.apertureElement]){
-	            AiMsgWarning("[ZOIC] Given FSTOP wider than maximum aperture radius provided by lens data.");
-	            AiMsgWarning("[ZOIC] Clamping aperture radius from [%.9f] to [%.9f]", ld.userApertureRadius, ld.lensAperture[ld.apertureElement]);
-	            ld.userApertureRadius = ld.lensAperture[ld.apertureElement];
-	        }
-	       
-	        // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
-	        ld.originShift = calculateImageDistance(params[p_focalDistance].FLT, &ld);
-	 
-	        // calculate distance between film plane and aperture
-	        ld.apertureDistance = 0.0;
-	        for(int i = 0; i < static_cast<int>(ld.lensRadiusCurvature.size()); i++){
-	            ld.apertureDistance += ld.lensThickness[i];
-	            if(i == ld.apertureElement){
-	                AiMsgInfo( "%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
-	                break;
-	            }
-	        }
-	 
-	        // precompute lens centers
-	        computeLensCenters(&ld);
+	    		DRAW_ONLY({
+		             myfile << "LENSMODEL{KOLB}";
+		             myfile << "\n";
+		         })
+		 
+		        // reset variables
+		        ld.lensRadiusCurvature.clear();
+		        ld.lensThickness.clear();
+		        ld.lensIOR.clear();
+		        ld.lensAperture.clear();
+		        ld.lensCenter.clear();
+		        ld.vignettedRays = 0;
+		        ld.succesRays = 0;
+		        ld.totalInternalReflection = 0;
+		        ld.originShift = 0.0;
+		        ld.apertureMap.clear();
+		 
+		        // not sure if this is the right way to do it.. probably more to it than this!
+		        ld.filmDiagonal = std::sqrt(SQR(params[p_sensorWidth].FLT) + SQR(params[p_sensorHeight].FLT));
+		 
+		        ld.focalDistance = params[p_focalDistance].FLT;
+		 
+		        // check if file is supplied
+		        // string is const char* so have to do it the oldskool way
+		        if ((params[p_lensDataPath].STR != NULL) && (params[p_lensDataPath].STR[0] == '\0')){
+		           AiMsgError("[ZOIC] Lens Data Path is empty");
+		           AiRenderAbort();
+		        } else {
+		           AiMsgInfo("[ZOIC] Lens Data Path = [%s]", params[p_lensDataPath].STR);
+		           readTabularLensData(params[p_lensDataPath].STR, &ld);
+		        }
+		 
+		        // bail out if something is incorrect with the vectors
+		        if (static_cast<int>(ld.lensRadiusCurvature.size()) == 0 ||
+		            ld.lensRadiusCurvature.size() != ld.lensAperture.size() ||
+		            ld.lensThickness.size() != ld.lensIOR.size()){
+		            AiMsgError("[ZOIC] Failed to read lens data file.");
+		            AiMsgError("[ZOIC] ... Is it the path correct?");
+		            AiMsgError("[ZOIC] ... Does it have 4 tabbed columns?");
+		            AiRenderAbort();
+		        }
+		 
+		        // look for invalid numbers that would mess it all up bro
+		        cleanupLensData(&ld);
+		 
+		        // calculate focal length by tracing a parallel ray through the lens system
+		        float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, false);
+		 
+		        // find by how much all lens elements should be scaled
+		        ld.focalLengthRatio = params[p_focalLength].FLT / kolbFocalLength;
+		        AiMsgInfo( "%-40s %12.8f", "[ZOIC] Focal length ratio", ld.focalLengthRatio);
+		 
+		        // scale lens elements
+		        adjustFocalLength(&ld);
+		 
+		        // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
+		        kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, true);
+		 
+		        // user specified aperture radius from fstop
+		        ld.userApertureRadius = kolbFocalLength / (2.0 * params[p_fStop].FLT);
+		        AiMsgInfo( "%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
+		 
+		        // clamp aperture if fstop is wider than max aperture given by lens description
+		        if (ld.userApertureRadius > ld.lensAperture[ld.apertureElement]){
+		            AiMsgWarning("[ZOIC] Given FSTOP wider than maximum aperture radius provided by lens data.");
+		            AiMsgWarning("[ZOIC] Clamping aperture radius from [%.9f] to [%.9f]", ld.userApertureRadius, ld.lensAperture[ld.apertureElement]);
+		            ld.userApertureRadius = ld.lensAperture[ld.apertureElement];
+		        }
+		       
+		        // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
+		        ld.originShift = calculateImageDistance(params[p_focalDistance].FLT, &ld);
+		 
+		        // calculate distance between film plane and aperture
+		        ld.apertureDistance = 0.0;
+		        for(int i = 0; i < static_cast<int>(ld.lensRadiusCurvature.size()); i++){
+		            ld.apertureDistance += ld.lensThickness[i];
+		            if(i == ld.apertureElement){
+		                AiMsgInfo( "%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
+		                break;
+		            }
+		        }
+		 
+		        // precompute lens centers
+		        computeLensCenters(&ld);
 
-	        if (params[p_kolbSamplingLUT].BOOL){
-	            exitPupilLUT(&ld, 64, 64, 25000);
+		        if (params[p_kolbSamplingLUT].BOOL){
+		            exitPupilLUT(&ld, 64, 64, 25000);
 
-	            DRAW_ONLY({
-		            testAperturesTruth(&ld);
-		            testAperturesLUT(&ld);
-	           	}) 
-	        }
-	             
+		            DRAW_ONLY({
+			            testAperturesTruth(&ld);
+			            testAperturesLUT(&ld);
+		           	}) 
+		        }
+		             
 
-	        DRAW_ONLY({
-	            // write to file for lens drawing
-	            writeToFile(&ld);
-	            myfile << "RAYS{";
-	        })
-    	} else {
-    		AiMsgWarning("[ZOIC] Skipping node update, parameters didn't change.");
-    	}
-    }
+		        DRAW_ONLY({
+		            // write to file for lens drawing
+		            writeToFile(&ld);
+		            myfile << "RAYS{";
+		        })
+	    	} else {
+	    		AiMsgWarning("[ZOIC] Skipping node update, parameters didn't change.");
+	    	}
+		}
+
+		break;
+ 	}
+ 
 }
  
 
@@ -1598,220 +1620,228 @@ camera_create_ray {
         }
     })
  
-    // chang this to an enum, thinlens, raytraced
-    if (!params[p_kolb].BOOL){
 
-        // create point on lens
-        AtPoint p = {input->sx * camera->tan_fov, input->sy * camera->tan_fov, 1.0};
-        output->dir = AiV3Normalize(p - output->origin);
+	switch(params[p_lensModel].INT)
+	{
+	case THINLENS:
+		{
+			// create point on lens
+	        AtPoint p = {input->sx * camera->tan_fov, input->sy * camera->tan_fov, 1.0};
+	        output->dir = AiV3Normalize(p - output->origin);
 
-        AtPoint originOriginal = output->origin;
- 
-        // DOF CALCULATIONS
-        if (params[p_useDof].BOOL == true) {
+	        AtPoint originOriginal = output->origin;
+	 
+	        // DOF CALCULATIONS
+	        if (params[p_useDof].BOOL == true) {
 
-        	bool succes = false;
-        	int tries = 0;
+	        	bool succes = false;
+	        	int tries = 0;
 
-	        AtPoint2 lens = {0.0f, 0.0f};
+		        AtPoint2 lens = {0.0f, 0.0f};
 
-            !(params[p_useImage].BOOL) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
+	            !(params[p_useImage].BOOL) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
 
-            lens *= camera->apertureRadius;
-            output->origin = {lens.x, lens.y, 0.0};
- 
-            // Compute point on plane of focus, intersection on z axis
-            float intersection = ABS(params[p_focalDistance].FLT / output->dir.z);
-            AtPoint focusPoint = output->dir * intersection;
+	            lens *= camera->apertureRadius;
+	            output->origin = {lens.x, lens.y, 0.0};
+	 
+	            // Compute point on plane of focus, intersection on z axis
+	            float intersection = ABS(params[p_focalDistance].FLT / output->dir.z);
+	            AtPoint focusPoint = output->dir * intersection;
 
-            output->dir = AiV3Normalize(focusPoint - output->origin);
-            if (params[p_opticalVignettingDistance].FLT > 0.0f){
-            	
-                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, params[p_opticalVignettingRadius].FLT, params[p_opticalVignettingDistance].FLT) && tries <= 15){
-                    output->dir = AiV3Normalize(p - originOriginal);
-                    
-                    lens = {0.0f, 0.0f};
-                    !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens) : camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
-        		
-                    lens *= camera->apertureRadius;
+	            output->dir = AiV3Normalize(focusPoint - output->origin);
+	            if (params[p_opticalVignettingDistance].FLT > 0.0f){
+	            	
+	                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, params[p_opticalVignettingRadius].FLT, params[p_opticalVignettingDistance].FLT) && tries <= 15){
+	                    output->dir = AiV3Normalize(p - originOriginal);
+	                    
+	                    lens = {0.0f, 0.0f};
+	                    !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens) : camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+	        		
+	                    lens *= camera->apertureRadius;
 
-                    output->dir = AiV3Normalize(p - originOriginal);
-                    output->origin = {lens.x, lens.y, 0.0};
-                    float intersection = ABS(params[p_focalDistance].FLT / output->dir.z);
-                    AtPoint focusPoint = output->dir * intersection;
-                    output->dir = AiV3Normalize(focusPoint - output->origin);
-                    
-                    ++tries;
-                }
+	                    output->dir = AiV3Normalize(p - originOriginal);
+	                    output->origin = {lens.x, lens.y, 0.0};
+	                    float intersection = ABS(params[p_focalDistance].FLT / output->dir.z);
+	                    AtPoint focusPoint = output->dir * intersection;
+	                    output->dir = AiV3Normalize(focusPoint - output->origin);
+	                    
+	                    ++tries;
+	                }
 
-                if(tries > 15){
-                    output->weight = 0.0f;
-                    ++ld.vignettedRays;
-                } else {
-                    ++ld.succesRays;
-                }
-                
-				/*
-                if(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance)){
-                	output->weight = 0.0f;
-                }
-                */
-            }
-        }
- 
-        DRAW_ONLY({
-            if (draw){
-                myfile << std::fixed << std::setprecision(10) << output->origin.z;
-                myfile << " ";
-                myfile << std::fixed << std::setprecision(10) << output->origin.y;
-                myfile << " ";
-                myfile << std::fixed << std::setprecision(10) << output->dir.z * -10000.0;
-                myfile << " ";
-                myfile << std::fixed << std::setprecision(10) << output->dir.y * 10000.0;
-                myfile << " ";
-            }
- 
-            draw = false;
-        })
- 
-        // now looking down -Z
-        output->dir.z *= -1.0;
-    }
- 
- 
-    if(params[p_kolb].BOOL){
-        // not sure if this is correct, i´d like to use the diagonal since that seems to be the standard
-        output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
-        output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
-        output->origin.z = ld.originShift;
-        
-        DRAW_ONLY({
-            // looks cleaner in 2d when rays are aligned on axis
-            output->origin.x = 0.0;
-            output->origin.y = 0.0;
-        })
+	                if(tries > 15){
+	                    output->weight = 0.0f;
+	                    ++ld.vignettedRays;
+	                } else {
+	                    ++ld.succesRays;
+	                }
+	                
+					/*
+	                if(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance)){
+	                	output->weight = 0.0f;
+	                }
+	                */
+	            }
+	        }
+	 
+	        DRAW_ONLY({
+	            if (draw){
+	                myfile << std::fixed << std::setprecision(10) << output->origin.z;
+	                myfile << " ";
+	                myfile << std::fixed << std::setprecision(10) << output->origin.y;
+	                myfile << " ";
+	                myfile << std::fixed << std::setprecision(10) << output->dir.z * -10000.0;
+	                myfile << " ";
+	                myfile << std::fixed << std::setprecision(10) << output->dir.y * 10000.0;
+	                myfile << " ";
+	            }
+	 
+	            draw = false;
+	        })
+	 
+	        // now looking down -Z
+	        output->dir.z *= -1.0;
+	    }
 
-        AtPoint2 lens = {0.0, 0.0};
-        
-        // sample disk with proper sample distribution
-        !(params[p_useImage].BOOL) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
-        
-        int tries = 0;
-        int maxtries = 15;
-        
-        if (!params[p_kolbSamplingLUT].BOOL){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
+	    break;
 
-    		output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
-            output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
-            output->origin.z = ld.originShift;
-
-            output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-            output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-            output->dir.z = -ld.lensThickness[0];
-
-            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
-
-                output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
-    	        output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
-    	        output->origin.z = ld.originShift;
-    	 
-                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
-
-    	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-    	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-    	        output->dir.z = - ld.lensThickness[0];
-
-    	        ++tries;
-            }
-        } 
-
-        else { // USING LOOKUP TABLE
-            
-            float samplingErrorCorrection = 1.5;
-
-            // lowest bound x value
-            std::map<float, std::map<float, boundingBox2d>>::iterator low;
-            low = ld.apertureMap.lower_bound(output->origin.x);
-            float value1 = low->first;
-
-            // lowest bound y value
-            std::map<float, boundingBox2d>::iterator low2;
-            low2 = low->second.lower_bound(output->origin.y);
-            float value2 = low2->first;
-
-            // go back 1 element in sorted map
-            --low;
-            float value3 = low->first;
-            
-            --low2;
-            float value4 = low2->first;
-
-            // percentage of x inbetween two stored LUT entries
-            float xpercentage = (output->origin.x - value1) / (value3 - value1);
-            float ypercentage = (output->origin.y - value2) / (value4 - value2);
-
-            // scale
-            float scale1 = ld.apertureMap[value1][value2].getMaxScale();
-            float scale2 = ld.apertureMap[value3][value4].getMaxScale();
-            float scale3 = ld.apertureMap[value1][value4].getMaxScale();
-            float scale4 = ld.apertureMap[value3][value2].getMaxScale();
-
-        	float maxScale = BILERP(xpercentage, ypercentage, scale1, scale2, scale3, scale4) * samplingErrorCorrection;
-
-            lens *= maxScale;
-
-            // translation
-            AtPoint2 centroid1 = ld.apertureMap[value1][value2].getCentroid();
-            AtPoint2 centroid2 = ld.apertureMap[value1][value4].getCentroid();
-            AtPoint2 centroid3 = ld.apertureMap[value3][value4].getCentroid();
-            AtPoint2 centroid4 = ld.apertureMap[value3][value2].getCentroid();
-
-            AtPoint2 translation = {BILERP(xpercentage, ypercentage, centroid1.x, centroid3.x, centroid2.x, centroid4.x),
-                                    BILERP(xpercentage, ypercentage, centroid1.y, centroid3.y, centroid2.y, centroid4.y)};
-
-            lens += translation;
-
-            output->dir.x = lens.x - output->origin.x;
-            output->dir.y = lens.y - output->origin.y;
-            output->dir.z = - ld.lensThickness[0];
-
-
-            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
-                output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
-                output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
-                output->origin.z = ld.originShift;
-
-                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
-
-                lens *= maxScale;
-                lens += translation;
-
-                output->dir.x = lens.x - output->origin.x;
-                output->dir.y = lens.y - output->origin.y;
-                output->dir.z = - ld.lensThickness[0];
-
-                ++tries;
-            }
+    case RAYTRACED:
+    	{
+    		// not sure if this is correct, i´d like to use the diagonal since that seems to be the standard
+	        output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
+	        output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
+	        output->origin.z = ld.originShift;
 	        
-        }
+	        DRAW_ONLY({
+	            // looks cleaner in 2d when rays are aligned on axis
+	            output->origin.x = 0.0;
+	            output->origin.y = 0.0;
+	        })
 
-        if(tries > maxtries){
-            output->weight = 0.0f;
-            ++ld.vignettedRays;
-        } else {
-            ++ld.succesRays;
-        }
+	        AtPoint2 lens = {0.0, 0.0};
+	        
+	        // sample disk with proper sample distribution
+	        !(params[p_useImage].BOOL) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
+	        
+	        int tries = 0;
+	        int maxtries = 15;
+	        
+	        if (!params[p_kolbSamplingLUT].BOOL){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
+
+	    		output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
+	            output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
+	            output->origin.z = ld.originShift;
+
+	            output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
+	            output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
+	            output->dir.z = -ld.lensThickness[0];
+
+	            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
+
+	                output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
+	    	        output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
+	    	        output->origin.z = ld.originShift;
+	    	 
+	                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+
+	    	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
+	    	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
+	    	        output->dir.z = - ld.lensThickness[0];
+
+	    	        ++tries;
+	            }
+	        } 
+
+	        else { // USING LOOKUP TABLE
+	            
+	            float samplingErrorCorrection = 1.5;
+
+	            // lowest bound x value
+	            std::map<float, std::map<float, boundingBox2d>>::iterator low;
+	            low = ld.apertureMap.lower_bound(output->origin.x);
+	            float value1 = low->first;
+
+	            // lowest bound y value
+	            std::map<float, boundingBox2d>::iterator low2;
+	            low2 = low->second.lower_bound(output->origin.y);
+	            float value2 = low2->first;
+
+	            // go back 1 element in sorted map
+	            --low;
+	            float value3 = low->first;
+	            
+	            --low2;
+	            float value4 = low2->first;
+
+	            // percentage of x inbetween two stored LUT entries
+	            float xpercentage = (output->origin.x - value1) / (value3 - value1);
+	            float ypercentage = (output->origin.y - value2) / (value4 - value2);
+
+	            // scale
+	            float scale1 = ld.apertureMap[value1][value2].getMaxScale();
+	            float scale2 = ld.apertureMap[value3][value4].getMaxScale();
+	            float scale3 = ld.apertureMap[value1][value4].getMaxScale();
+	            float scale4 = ld.apertureMap[value3][value2].getMaxScale();
+
+	        	float maxScale = BILERP(xpercentage, ypercentage, scale1, scale2, scale3, scale4) * samplingErrorCorrection;
+
+	            lens *= maxScale;
+
+	            // translation
+	            AtPoint2 centroid1 = ld.apertureMap[value1][value2].getCentroid();
+	            AtPoint2 centroid2 = ld.apertureMap[value1][value4].getCentroid();
+	            AtPoint2 centroid3 = ld.apertureMap[value3][value4].getCentroid();
+	            AtPoint2 centroid4 = ld.apertureMap[value3][value2].getCentroid();
+
+	            AtPoint2 translation = {BILERP(xpercentage, ypercentage, centroid1.x, centroid3.x, centroid2.x, centroid4.x),
+	                                    BILERP(xpercentage, ypercentage, centroid1.y, centroid3.y, centroid2.y, centroid4.y)};
+
+	            lens += translation;
+
+	            output->dir.x = lens.x - output->origin.x;
+	            output->dir.y = lens.y - output->origin.y;
+	            output->dir.z = - ld.lensThickness[0];
 
 
-        // looks cleaner in 2d when rays are aligned on axis
-        DRAW_ONLY(output->dir.x = 0.0;)
+	            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
+	                output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
+	                output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
+	                output->origin.z = ld.originShift;
 
-        // flip ray direction and origin
-        output->dir *= -1.0;
-        output->origin *= -1.0;
- 
-        DRAW_ONLY(draw = false;)
-    }
+	                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
+
+	                lens *= maxScale;
+	                lens += translation;
+
+	                output->dir.x = lens.x - output->origin.x;
+	                output->dir.y = lens.y - output->origin.y;
+	                output->dir.z = - ld.lensThickness[0];
+
+	                ++tries;
+	            }
+		        
+	        }
+
+	        if(tries > maxtries){
+	            output->weight = 0.0f;
+	            ++ld.vignettedRays;
+	        } else {
+	            ++ld.succesRays;
+	        }
+
+
+	        // looks cleaner in 2d when rays are aligned on axis
+	        DRAW_ONLY(output->dir.x = 0.0;)
+
+	        // flip ray direction and origin
+	        output->dir *= -1.0;
+	        output->origin *= -1.0;
+	 
+	        DRAW_ONLY(draw = false;)
+    	}
+
+    	break;
+	}
+
  
     // control to go light stops up and down
     float e2 = SQR(params[p_exposureControl].FLT);
