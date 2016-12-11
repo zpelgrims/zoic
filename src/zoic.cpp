@@ -87,11 +87,13 @@ enum zoicParams{
 	p_exposureControl
 };
 
+
 enum LensModel{
 	THINLENS,
 	RAYTRACED,
 	NONE
 };
+
 
 static const char* LensModelNames[] = 
 {
@@ -99,9 +101,6 @@ static const char* LensModelNames[] =
     "RAYTRACED",
     NULL
 };
-
-
-#define AI_PIOVER4 (0.78539816339f)
  
  
 inline bool LoadTexture(const AtString path, void *pixelData){
@@ -606,10 +605,10 @@ inline void concentricDiskSample(float ox, float oy, AtPoint2 *lens) {
 
     if (SQR(a) > SQR(b)){
         r = a;
-        phi = (AI_PIOVER4) * (b / a);
+        phi = (0.78539816339f) * (b / a); // 0.78539816339f = PI / 4.0
     } else {
         r = b;
-        phi = (AI_PIOVER2) - (AI_PIOVER4) * (a / b);
+        phi = (AI_PIOVER2) - (0.78539816339f) * (a / b);
     }
         
     *lens = {r * std::cos(phi), r * std::sin(phi)};
