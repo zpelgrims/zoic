@@ -1628,7 +1628,7 @@ camera_create_ray {
                     
                     lens = {0.0f, 0.0f};
                     !(_useImage) ? concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens) : camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
-        
+        		
                     lens *= camera->apertureRadius;
 
                     output->dir = AiV3Normalize(p - originOriginal);
