@@ -6,7 +6,8 @@
 
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
 
-// ray derivatives problem with textures?
+// ray derivatives problem with textures? Mipmap to rediculous -30 seems to help..
+// Add support for C4D, Houdini, 3DSMAX
 // Make visualisation for all parameters for website
 // Support lens files with extra information (abbe number, kind of glass)
  
@@ -1673,12 +1674,6 @@ camera_create_ray {
 	                } else {
 	                    ++ld.succesRays;
 	                }
-	                
-					/*
-	                if(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, _opticalVignettingRadius, _opticalVignettingDistance)){
-	                	output->weight = 0.0f;
-	                }
-	                */
 	            }
 	        }
 	 

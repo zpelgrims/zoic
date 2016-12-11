@@ -1,137 +1,175 @@
-# zoic                    0x00070007
 [node zoic]
-        desc STRING "Extended camera shader with added options for mage based bokeh shapes and optical vignetting."
-        maya.name               STRING  "camera"
-        maya.id                     INT     0x00070007
-        maya.translator         STRING  "zoic"
+    desc STRING "Extended camera shader with added options for mage based bokeh shapes and optical vignetting."
+    maya.name               STRING  "camera"
+    maya.id                 INT     0x00070100
+    maya.classification     STRING  "shader/surface"
+    maya.type               STRING  "camera"
+    maya.translator         STRING  "zoic"
+
+    c4d.classification      STRING  "generic"
+
+    houdini.icon            STRING  "SHOP_surface"
+    houdini.label           STRING  "zoic"
+    houdini.help_url        STRING  "http://www.zenopelgrims.com/zoic"
+    houdini.order           STRING  "sensorWidth sensorHeight focalLength fStop focalDistance useImage bokehPath lensModel lensDataPath kolbSamplingLUT useDof opticalVignettingDistance opticalVignettingRadius highlightWidth highlightStrength exposureControl"
 
 
-        [attr sensorWidth]
+    [attr sensorWidth]
         maya.name           STRING  "aiSensorWidth"
-        min                        FLOAT   0.1
-        max                       FLOAT   10
-        default                  FLOAT   3.6
-        linkable                BOOL FALSE
-        desc STRING "Width of the sensor in centimeters. Default value is the width of a full frame sensor."
+        min                 FLOAT   0.1
+        max                 FLOAT   10
+        default             FLOAT   3.6
+        linkable            BOOL    FALSE
+        desc                STRING  "Width of the sensor in centimeters. Default value is the width of a full frame sensor."
+
+        houdini.label       STRING  "sensorWidth"
 
 
-        [attr sensorHeight]
+    [attr sensorHeight]
         maya.name           STRING  "aiSensorHeight"
-        min             FLOAT   0.1
-        max             FLOAT   10
+        min                 FLOAT   0.1
+        max                 FLOAT   10
         default             FLOAT   2.4
-        linkable BOOL FALSE
-        desc STRING "Height of the sensor in centimeters. Default value is the height of a full frame sensor."
+        linkable            BOOL    FALSE
+        desc                STRING  "Height of the sensor in centimeters. Default value is the height of a full frame sensor."
+
+        houdini.label       STRING  "sensorHeight"
 
 
-        [attr focalLength]
+    [attr focalLength]
         maya.name           STRING  "aiFocalLength"
-        min             FLOAT   1
-        softmin         FLOAT 8
-        softmax         FLOAT 200
-        max             FLOAT   1000
-        default             FLOAT   35
-        desc STRING "Distance between the lens and the point at which the light converges in millimeters."
+        min                 FLOAT   0.1
+        softmin             FLOAT   0.8
+        softmax             FLOAT   20.0
+        max                 FLOAT   100.0
+        default             FLOAT   3.5
+        desc                STRING  "Distance between the lens and the point at which the light converges in millimeters."
+
+        houdini.label       STRING  "focalLength"
 
 
-        [attr fStop]
-        maya.name           STRING      "aiFStop"
-        min                        FLOAT        0.01
-        softmin                  FLOAT        0.7
-        softmax                 FLOAT        32.0
-        max                       FLOAT        100.0
-        default                  FLOAT         2.8
-        desc                     STRING       "Ratio of the distance from the lens to the point where the focused light converges (the focal length) over the diameter of the aperture."
+    [attr fStop]
+        maya.name           STRING  "aiFStop"
+        min                 FLOAT   0.01
+        softmin             FLOAT   0.7
+        softmax             FLOAT   32.0
+        max                 FLOAT   100.0
+        default             FLOAT   2.8
+        desc                STRING  "Ratio of the distance from the lens to the point where the focused light converges (the focal length) over the diameter of the aperture."
+
+        houdini.label       STRING  "fStop"
 
 
-        [attr focalDistance]
+    [attr focalDistance]
         maya.name           STRING  "aiFocalDistance"
-        min                       FLOAT   0.001
-        max                      FLOAT   99999
-        default                 FLOAT   120
-        desc                    STRING "Distance between lens and object in focus in millimeters."
+        min                 FLOAT   0.001
+        max                 FLOAT   99999
+        default             FLOAT   120
+        desc                STRING  "Distance between lens and object in focus in millimeters."
+
+        houdini.label       STRING  "focalDistance"
 
 
-        [attr useImage]
+    [attr useImage]
         maya.name           STRING  "aiUseImage"
-        default                  BOOL   false
-        desc                     STRING "Enable Image based bokeh"
+        default             BOOL    false
+        desc                STRING  "Enable Image based bokeh"
+
+        houdini.label       STRING  "useImage"
 
 
-        [attr bokehPath]
+    [attr bokehPath]
         maya.name           STRING  "aiBokehPath"
-        default                  STRING   ""
-        desc                     STRING "Path to bokeh image. No need to convert to .tx"
+        default             STRING  ""
+        desc                STRING  "Path to bokeh image. No need to convert to .tx"
+
+        houdini.label       STRING  "bokehPath"
 
 
-        [attr kolb]
-        maya.name          STRING  "aiKolb"
-        default                 BOOL   true
-        desc                    STRING "Use a raytraced lens model"
-        linkable                BOOL FALSE
+    [attr lensModel]
+        desc                STRING  "Lens Model"
+        default             STRING  "RAYTRACED"
+
+        houdini.label       STRING  "Lens Model"
 
 
-                               [attr lensDataPath]
+    [attr lensDataPath]
         maya.name           STRING  "aiLensDataPath"
-        default                  STRING   ""
-        desc                     STRING "Path to lens data file"
+        default             STRING  ""
+        desc                STRING  "Path to lens data file"
+
+        houdini.label       STRING  "lensDataPath"
 
 
-                               [attr kolbSamplingMethod]
-        maya.name          STRING  "aiKolbSamplingMethod"
-        default                 BOOL   true
-        desc                    STRING "Aperture or full first lens element sampling"
-        linkable                BOOL FALSE
+    [attr kolbSamplingLUT]
+        maya.name           STRING  "aiKolbSamplingLUT"
+        default             BOOL    true
+        desc                STRING  "Use lookup table"
+        linkable            BOOL    FALSE
+
+        houdini.label       STRING  "kolbSamplingLUT"
 
 
-        [attr useDof]
-        maya.name          STRING  "aiUseDof"
-        default                 BOOL   true
-        desc                    STRING "Enable Depth of Field"
-        linkable                BOOL FALSE
+    [attr useDof]
+        maya.name           STRING  "aiUseDof"
+        default             BOOL    true
+        desc                STRING  "Enable Depth of Field"
+        linkable            BOOL    FALSE
+
+        houdini.label       STRING  "useDof"
 
 
-        [attr opticalVignettingDistance]
+    [attr opticalVignettingDistance]
         maya.name           STRING  "aiOpticalVignettingDistance"
-        min                       FLOAT   0.0
-        softmax                FLOAT 50.0
-        max                      FLOAT   1000.0
-        default                  FLOAT   0
-        desc                     STRING "Sometimes referred to as the cat-eye effect, this is a lens imperfection that is not caused by the glass but by the outer edge of the lens, also known as the exit aperture. When the main aperture is fully open, light coming into the camera from steep angles will be blocked partially by the edge of the lens. This creates cat-eye like bokeh shapes near the edges of an image. It should be noted that this lens effect is purely mechanical and can not be confused with lens distortion."
+        min                 FLOAT   0.0
+        softmax             FLOAT   50.0
+        max                 FLOAT   1000.0
+        default             FLOAT   0
+        desc                STRING  "Sometimes referred to as the cat-eye effect, this is a lens imperfection that is not caused by the glass but by the outer edge of the lens, also known as the exit aperture. When the main aperture is fully open, light coming into the camera from steep angles will be blocked partially by the edge of the lens. This creates cat-eye like bokeh shapes near the edges of an image. It should be noted that this lens effect is purely mechanical and can not be confused with lens distortion."
+
+        houdini.label       STRING  "opticalVignettingDistance"
 
 
-        [attr opticalVignettingRadius]
+    [attr opticalVignettingRadius]
         maya.name           STRING  "aiOpticalVignettingRadius"
-        min                       FLOAT   1.0
-        softmax                FLOAT 2.0
-        max                      FLOAT   5.0
-        default                  FLOAT   1.0
-        desc                     STRING "A multiplier on the actual aperture radius to determine the size of the virtual aperture."
+        min                 FLOAT   1.0
+        softmax             FLOAT   2.0
+        max                 FLOAT   5.0
+        default             FLOAT   1.0
+        desc                STRING  "A multiplier on the actual aperture radius to determine the size of the virtual aperture."
+
+        houdini.label       STRING  "opticalVignettingRadius"
 
 
-        [attr highlightWidth]
-        maya.name                STRING     "aiHighlightWidth"
-        min                      FLOAT      0.0
-        softmax                  FLOAT      0.2
-        max                      FLOAT      1.0
-        default                  FLOAT      0.0
-        desc                     STRING     "Width of the highlight on the inner side of the bokeh in relationship to the origin in image space. This is a percentage of the lens radius."
+    [attr highlightWidth]
+        maya.name           STRING  "aiHighlightWidth"
+        min                 FLOAT   0.0
+        softmax             FLOAT   0.2
+        max                 FLOAT   1.0
+        default             FLOAT   0.0
+        desc                STRING  "Width of the highlight on the inner side of the bokeh in relationship to the origin in image space. This is a percentage of the lens radius."
+
+        houdini.label       STRING  "highlightWidth"
 
 
-        [attr highlightStrength]
-        maya.name                STRING     "aiHighlightStrength"
-        min                      FLOAT      0.0
-        softmax                  FLOAT      20.0
-        max                      FLOAT      100.0
-        default                  FLOAT      0.0
-        desc                     STRING     "Strength of the highlight on the inner side of the bokeh in relationship to the origin in image space. This is a multiplier on the weight of the rays."
+    [attr highlightStrength]
+        maya.name           STRING  "aiHighlightStrength"
+        min                 FLOAT   0.0
+        softmax             FLOAT   20.0
+        max                 FLOAT   100.0
+        default             FLOAT   0.0
+        desc                STRING  "Strength of the highlight on the inner side of the bokeh in relationship to the origin in image space. This is a multiplier on the weight of the rays."
+
+        houdini.label       STRING  "highlightStrength"
 
 
-        [attr exposureControl]
-        maya.name                STRING     "aiExposureControl"
-        min                      FLOAT      -100.0
-        softmin                  FLOAT      -5.0
-        softmax                  FLOAT      5.0
-        max                      FLOAT      100.0
-        default                  FLOAT      0.0
-        desc                     STRING     "Multiplier on the ray weight."
+    [attr exposureControl]
+        maya.name           STRING  "aiExposureControl"
+        min                 FLOAT   -100.0
+        softmin             FLOAT   -5.0
+        softmax             FLOAT   5.0
+        max                 FLOAT   100.0
+        default             FLOAT   0.0
+        desc                STRING  "Multiplier on the ray weight."
+
+        houdini.label       STRING  "exposureControl"
