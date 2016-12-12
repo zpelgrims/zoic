@@ -1927,6 +1927,10 @@ camera_create_ray {
     }
  
     DRAW_ONLY(++counter;)
+
+    // EXPERIMENTAL, I KNOW IT IS INCORRECT BUT AT LEAST THE PROBLEM IS RESOLVED
+    output->dOdy = output->origin;
+    output->dDdy = output->dir;
 }
  
  
