@@ -7,11 +7,10 @@
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
 
 // ray derivatives problem with textures? Mipmap to rediculous -30 seems to help..
-// Add support for C4D (ID´s need to be generated)
+// Add support for C4D (IDs need to be generated)
 // Test Houdini support
-// Change 4 vectors to struct
 // Make visualisation for all parameters for website
-// Support lens files with extra information (abbe number, kind of glass)
+// Support lens files with abbe number
  
 #include <ai.h>
 #include <map>
@@ -24,16 +23,6 @@
 #include <vector>
 #include <sstream>
 #include <iomanip>
-#include <random>
-
-/*
-#ifdef _WIN32
-#   include <Windows.h>
-#else
-#   include <sys/time.h>
-#   include <ctime>
-#endif
-*/
 
 #ifdef _MACBOOK
 #  define MACBOOK_ONLY(block) block
@@ -628,8 +617,6 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     int commentCounter = 0;
     LensElement lens;
  
-    //// COME UP WITH A SYSTEM TO ONLY STORE SELECTED CHECKBOXES
- 
     AiMsgInfo("[ZOIC] ##############################################");
     AiMsgInfo("[ZOIC] ############# READING LENS DATA ##############");
     AiMsgInfo("[ZOIC] ##############################################");
@@ -851,9 +838,7 @@ float calculateImageDistance(float objectDistance, Lensdata *ld){
      }
  
      for(int i = 0; i < ld->lensCount; i++){
-         if (i != 0){
-            summedThickness -= ld->lenses[ld->lensCount - i].thickness;
-         }
+         if (i != 0){summedThickness -= ld->lenses[ld->lensCount - i].thickness;}
         
          AtVector sphere_center;
          sphere_center.x = 0.0;
@@ -1479,8 +1464,8 @@ node_update {
 		 
 		        // not sure if this is the right way to do it.. probably more to it than this!
 		        ld.filmDiagonal = std::sqrt(SQR(params[p_sensorWidth].FLT) + SQR(params[p_sensorHeight].FLT));
-		 
-		        ld.focalDistance = params[p_focalDistance].FLT;
+		        
+                ld.focalDistance = params[p_focalDistance].FLT;
 		 
 		        // check if file is supplied
 		        // string is const char* so have to do it the oldskool way
@@ -1493,7 +1478,7 @@ node_update {
 		        }
 		 
 		        // bail out if something is incorrect with the vectors
-		        if (static_cast<int>(ld.lenses.size()) == 0){
+		        if (ld.lensCount == 0){
 		            AiMsgError("[ZOIC] Failed to read lens data file.");
 		            AiMsgError("[ZOIC] ... Is it the path correct?");
 		            AiMsgError("[ZOIC] ... Does it have 4 tabbed columns?");
@@ -1532,7 +1517,7 @@ node_update {
 		 
 		        // calculate distance between film plane and aperture
 		        ld.apertureDistance = 0.0;
-		        for(int i = 0; i < static_cast<int>(ld.lenses.size()); i++){
+		        for(int i = 0; i < ld.lensCount; i++){
 		            ld.apertureDistance += ld.lenses[i].thickness;
 		            if(i == ld.apertureElement){
 		                AiMsgInfo( "%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
@@ -1552,12 +1537,12 @@ node_update {
 		           	}) 
 		        }
 		             
-
 		        DRAW_ONLY({
 		            // write to file for lens drawing
 		            writeToFile(&ld);
 		            myfile << "RAYS{";
 		        })
+
 	    	} else {
 	    		AiMsgWarning("[ZOIC] Skipping node update, parameters didn't change.");
 	    	}
