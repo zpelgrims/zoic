@@ -621,68 +621,175 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     AiMsgInfo("[ZOIC] ############# READING LENS DATA ##############");
     AiMsgInfo("[ZOIC] ##############################################");
     AiMsgInfo("[ZOIC] Welcome to the lens nerd club :-D");
- 
+
+    // read file without storing data, but count instead
+    int columns = 0;
+    int lines = 0;
+
     while (getline(lensDataFile, line)){
-        if (line.empty() || line.front() == '#'){
-            ++commentCounter;
-            continue;
-        }
- 
+        if (line.empty() || line.front() == '#'){continue;}
         std::size_t prev = 0, pos;
         iss << line;
  
         while ((pos = line.find_first_of("\t,;: ", prev)) != std::string::npos){
-            if (pos > prev){
-                if (lensDataCounter == 0){
-                    lens.curvature = std::stof(line.substr(prev, pos-prev));
-                } else if (lensDataCounter == 1){
-                    lens.thickness = std::stof(line.substr(prev, pos-prev));
-                } else if (lensDataCounter == 2){
-                    lens.ior = std::stof(line.substr(prev, pos-prev));
-                } else if (lensDataCounter == 3){
-                    lens.aperture = std::stof(line.substr(prev, pos-prev));
-                    lensDataCounter = -1;
-                }
-            }
-
+            if (pos > prev){++columns;}
             prev = pos + 1;
-            ++lensDataCounter;
         }
         
-        if (prev < line.length()){
-            if (lensDataCounter == 0){
-                lens.curvature = std::stof(line.substr(prev, std::string::npos));
-            } else if (lensDataCounter == 1){
-                lens.thickness = std::stof(line.substr(prev, std::string::npos));
-            } else if (lensDataCounter == 2){
-                lens.ior = std::stof(line.substr(prev, std::string::npos));
-            } else if (lensDataCounter == 3){
-                lens.aperture = std::stof(line.substr(prev, std::string::npos));
-                lensDataCounter = -1;
+        if (prev < line.length()){++columns;}
+
+        iss.clear();
+        ++lines;
+    }
+
+    lensDataFile.clear();
+    lensDataFile.seekg(0, std::ios::beg);
+    int totalColumns = static_cast<int>(static_cast<float>(columns) / static_cast<float>(lines));
+    AiMsgInfo( "%-40s %12d", "[ZOIC] Data file columns", totalColumns);
+
+
+    // read in data
+    switch(totalColumns)
+    {
+        case 4:
+        {
+            while (getline(lensDataFile, line)){
+                if (line.empty() || line.front() == '#'){
+                    ++commentCounter;
+                    continue;
+                }
+         
+                std::size_t prev = 0, pos;
+                iss << line;
+         
+                while ((pos = line.find_first_of("\t,;: ", prev)) != std::string::npos){
+                    if (pos > prev){
+                        if (lensDataCounter == 0){
+                            lens.curvature = std::stof(line.substr(prev, pos-prev));
+                        } else if (lensDataCounter == 1){
+                            lens.thickness = std::stof(line.substr(prev, pos-prev));
+                        } else if (lensDataCounter == 2){
+                            lens.ior = std::stof(line.substr(prev, pos-prev));
+                        } else if (lensDataCounter == 3){
+                            lens.aperture = std::stof(line.substr(prev, pos-prev));
+                            lensDataCounter = -1;
+                        }
+                    }
+
+                    prev = pos + 1;
+                    ++lensDataCounter;
+                }
+                
+                if (prev < line.length()){
+                    if (lensDataCounter == 0){
+                        lens.curvature = std::stof(line.substr(prev, std::string::npos));
+                    } else if (lensDataCounter == 1){
+                        lens.thickness = std::stof(line.substr(prev, std::string::npos));
+                    } else if (lensDataCounter == 2){
+                        lens.ior = std::stof(line.substr(prev, std::string::npos));
+                    } else if (lensDataCounter == 3){
+                        lens.aperture = std::stof(line.substr(prev, std::string::npos));
+                        lensDataCounter = -1;
+                    }
+
+                    ++lensDataCounter;
+                }
+
+                ld->lenses.push_back(lens);
+                iss.clear();
             }
 
-            ++lensDataCounter;
-        }
 
-        ld->lenses.push_back(lens);
-        iss.clear();
-    }
+            ld->lensCount = static_cast<int>(ld->lenses.size());
+ 
+            AiMsgInfo( "%-40s %12d", "[ZOIC] Comment lines ignored", commentCounter);
+         
+            AiMsgInfo("[ZOIC] ##############################################");
+            AiMsgInfo("[ZOIC] #   ROC       Thickness     IOR     Aperture #");
+            AiMsgInfo("[ZOIC] ##############################################");
+         
+            for(int i = 0; i < ld->lensCount; i++){
+                AiMsgInfo("[ZOIC] %10.4f  %10.4f  %10.4f  %10.4f", ld->lenses[i].curvature, ld->lenses[i].thickness, ld->lenses[i].ior, ld->lenses[i].aperture);
+            }
+         
+            AiMsgInfo("[ZOIC] ##############################################");
+            AiMsgInfo("[ZOIC] ########### END READING LENS DATA ############");
+            AiMsgInfo("[ZOIC] ##############################################");
 
-    ld->lensCount = static_cast<int>(ld->lenses.size());
+
+
+        } break;
+
+        case 5:
+        {
+            while (getline(lensDataFile, line)){
+                if (line.empty() || line.front() == '#'){
+                    ++commentCounter;
+                    continue;
+                }
+         
+                std::size_t prev = 0, pos;
+                iss << line;
+         
+                while ((pos = line.find_first_of("\t,;: ", prev)) != std::string::npos){
+                    if (pos > prev){
+                        if (lensDataCounter == 0){
+                            lens.curvature = std::stof(line.substr(prev, pos-prev));
+                        } else if (lensDataCounter == 1){
+                            lens.thickness = std::stof(line.substr(prev, pos-prev));
+                        } else if (lensDataCounter == 2){
+                            lens.ior = std::stof(line.substr(prev, pos-prev));
+                        } else if (lensDataCounter == 3){
+                            lens.abbe = std::stof(line.substr(prev, pos-prev));
+                        } else if (lensDataCounter == 4){
+                            lens.aperture = std::stof(line.substr(prev, pos-prev));
+                            lensDataCounter = -1;
+                        }
+                    }
+
+                    prev = pos + 1;
+                    ++lensDataCounter;
+                }
+                
+                if (prev < line.length()){
+                    if (lensDataCounter == 0){
+                        lens.curvature = std::stof(line.substr(prev, std::string::npos));
+                    } else if (lensDataCounter == 1){
+                        lens.thickness = std::stof(line.substr(prev, std::string::npos));
+                    } else if (lensDataCounter == 2){
+                        lens.ior = std::stof(line.substr(prev, std::string::npos));
+                    } else if (lensDataCounter == 3){
+                            lens.abbe = std::stof(line.substr(prev, pos-prev));
+                    } else if (lensDataCounter == 4){
+                        lens.aperture = std::stof(line.substr(prev, std::string::npos));
+                        lensDataCounter = -1;
+                    }
+
+                    ++lensDataCounter;
+                }
+
+                ld->lenses.push_back(lens);
+                iss.clear();
+            }
+
+
+            ld->lensCount = static_cast<int>(ld->lenses.size());
  
-    AiMsgInfo( "%-40s %12d", "[ZOIC] Comment lines ignored", commentCounter);
- 
-    AiMsgInfo("[ZOIC] ##############################################");
-    AiMsgInfo("[ZOIC] #   ROC       Thickness     IOR     Aperture #");
-    AiMsgInfo("[ZOIC] ##############################################");
- 
-    for(int i = 0; i < ld->lensCount; i++){
-        AiMsgInfo("[ZOIC] %10.4f  %10.4f  %10.4f  %10.4f", ld->lenses[i].curvature, ld->lenses[i].thickness, ld->lenses[i].ior, ld->lenses[i].aperture);
+            AiMsgInfo( "%-40s %12d", "[ZOIC] Comment lines ignored", commentCounter);
+            AiMsgInfo("[ZOIC] ##############################################");
+            AiMsgInfo("[ZOIC] #  ROC   Thickness   IOR    ABBE    Aperture #");
+            AiMsgInfo("[ZOIC] ##############################################");
+         
+            for(int i = 0; i < ld->lensCount; i++){
+                AiMsgInfo("[ZOIC] %7.3f  %7.3f %7.3f   %7.3f   %7.3f", ld->lenses[i].curvature, ld->lenses[i].thickness, ld->lenses[i].ior, ld->lenses[i].abbe, ld->lenses[i].aperture);
+            }
+         
+            AiMsgInfo("[ZOIC] ##############################################");
+            AiMsgInfo("[ZOIC] ########### END READING LENS DATA ############");
+            AiMsgInfo("[ZOIC] ##############################################");
+
+        } break;
     }
- 
-    AiMsgInfo("[ZOIC] ##############################################");
-    AiMsgInfo("[ZOIC] ########### END READING LENS DATA ############");
-    AiMsgInfo("[ZOIC] ##############################################");
  
     // reverse the lens order, since we will start with the rear-most lens element
     std::reverse(ld->lenses.begin(),ld->lenses.end());
