@@ -7,7 +7,9 @@
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
 
 // ray derivatives problem with textures? Mipmap to rediculous -30 seems to help..
-// Add support for C4D, Houdini, 3DSMAX
+// Add support for C4D (ID´s need to be generated)
+// Test Houdini support
+// Change 4 vectors to struct
 // Make visualisation for all parameters for website
 // Support lens files with extra information (abbe number, kind of glass)
  
@@ -535,26 +537,28 @@ public:
     }
 
     float getMaxScale(){
-	    float scaleX = AiV2Dist( getCentroid(), {max.x, getCentroid().y});
-	    float scaleY = AiV2Dist( getCentroid(), {getCentroid().x, max.y});
-
-	    if (scaleX >= scaleY){
-	        return scaleX;
-	    } else {
-	        return scaleY;
-	    }
+        AtPoint2 centroid = getCentroid();
+	    float scaleX = AiV2Dist(centroid, {max.x, centroid.y});
+	    float scaleY = AiV2Dist(centroid, {centroid.x, max.y});
+	    if (scaleX >= scaleY){return scaleX;} else {return scaleY;}
     }
+};
+
+
+struct LensElement{
+public:
+    float curvature;
+    float thickness;
+    float ior;
+    float aperture;
+    float abbe;
+    float center;
 };
  
  
 struct Lensdata{
-    std::vector<float> lensRadiusCurvature;
-    std::vector<float> lensThickness;
-    std::vector<float> lensIOR;
-    std::vector<float> lensAperture;
-    std::vector<float> lensAbbe;
-    std::vector<std::string> lensMaterial;
-    std::vector<float> lensCenter;
+    std::vector<LensElement> lenses;
+    int lensCount;
     float userApertureRadius;
     int apertureElement;
     int vignettedRays, succesRays, drawRays;
@@ -622,13 +626,7 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     std::stringstream iss;
     int lensDataCounter = 0;
     int commentCounter = 0;
- 
-    bool checkbox_roc = true;
-    bool checkbox_thickness = true;
-    bool checkbox_material = false;
-    bool checkbox_ior = true;
-    bool checkbox_abbe = false;
-    bool checkbox_aperture = true;
+    LensElement lens;
  
     //// COME UP WITH A SYSTEM TO ONLY STORE SELECTED CHECKBOXES
  
@@ -649,40 +647,41 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
         while ((pos = line.find_first_of("\t,;: ", prev)) != std::string::npos){
             if (pos > prev){
                 if (lensDataCounter == 0){
-                    ld->lensRadiusCurvature.push_back(std::stod(line.substr(prev, pos-prev)));
+                    lens.curvature = std::stof(line.substr(prev, pos-prev));
                 } else if (lensDataCounter == 1){
-                    ld->lensThickness.push_back(std::stod(line.substr(prev, pos-prev)));
+                    lens.thickness = std::stof(line.substr(prev, pos-prev));
                 } else if (lensDataCounter == 2){
-                    ld->lensIOR.push_back(std::stod(line.substr(prev, pos-prev)));
+                    lens.ior = std::stof(line.substr(prev, pos-prev));
                 } else if (lensDataCounter == 3){
-                    ld->lensAperture.push_back(std::stod(line.substr(prev, pos-prev)));
+                    lens.aperture = std::stof(line.substr(prev, pos-prev));
                     lensDataCounter = -1;
                 }
             }
- 
+
             prev = pos + 1;
             ++lensDataCounter;
         }
- 
+        
         if (prev < line.length()){
             if (lensDataCounter == 0){
-                ld->lensRadiusCurvature.push_back(std::stod(line.substr(prev, std::string::npos)));
+                lens.curvature = std::stof(line.substr(prev, std::string::npos));
             } else if (lensDataCounter == 1){
-                ld->lensThickness.push_back(std::stod(line.substr(prev, std::string::npos)));
+                lens.thickness = std::stof(line.substr(prev, std::string::npos));
             } else if (lensDataCounter == 2){
-                ld->lensIOR.push_back(std::stod(line.substr(prev, std::string::npos)));
+                lens.ior = std::stof(line.substr(prev, std::string::npos));
             } else if (lensDataCounter == 3){
-                ld->lensAperture.push_back(std::stod(line.substr(prev, std::string::npos)));
+                lens.aperture = std::stof(line.substr(prev, std::string::npos));
                 lensDataCounter = -1;
             }
- 
+
             ++lensDataCounter;
         }
- 
-       iss.clear();
+
+        ld->lenses.push_back(lens);
+        iss.clear();
     }
- 
-        
+
+    ld->lensCount = static_cast<int>(ld->lenses.size());
  
     AiMsgInfo( "%-40s %12d", "[ZOIC] Comment lines ignored", commentCounter);
  
@@ -690,29 +689,24 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     AiMsgInfo("[ZOIC] #   ROC       Thickness     IOR     Aperture #");
     AiMsgInfo("[ZOIC] ##############################################");
  
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        AiMsgInfo("[ZOIC] %10.4f  %10.4f  %10.4f  %10.4f", ld->lensRadiusCurvature[i], ld->lensThickness[i], ld->lensIOR[i], ld->lensAperture[i]);
+    for(int i = 0; i < ld->lensCount; i++){
+        AiMsgInfo("[ZOIC] %10.4f  %10.4f  %10.4f  %10.4f", ld->lenses[i].curvature, ld->lenses[i].thickness, ld->lenses[i].ior, ld->lenses[i].aperture);
     }
- 
  
     AiMsgInfo("[ZOIC] ##############################################");
     AiMsgInfo("[ZOIC] ########### END READING LENS DATA ############");
     AiMsgInfo("[ZOIC] ##############################################");
  
- 
-    // reverse the datasets in the vector, since we will start with the rear-most lens element
-    std::reverse(ld->lensRadiusCurvature.begin(),ld->lensRadiusCurvature.end());
-    std::reverse(ld->lensThickness.begin(),ld->lensThickness.end());
-    std::reverse(ld->lensIOR.begin(),ld->lensIOR.end());
-    std::reverse(ld->lensAperture.begin(),ld->lensAperture.end());
+    // reverse the lens order, since we will start with the rear-most lens element
+    std::reverse(ld->lenses.begin(),ld->lenses.end());
 }
  
  
 void cleanupLensData(Lensdata *ld){
     int apertureCount = 0;
-    for (int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
+    for (int i = 0; i < ld->lensCount; i++){
         // check if there is a 0.0 lensRadiusCurvature, which is the aperture
-        if (ld->lensRadiusCurvature[i] == 0.0){
+        if (ld->lenses[i].curvature == 0.0){
             ld->apertureElement = i;
             ++apertureCount;
  
@@ -721,43 +715,42 @@ void cleanupLensData(Lensdata *ld){
                 AiRenderAbort();
             }
  
-            AiMsgInfo("[ZOIC] Adjusted ROC[%d] [%.4f] to [99999.0]", i, ld->lensRadiusCurvature[i]);
-            ld->lensRadiusCurvature[i] = 99999.0;
+            AiMsgInfo("[ZOIC] Adjusted ROC[%d] [%.4f] to [99999.0]", i, ld->lenses[i].curvature);
+            ld->lenses[i].curvature = 99999.0;
         }
  
-        if (ld->lensIOR[i] == 0.0){
-            AiMsgInfo("[ZOIC] Changed IOR[%d] [%.4f] to [1.0000]", i, ld->lensIOR[i]);
-            ld->lensIOR[i] = 1.0;
+        if (ld->lenses[i].ior == 0.0){
+            AiMsgInfo("[ZOIC] Changed IOR[%d] [%.4f] to [1.0000]", i, ld->lenses[i].ior);
+            ld->lenses[i].ior = 1.0;
         }
     }
  
     AiMsgInfo( "%-40s %12d", "[ZOIC] Aperture is lens element number", ld->apertureElement);
  
     // scale from mm to cm
-    for (int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        ld->lensRadiusCurvature[i] *= 0.1;
-        ld->lensThickness[i] *= 0.1;
-        ld->lensAperture[i] *= 0.1;
+    for (int i = 0; i < ld->lensCount; i++){
+        ld->lenses[i].curvature *= 0.1;
+        ld->lenses[i].thickness *= 0.1;
+        ld->lenses[i].aperture *= 0.1;
     }
  
     // move lenses so last lens is at origin
     float summedThickness = 0.0;
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        summedThickness += ld->lensThickness[i];
+    for(int i = 0; i < ld->lensCount; i++){
+        summedThickness += ld->lenses[i].thickness;
     }
  
-    ld->lensThickness[0] -= summedThickness;
+    ld->lenses[0].thickness -= summedThickness;
 }
  
  
 void computeLensCenters(Lensdata *ld){
     // precomputes the lens centers so they can just be called at every ray creation
-    ld->lensCenter.clear();
     float summedThickness;
  
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        i == 0 ? summedThickness = ld->lensThickness[0] : summedThickness += ld->lensThickness[i];
-        ld->lensCenter.push_back(summedThickness - ld->lensRadiusCurvature[i]);
+    for(int i = 0; i < ld->lensCount; i++){
+        i == 0 ? summedThickness = ld->lenses[0].thickness : summedThickness += ld->lenses[i].thickness;
+        ld->lenses[i].center = summedThickness - ld->lenses[i].curvature;
     }
 }
  
@@ -844,7 +837,7 @@ float calculateImageDistance(float objectDistance, Lensdata *ld){
  
      AtVector ray_direction_focus;
      ray_direction_focus.x = 0.0;
-     ray_direction_focus.y = (ld->lensAperture[ld->lensAperture.size() - 1] / 2.0) * 0.3;
+     ray_direction_focus.y = (ld->lenses[ld->lensCount - 1].aperture / 2.0) * 0.3;
      ray_direction_focus.z = (- objectDistance * 1.1);
  
      float summedThickness = 0.0;
@@ -853,28 +846,30 @@ float calculateImageDistance(float objectDistance, Lensdata *ld){
      AtVector hit_point_normal;
      AtVector hit_point;
  
-     for(int k = 0; k < (int)ld->lensRadiusCurvature.size(); k++){
-         summedThickness += ld->lensThickness[k];
+     for(int k = 0; k < ld->lensCount; k++){
+         summedThickness += ld->lenses[k].thickness;
      }
  
-     for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-         i == 0 ? summedThickness = summedThickness : summedThickness -= ld->lensThickness[ld->lensRadiusCurvature.size() - i];
+     for(int i = 0; i < ld->lensCount; i++){
+         if (i != 0){
+            summedThickness -= ld->lenses[ld->lensCount - i].thickness;
+         }
         
          AtVector sphere_center;
          sphere_center.x = 0.0;
          sphere_center.y = 0.0;
-         sphere_center.z = summedThickness - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i];
+         sphere_center.z = summedThickness - ld->lenses[ld->lensCount - 1 - i].curvature;
         
-        raySphereIntersection(&hit_point, ray_direction_focus, ray_origin_focus, sphere_center, ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], true, false);
-        intersectionNormal(hit_point, sphere_center, - ld->lensRadiusCurvature[ld->lensRadiusCurvature.size() - 1 - i], &hit_point_normal);
+        raySphereIntersection(&hit_point, ray_direction_focus, ray_origin_focus, sphere_center, ld->lenses[ld->lensCount - 1 - i].curvature, true, false);
+        intersectionNormal(hit_point, sphere_center, - ld->lenses[ld->lensCount - 1 - i].curvature, &hit_point_normal);
         
          if(i==0){
-             calculateTransmissionVector(&ray_direction_focus, 1.0, ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal, false);
+             calculateTransmissionVector(&ray_direction_focus, 1.0, ld->lenses[ld->lensCount - i - 1].ior, ray_direction_focus, hit_point_normal, false);
          } else {
-             calculateTransmissionVector(&ray_direction_focus, ld->lensIOR[ld->lensRadiusCurvature.size() - i], ld->lensIOR[ld->lensRadiusCurvature.size() - i - 1], ray_direction_focus, hit_point_normal, false);
+             calculateTransmissionVector(&ray_direction_focus, ld->lenses[ld->lensCount - i].ior, ld->lenses[ld->lensCount - i - 1].ior, ray_direction_focus, hit_point_normal, false);
          }
         
-         if(i == static_cast<int>(ld->lensRadiusCurvature.size()) - 1){
+         if(i == ld->lensCount - 1){
              imageDistance = linePlaneIntersection(hit_point, ray_direction_focus).z;
          }
  
@@ -893,22 +888,22 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
     AtVector hit_point_normal;
     AtVector sphere_center;
  
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        sphere_center = {0.0, 0.0, ld->lensCenter[i]};
+    for(int i = 0; i < ld->lensCount; i++){
+        sphere_center = {0.0, 0.0, ld->lenses[i].center};
 
-        if(!raySphereIntersection(&hit_point, *ray_direction, *ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true)){
+        if(!raySphereIntersection(&hit_point, *ray_direction, *ray_origin, sphere_center, ld->lenses[i].curvature, false, true)){
             return false;
         }
 
         float hitPoint2 = SQR(hit_point.x) + SQR(hit_point.y);
  
         // check if ray hits lens boundary or aperture
-        if ((hitPoint2 > (ld->lensAperture[i] * 0.5) * (ld->lensAperture[i] * 0.5)) ||
+        if ((hitPoint2 > (ld->lenses[i].aperture * 0.5) * (ld->lenses[i].aperture * 0.5)) ||
             ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
                 return false;
         }
         
-        intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
+        intersectionNormal(hit_point, sphere_center, ld->lenses[i].curvature, &hit_point_normal);
  
         DRAW_ONLY({
             if(draw){
@@ -925,15 +920,15 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
         *ray_origin = hit_point;
  
         // if not last lens element
-        if(i != (int)ld->lensRadiusCurvature.size() - 1){
+        if(i != ld->lensCount - 1){
             // ray direction gets modified
-            if(!calculateTransmissionVector(ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], *ray_direction, hit_point_normal, true)){
+            if(!calculateTransmissionVector(ray_direction, ld->lenses[i].ior, ld->lenses[i+1].ior, *ray_direction, hit_point_normal, true)){
                 return false;
             }
         } else { // last lens element
             // assuming the material outside the lens is air [ior 1.0]
             // ray direction gets modified
-            if(!calculateTransmissionVector(ray_direction, ld->lensIOR[i], 1.0, *ray_direction, hit_point_normal, true)){
+            if(!calculateTransmissionVector(ray_direction, ld->lenses[i].ior, 1.0, *ray_direction, hit_point_normal, true)){
                 return false;
             }
  
@@ -960,7 +955,7 @@ float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
     float focalPointDistance;
     float principlePlaneDistance;
     float summedThickness = 0.0;
-    float rayOriginHeight = ld->lensAperture[0] * 0.1;
+    float rayOriginHeight = ld->lenses[0].aperture * 0.1;
 
     AtVector hit_point;
     AtVector hit_point_normal;
@@ -968,18 +963,18 @@ float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
     AtVector ray_origin = {0.0, rayOriginHeight, 0.0};
     AtVector ray_direction = {0.0, 0.0, 99999.0};
  
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
+    for(int i = 0; i < ld->lensCount; i++){
         // need to keep the summedthickness method since the sphere centers get computed only later on
-        i == 0 ? summedThickness = ld->lensThickness[0] : summedThickness += ld->lensThickness[i];
+        i == 0 ? summedThickness = ld->lenses[0].thickness : summedThickness += ld->lenses[i].thickness;
  
-        AtVector sphere_center = {0.0, 0.0, summedThickness - ld->lensRadiusCurvature[i]};
-        raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, false);
-        intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
+        AtVector sphere_center = {0.0, 0.0, summedThickness - ld->lenses[i].curvature};
+        raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lenses[i].curvature, false, false);
+        intersectionNormal(hit_point, sphere_center, ld->lenses[i].curvature, &hit_point_normal);
  
-        if(i != (int)ld->lensRadiusCurvature.size() - 1){
-            calculateTransmissionVector(&ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true);
+        if(i != ld->lensCount - 1){
+            calculateTransmissionVector(&ray_direction, ld->lenses[i].ior, ld->lenses[i+1].ior, ray_direction, hit_point_normal, true);
         } else { // last element in vector
-            calculateTransmissionVector(&ray_direction, ld->lensIOR[i], 1.0, ray_direction, hit_point_normal, true);
+            calculateTransmissionVector(&ray_direction, ld->lenses[i].ior, 1.0, ray_direction, hit_point_normal, true);
  
             // original parallel ray start and end
             AtVector pp_line1start = {0.0, rayOriginHeight, 0.0};
@@ -1022,30 +1017,30 @@ float traceThroughLensElementsForFocalLength(Lensdata *ld, bool originShift){
  
  
 void adjustFocalLength(Lensdata *ld){
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        ld->lensRadiusCurvature[i] *= ld->focalLengthRatio;
-        ld->lensThickness[i] *= ld->focalLengthRatio;
-        ld->lensAperture[i] *= ld->focalLengthRatio;
+    for(int i = 0; i < ld->lensCount; i++){
+        ld->lenses[i].curvature *= ld->focalLengthRatio;
+        ld->lenses[i].thickness *= ld->focalLengthRatio;
+        ld->lenses[i].aperture *= ld->focalLengthRatio;
     }
 }
  
 
 void writeToFile(Lensdata *ld){
      myfile << "LENSES{";
-     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
+     for(int i = 0; i < ld->lensCount; i++){
          // lenscenter, radius, angle
-         myfile << std::fixed << std::setprecision(10) << -ld->lensCenter[i];
+         myfile << std::fixed << std::setprecision(10) << -ld->lenses[i].center;
          myfile << " ";
-         myfile << std::fixed << std::setprecision(10) << -ld->lensRadiusCurvature[i];
+         myfile << std::fixed << std::setprecision(10) << -ld->lenses[i].curvature;
          myfile << " ";
-         myfile << std::fixed << std::setprecision(10) << (std::asin((ld->lensAperture[i] * 0.5) / ld->lensRadiusCurvature[i])) * (180 / AI_PI);
+         myfile << std::fixed << std::setprecision(10) << (std::asin((ld->lenses[i].aperture * 0.5) / ld->lenses[i].curvature)) * (180 / AI_PI);
          myfile << " ";
      }
      myfile << "}\n";
  
      myfile << "IOR{";
-     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
-         myfile << std::fixed << std::setprecision(10) << ld->lensIOR[i];
+     for(int i = 0; i < ld->lensCount; i++){
+         myfile << std::fixed << std::setprecision(10) << ld->lenses[i].ior;
          myfile << " ";
      }
      myfile << "}\n";
@@ -1064,9 +1059,9 @@ void writeToFile(Lensdata *ld){
  
      myfile << "APERTUREMAX{";
      float maxAperture = 0.0;
-     for(int i = 0; i < ld->lensRadiusCurvature.size(); i++){
-         if (ld->lensAperture[i] > maxAperture){
-             maxAperture = ld->lensAperture[i];
+     for(int i = 0; i < ld->lensCount; i++){
+         if (ld->lenses[i].aperture > maxAperture){
+             maxAperture = ld->lenses[i].aperture;
          }
      }
      myfile << std::fixed << std::setprecision(10) << maxAperture;
@@ -1138,35 +1133,35 @@ bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_d
     AtVector hit_point_normal;
     AtVector sphere_center;
  
-    for(int i = 0; i < (int)ld->lensRadiusCurvature.size(); i++){
-        sphere_center = {0.0, 0.0, ld->lensCenter[i]};
+    for(int i = 0; i < ld->lensCount; i++){
+        sphere_center = {0.0, 0.0, ld->lenses[i].center};
 
-        if(!raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lensRadiusCurvature[i], false, true)){
+        if(!raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lenses[i].curvature, false, true)){
             return false;
         }
 
         float hitPoint2 = SQR(hit_point.x) + SQR(hit_point.y);
  
         // check if ray hits lens boundary or aperture
-        if ((hitPoint2 > (ld->lensAperture[i] * 0.5) * (ld->lensAperture[i] * 0.5)) ||
+        if ((hitPoint2 > (ld->lenses[i].aperture * 0.5) * (ld->lenses[i].aperture * 0.5)) ||
             ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
                 return false;
         }
         
-        intersectionNormal(hit_point, sphere_center, ld->lensRadiusCurvature[i], &hit_point_normal);
+        intersectionNormal(hit_point, sphere_center, ld->lenses[i].curvature, &hit_point_normal);
  
         ray_origin = hit_point;
  
         // if not last lens element
-        if(i != (int)ld->lensRadiusCurvature.size() - 1){
+        if(i != ld->lensCount - 1){
             // ray direction gets modified
-            if(!calculateTransmissionVector(&ray_direction, ld->lensIOR[i], ld->lensIOR[i+1], ray_direction, hit_point_normal, true)){
+            if(!calculateTransmissionVector(&ray_direction, ld->lenses[i].ior, ld->lenses[i+1].ior, ray_direction, hit_point_normal, true)){
                 return false;
             }
         } else { // last lens element
             // assuming the material outside the lens is air [ior 1.0]
             // ray direction gets modified
-            if(!calculateTransmissionVector(&ray_direction, ld->lensIOR[i], 1.0, ray_direction, hit_point_normal, true)){
+            if(!calculateTransmissionVector(&ray_direction, ld->lenses[i].ior, 1.0, ray_direction, hit_point_normal, true)){
                 return false;
             }
         }
@@ -1198,12 +1193,12 @@ void testAperturesTruth(Lensdata *ld){
                 origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.z = ld->originShift;
             
-                direction.x = (lens.x * ld->lensAperture[0]) - origin.x;
-                direction.y = (lens.y * ld->lensAperture[0]) - origin.y;
-                direction.z = - ld->lensThickness[0];
+                direction.x = (lens.x * ld->lenses[0].aperture) - origin.x;
+                direction.y = (lens.y * ld->lenses[0].aperture) - origin.y;
+                direction.z = - ld->lenses[0].thickness;
 
                 if(traceThroughLensElements(&origin, &direction, ld, false)){
-                    testAperturesFile << lens.x * ld->lensAperture[0] << " " << lens.y * ld->lensAperture[0] << " ";
+                    testAperturesFile << lens.x * ld->lenses[0].aperture << " " << lens.y * ld->lenses[0].aperture << " ";
                 }
             }
 
@@ -1276,7 +1271,7 @@ void testAperturesLUT(Lensdata *ld){
 
                 direction.x = lens.x - origin.x;
                 direction.y = lens.y - origin.y;
-                direction.z = - ld->lensThickness[0];
+                direction.z = - ld->lenses[0].thickness;
 
                 testAperturesFile << lens.x << " " << lens.y << " ";
             }
@@ -1331,30 +1326,30 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
                 lensU = ((xor128() / 4294967296.0f) * 2.0f) - 1.0f;
                 lensV = ((xor128() / 4294967296.0f) * 2.0f) - 1.0f;
 
-                boundsDirection.x = (lensU * ld->lensAperture[0]) - sampleOrigin.x;
-                boundsDirection.y = (lensV * ld->lensAperture[0]) - sampleOrigin.y;
-                boundsDirection.z = - ld->lensThickness[0];
+                boundsDirection.x = (lensU * ld->lenses[0].aperture) - sampleOrigin.x;
+                boundsDirection.y = (lensV * ld->lenses[0].aperture) - sampleOrigin.y;
+                boundsDirection.z = - ld->lenses[0].thickness;
 
                 if(traceThroughLensElementsForApertureSize(sampleOrigin, boundsDirection, ld)){
                     if((apertureBounds.min.x + apertureBounds.min.y) == 0.0){
-                        apertureBounds.min = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
-                        apertureBounds.max = {lensU * ld->lensAperture[0], lensV * ld->lensAperture[0]};
+                        apertureBounds.min = {lensU * ld->lenses[0].aperture, lensV * ld->lenses[0].aperture};
+                        apertureBounds.max = {lensU * ld->lenses[0].aperture, lensV * ld->lenses[0].aperture};
                     }
 
-                    if((lensU * ld->lensAperture[0]) > apertureBounds.max.x){
-                        apertureBounds.max.x = lensU * ld->lensAperture[0];
+                    if((lensU * ld->lenses[0].aperture) > apertureBounds.max.x){
+                        apertureBounds.max.x = lensU * ld->lenses[0].aperture;
                     }
 
-                    if((lensV * ld->lensAperture[0]) > apertureBounds.max.y){
-                        apertureBounds.max.y = lensV * ld->lensAperture[0];
+                    if((lensV * ld->lenses[0].aperture) > apertureBounds.max.y){
+                        apertureBounds.max.y = lensV * ld->lenses[0].aperture;
                     }
 
-                    if((lensU * ld->lensAperture[0]) < apertureBounds.min.x){
-                        apertureBounds.min.x = lensU * ld->lensAperture[0];
+                    if((lensU * ld->lenses[0].aperture) < apertureBounds.min.x){
+                        apertureBounds.min.x = lensU * ld->lenses[0].aperture;
                     }
 
-                    if((lensV * ld->lensAperture[0]) < apertureBounds.min.y){
-                        apertureBounds.min.y = lensV * ld->lensAperture[0];
+                    if((lensV * ld->lenses[0].aperture) < apertureBounds.min.y){
+                        apertureBounds.min.y = lensV * ld->lenses[0].aperture;
                     }
                 }
             }
@@ -1387,7 +1382,7 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 12.5);
-    AiParameterFLT("fStop", 2.8);
+    AiParameterFLT("fStop", 16.0);
     AiParameterFLT("focalDistance", 120.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
@@ -1475,11 +1470,7 @@ node_update {
 		         })
 		 
 		        // reset variables
-		        ld.lensRadiusCurvature.clear();
-		        ld.lensThickness.clear();
-		        ld.lensIOR.clear();
-		        ld.lensAperture.clear();
-		        ld.lensCenter.clear();
+		        ld.lenses.clear();
 		        ld.vignettedRays = 0;
 		        ld.succesRays = 0;
 		        ld.totalInternalReflection = 0;
@@ -1502,9 +1493,7 @@ node_update {
 		        }
 		 
 		        // bail out if something is incorrect with the vectors
-		        if (static_cast<int>(ld.lensRadiusCurvature.size()) == 0 ||
-		            ld.lensRadiusCurvature.size() != ld.lensAperture.size() ||
-		            ld.lensThickness.size() != ld.lensIOR.size()){
+		        if (static_cast<int>(ld.lenses.size()) == 0){
 		            AiMsgError("[ZOIC] Failed to read lens data file.");
 		            AiMsgError("[ZOIC] ... Is it the path correct?");
 		            AiMsgError("[ZOIC] ... Does it have 4 tabbed columns?");
@@ -1532,10 +1521,10 @@ node_update {
 		        AiMsgInfo( "%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
 		 
 		        // clamp aperture if fstop is wider than max aperture given by lens description
-		        if (ld.userApertureRadius > ld.lensAperture[ld.apertureElement]){
+		        if (ld.userApertureRadius > ld.lenses[ld.apertureElement].aperture){
 		            AiMsgWarning("[ZOIC] Given FSTOP wider than maximum aperture radius provided by lens data.");
-		            AiMsgWarning("[ZOIC] Clamping aperture radius from [%.9f] to [%.9f]", ld.userApertureRadius, ld.lensAperture[ld.apertureElement]);
-		            ld.userApertureRadius = ld.lensAperture[ld.apertureElement];
+		            AiMsgWarning("[ZOIC] Clamping aperture radius from [%.9f] to [%.9f]", ld.userApertureRadius, ld.lenses[ld.apertureElement].aperture);
+		            ld.userApertureRadius = ld.lenses[ld.apertureElement].aperture;
 		        }
 		       
 		        // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
@@ -1543,8 +1532,8 @@ node_update {
 		 
 		        // calculate distance between film plane and aperture
 		        ld.apertureDistance = 0.0;
-		        for(int i = 0; i < static_cast<int>(ld.lensRadiusCurvature.size()); i++){
-		            ld.apertureDistance += ld.lensThickness[i];
+		        for(int i = 0; i < static_cast<int>(ld.lenses.size()); i++){
+		            ld.apertureDistance += ld.lenses[i].thickness;
 		            if(i == ld.apertureElement){
 		                AiMsgInfo( "%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
 		                break;
@@ -1725,9 +1714,9 @@ camera_create_ray {
 	            output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
 	            output->origin.z = ld.originShift;
 
-	            output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-	            output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-	            output->dir.z = -ld.lensThickness[0];
+	            output->dir.x = (lens.x * ld.lenses[0].aperture) - output->origin.x;
+	            output->dir.y = (lens.y * ld.lenses[0].aperture) - output->origin.y;
+	            output->dir.z = -ld.lenses[0].thickness;
 
 	            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
 
@@ -1737,9 +1726,9 @@ camera_create_ray {
 	    	 
 	                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
 
-	    	        output->dir.x = (lens.x * ld.lensAperture[0]) - output->origin.x;
-	    	        output->dir.y = (lens.y * ld.lensAperture[0]) - output->origin.y;
-	    	        output->dir.z = - ld.lensThickness[0];
+	    	        output->dir.x = (lens.x * ld.lenses[0].aperture) - output->origin.x;
+	    	        output->dir.y = (lens.y * ld.lenses[0].aperture) - output->origin.y;
+	    	        output->dir.z = - ld.lenses[0].thickness;
 
 	    	        ++tries;
 	            }
@@ -1793,7 +1782,7 @@ camera_create_ray {
 
 	            output->dir.x = lens.x - output->origin.x;
 	            output->dir.y = lens.y - output->origin.y;
-	            output->dir.z = - ld.lensThickness[0];
+	            output->dir.z = - ld.lenses[0].thickness;
 
 
 	            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
@@ -1808,7 +1797,7 @@ camera_create_ray {
 
 	                output->dir.x = lens.x - output->origin.x;
 	                output->dir.y = lens.y - output->origin.y;
-	                output->dir.z = - ld.lensThickness[0];
+	                output->dir.z = - ld.lenses[0].thickness;
 
 	                ++tries;
 	            }
