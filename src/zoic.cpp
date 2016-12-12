@@ -10,19 +10,20 @@
 // Add support for C4D (IDs need to be generated)
 // Test Houdini support
 // Make visualisation for all parameters for website
-// Support lens files with abbe number
  
+
 #include <ai.h>
-#include <map>
-#include <iterator>
-#include <cstring>
 #include <iostream>
-#include <algorithm>
 #include <string>
+#include <cstring>
 #include <fstream>
-#include <vector>
 #include <sstream>
 #include <iomanip>
+#include <vector>
+#include <map>
+#include <iterator>
+#include <algorithm>
+
 
 #ifdef _MACBOOK
 #  define MACBOOK_ONLY(block) block
@@ -647,6 +648,16 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     int totalColumns = static_cast<int>(static_cast<float>(columns) / static_cast<float>(lines));
     AiMsgInfo( "%-40s %12d", "[ZOIC] Data file columns", totalColumns);
 
+    // bail out if not legal amount of columns
+    if (totalColumns < 4){
+        AiMsgError("[ZOIC] Failed to read lens data file.");
+        AiMsgError("[ZOIC] Less than 4 columns of data are found. Please double check.");
+        AiRenderAbort();
+    } else if (totalColumns > 5){
+        AiMsgError("[ZOIC] Failed to read lens data file.");
+        AiMsgError("[ZOIC] More than 5 columns of data are found. Please double check.");
+        AiRenderAbort();
+    }
 
     // read in data
     switch(totalColumns)
@@ -715,8 +726,6 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
             AiMsgInfo("[ZOIC] ##############################################");
             AiMsgInfo("[ZOIC] ########### END READING LENS DATA ############");
             AiMsgInfo("[ZOIC] ##############################################");
-
-
 
         } break;
 
@@ -1584,14 +1593,6 @@ node_update {
 		           readTabularLensData(params[p_lensDataPath].STR, &ld);
 		        }
 		 
-		        // bail out if something is incorrect with the vectors
-		        if (ld.lensCount == 0){
-		            AiMsgError("[ZOIC] Failed to read lens data file.");
-		            AiMsgError("[ZOIC] ... Is it the path correct?");
-		            AiMsgError("[ZOIC] ... Does it have 4 tabbed columns?");
-		            AiRenderAbort();
-		        }
-		 
 		        // look for invalid numbers that would mess it all up bro
 		        cleanupLensData(&ld);
 		 
@@ -1689,7 +1690,6 @@ node_finish {
 
 
 camera_create_ray {
-    // get values
     const AtParamValue* params = AiNodeGetParams(node);
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
 
