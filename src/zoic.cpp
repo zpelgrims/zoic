@@ -6,7 +6,7 @@
 
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
 
-// ray derivatives problem with textures? Mipmap to rediculous -30 seems to help..
+// Calculate proper ray derivatives for optimal texture i/o
 // Add support for C4D (IDs need to be generated)
 // Test Houdini support
 // Make visualisation for all parameters for website
@@ -1482,8 +1482,8 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
-    AiParameterFLT("focalLength", 12.5);
-    AiParameterFLT("fStop", 16.0);
+    AiParameterFLT("focalLength", 10.0);
+    AiParameterFLT("fStop", 1.4);
     AiParameterFLT("focalDistance", 120.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");

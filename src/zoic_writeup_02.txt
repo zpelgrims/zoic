@@ -1,0 +1,175 @@
+MAKE SURE TO SAY IT IS OPEN SOURCE
+
+
+
+> CHANGELOG:
+
+v2.0:
+
+	- Introduction of raytraced lens model
+	- Smarter sampling approach for thin-lens model when using optical vignetting
+		- Leaves just the optical vignetting, without the noisy edge vignetting
+
+v1.1.1:
+
+	- Removed OIIO dependency
+
+v1.1:
+
+	- Introduction of emperical edge highlights
+	- Exposure control
+
+v1.0:
+
+	- Introduction of image based bokeh shapes
+	- Introduction of emperical optical vignetting
+
+
+
+
+
+ZOIC 2.0 provides two different lens models, a new raytraced model which reads in lens description files often found in optics literature and lens patents, and the classical thin-lens approximation. These are two completely different ways of calculating the camera rays and therefore have seperate documentation. Both models serve their own purposes, although in general the new raytraced model should be preferred at all times where photorealism is required. It comes with a slight increase in camera ray creation times, which scales linearly with the amount of lens elements in the lens description file since the rays are traced through the lens system.
+
+
+RAYTRACED:
+
+	LENS MODEL PRINCIPLES:
+
+		This lens model reads in lens descriptions found in lens patents and books on optics. This data is used to trace the camera rays through that virtual lens. The model is based on a paper by Kolb et al [1995] and comes with some advantages over the thin-lens model, which by the way, is quite often a criminal approximation to how real lenses work:
+
+			Physically plausible optical vignetting
+
+			Physically plausible lens distortion
+
+			Physically plausible bokeh shapes due to the lens geometry
+
+			Correct image formation for wide angle lenses
+
+
+		Essentially, this should bring you one step closer to creating pretty, believable photographic images.
+
+
+		[use images of multiple lens designs]
+
+
+
+		TECHNICAL / HOW DOES THIS WORK?
+
+
+			The lens description file provides 4 sets of values for every lens element, which is enough to mathematically model the lens. The first value is the radius of curvature, or simply the radius of the lens imagined extended as a sphere. The second value is the thickness, which is the distance from one surface to the next. Then we have the index of refraction, which tells us how much the light rays will be bent after the intersection. Last but not least there's the aperture, which defines the maximum radius of the lens.
+
+			A special case is the aperture element, which has a radius of curvature of 0.
+
+
+			I will skip explaining how I approached the intersection / refraction as those need an article dedicated to themselves. I'm not the greatest at mathematics and there's plenty of explenations already around on the internet.
+
+
+			FOCAL LENGTH:
+
+				The first step is to figure out what the current focal length of the given lens description file is. Usually they are more or less 100mm. More or less is definitely not the way to go, so the actual focal length is found by tracing a parallel ray through the lens system. From this parallel ray, two values are measured. 
+
+					1. Principle plane on the [IMAGE SIDE/OBJECT SIDE? MAKE SURE TO KNOW]
+					2. Focal point
+
+
+				Principle plane: The intersection point between the original, parallel ray and the ray leaving the lens system.
+				Focal point: The intersection point between y=0 and the ray leaving the lens system.
+
+				By subtracting the focal point distance by the principle plane distance, we find the precise focal length.
+
+
+			To apply this focal length to the lens system, all distance measurements in the lens description file are multiplied by the ratio of the new focal length over the traced focal length. All lens elements get essentially scaled up or down.
+
+
+
+			APERTURE RADIUS:
+
+				Given an f-stop, it is necessary to calculate the actual aperture radius. This is trivial, as it is the focal length over 2*fStop.
+
+
+			IMAGE DISTANCE:
+
+
+				This is found by tracing a ray from the object side of the lens into the image side. The ray starts at the point we want to focus at, and hits the lens at a very small angle since lens distortion is minimal in the center.
+
+				Where the exit ray intersects with y=0, the image will be in focus. So what is the logical thing to do here? Simply place our image sensor at this distance. It is a good idea to leave the last lens element at the x=0 origin and move the image sensor instead, otherwise the distance between the focus point and the last lens element changes again. This shifting of all lens elements is one of the first steps after reading in the lens data. Calculating the image distance is the last bit of important precomputation. Now let's move to the calculation of individual camera rays.
+
+
+
+			CAMERA RAYS:
+
+				Aha! The main ray creation loop. The whole idea here is to set the origin and direction of a ray before sending into the lens system. After the origin and direction have been updated throughout the tracing process inside the lens, we hand the final origin and direction over to Arnold to do it's thing with.
+
+				First, a point on the image sensor is chosen. This point needs to be intricately linked to the current pixel in the image. It looks something like this:
+
+					origin = {input->sx * (sensorWidth * 0.5), input->sx (* sensorWidth * 0.5), originShift}
+
+				Then a point on the lens is chosen. It is important that:
+
+					1. It is as uniformly distributed as possible
+					2. No rays get wasted (so it needs to be in the unit disk domain, not unit square!)
+
+				One of the best and fast solutions to this problem is the concentric mapping method developed by Shirley. This maps random points on the unit square uniformly onto the unit disk.
+
+				[IMAGE OF CONCENTRIC MAPPING]
+
+				When you enable the custom bokeh shape function, this concentric mapping gets replaced by my own. Check out the image based bokeh technical section for that. The custom bokeh function will uniformly distribute samples over the image according to the pixel intensities.
+
+
+				Now an initial direction needs to be calculated. Since we have a point on the lens and a point on the sensor, the direction vector can be calculated simply by subtracting the origin point from the lens point. It is important to scale up the lens coordinates from the unit coordinates to the aperture of the first lens element.
+
+					direction = {(lens.x * lenses[0].aperture) - origin.x, (lens.y * lenses[0].aperture) - origin.y, - ld.lenses[0].thickness}
+
+				Now the tracing function can start, updating the origin and direction as the ray is traced through the lens. If the ray doesn't make it through the lens, another position on the lens is chosen and the process starts over until it gets through or hits a hardcoded maximum.
+
+
+				If the LUT precalculation is enabled, the lens coordinates will be manipulated even more so the least amount of possible camera rays will fail on first try. This is a bit too complex for this general writeup, so check out the code on Github if you're interested.
+
+
+
+
+	LENS DESCRIPTION FILES:
+
+		The lens model requires tabular lens description files, which unfortunately are rather sparsely distributed around the internet. I did some digging into optics literature and wrote some description files myself from the data I found. ZOIC accepts both lens descriptions with 4 or 5 columns:
+		
+		# lines starting with hash are ignored
+		# seperation between numbers can be tab, space or comma
+		# the order of elements needs to be in the following sequence
+
+		RADIUS OF CURVATURE, THICKNESS, IOR, APERTURE
+		
+		or
+
+		RADIUS OF CURVATURE, THICKNESS, IOR, V-NUMBER, APERTURE
+
+
+		Some lens description files:
+
+			- xxx
+			- xxx
+			- xxx
+			- xxx
+			- xxx
+			- xxx
+			- xxx
+
+
+
+	PRECALCULATE LOOK UP TABLE:
+
+		The most straightforward sampling approach is to distribute rays uniformly over the first lens element. This works pretty well with large apertures, but it fails miserably with small apertures since most of the rays won't not pass through it.
+
+		Zoic combats this problem by providing the option to pre-calculate the aperture shapes at 64*64 points on the sensor, and then billinearly interpolates between those. This makes sure that very few rays are "wasted". The aperture has to be calculated at multiple points since its shape and size vary drastically over the film plane.
+
+		When using large apertures, you can turn off this option to speed up interactive rendering. However, when interactivity is not needed or using small apertures, it is highly recommended to enable this option.
+
+		[IMAGE OF BOKEH SAMPLES]
+		[IMAGE OF SIDEVIEW WITH COLORED RAYS]
+
+
+> MOTIVATION
+	I tried to document some of the concepts behind the shader to motivate others that these kinds of shader writing projects are doable. I'd be lying if I claimed it was easy or doesn't require a lot of patience and time to figure it all out, but it is certainly doable. I kept all information very general, so if you want to dig deeper, check out the code on Github. It's all open source.
+
+
+> CHECK OUT THE CODE ON GITHUB
+	www.github.com/zpelgrims/zoic
