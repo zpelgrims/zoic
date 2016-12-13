@@ -1534,14 +1534,14 @@ node_update {
 	case THINLENS:
 		{
 			DRAW_ONLY({
-            myfile << "LENSMODEL{THINLENS}";
-            myfile << "\n";
-            myfile << "RAYS{" ;
-        })
+                myfile << "LENSMODEL{THINLENS}";
+                myfile << "\n";
+                myfile << "RAYS{" ;
+            })
 
-        camera->fov = 2.0f * atan((params[p_sensorWidth].FLT / (2.0f * params[p_focalLength].FLT))); // in radians
-        camera->tan_fov = tanf(camera->fov/ 2.0f);
-        camera->apertureRadius = (params[p_focalLength].FLT) / (2.0f * params[p_fStop].FLT);
+            camera->fov = 2.0f * atan((params[p_sensorWidth].FLT / (2.0f * params[p_focalLength].FLT))); // in radians
+            camera->tan_fov = tanf(camera->fov/ 2.0f);
+            camera->apertureRadius = (params[p_focalLength].FLT) / (2.0f * params[p_fStop].FLT);
 		}
 		break;
 
@@ -1700,6 +1700,9 @@ camera_create_ray {
             counter = 0;
         }
     })
+
+    int tries = 0;
+    int maxtries = 15;
  
 
 	switch(params[p_lensModel].INT)
@@ -1715,11 +1718,7 @@ camera_create_ray {
 	        // DOF CALCULATIONS
 	        if (params[p_useDof].BOOL == true) {
 
-	        	bool succes = false;
-	        	int tries = 0;
-
 		        AtPoint2 lens = {0.0f, 0.0f};
-
 	            !(params[p_useImage].BOOL) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
 
 	            lens *= camera->apertureRadius;
@@ -1728,16 +1727,12 @@ camera_create_ray {
 	            // Compute point on plane of focus, intersection on z axis
 	            float intersection = ABS(params[p_focalDistance].FLT / output->dir.z);
 	            AtPoint focusPoint = output->dir * intersection;
-
 	            output->dir = AiV3Normalize(focusPoint - output->origin);
+
 	            if (params[p_opticalVignettingDistance].FLT > 0.0f){
-	            	
-	                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, params[p_opticalVignettingRadius].FLT, params[p_opticalVignettingDistance].FLT) && tries <= 15){
-	                    output->dir = AiV3Normalize(p - originOriginal);
+	                while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, params[p_opticalVignettingRadius].FLT, params[p_opticalVignettingDistance].FLT) && tries <= maxtries){
 	                    
-	                    lens = {0.0f, 0.0f};
-	                    !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens) : camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
-	        		
+                        !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens) : camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
 	                    lens *= camera->apertureRadius;
 
 	                    output->dir = AiV3Normalize(p - originOriginal);
@@ -1749,7 +1744,7 @@ camera_create_ray {
 	                    ++tries;
 	                }
 
-	                if(tries > 15){
+	                if(tries > maxtries){
 	                    output->weight = 0.0f;
 	                    ++ld.vignettedRays;
 	                } else {
@@ -1785,6 +1780,8 @@ camera_create_ray {
 	        output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
 	        output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
 	        output->origin.z = ld.originShift;
+
+            AtPoint kolb_origin_original = output->origin;
 	        
 	        DRAW_ONLY({
 	            // looks cleaner in 2d when rays are aligned on axis
@@ -1792,36 +1789,18 @@ camera_create_ray {
 	            output->origin.y = 0.0;
 	        })
 
+            // sample disk with proper sample distribution
 	        AtPoint2 lens = {0.0, 0.0};
-	        
-	        // sample disk with proper sample distribution
 	        !(params[p_useImage].BOOL) ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens);
 	        
-	        int tries = 0;
-	        int maxtries = 15;
-	        
 	        if (!params[p_kolbSamplingLUT].BOOL){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
-
-	    		output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
-	            output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
-	            output->origin.z = ld.originShift;
-
-	            output->dir.x = (lens.x * ld.lenses[0].aperture) - output->origin.x;
-	            output->dir.y = (lens.y * ld.lenses[0].aperture) - output->origin.y;
-	            output->dir.z = -ld.lenses[0].thickness;
+	    		output->origin = kolb_origin_original;
+	            output->dir = {(lens.x * ld.lenses[0].aperture) - output->origin.x, (lens.y * ld.lenses[0].aperture) - output->origin.y, -ld.lenses[0].thickness};
 
 	            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
-
-	                output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
-	    	        output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
-	    	        output->origin.z = ld.originShift;
-	    	 
+	                output->origin = kolb_origin_original;
 	                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
-
-	    	        output->dir.x = (lens.x * ld.lenses[0].aperture) - output->origin.x;
-	    	        output->dir.y = (lens.y * ld.lenses[0].aperture) - output->origin.y;
-	    	        output->dir.z = - ld.lenses[0].thickness;
-
+	    	        output->dir = {(lens.x * ld.lenses[0].aperture) - output->origin.x, (lens.y * ld.lenses[0].aperture) - output->origin.y, - ld.lenses[0].thickness};
 	    	        ++tries;
 	            }
 	        } 
@@ -1843,7 +1822,6 @@ camera_create_ray {
 	            // go back 1 element in sorted map
 	            --low;
 	            float value3 = low->first;
-	            
 	            --low2;
 	            float value4 = low2->first;
 
@@ -1852,12 +1830,8 @@ camera_create_ray {
 	            float ypercentage = (output->origin.y - value2) / (value4 - value2);
 
 	            // scale
-	            float scale1 = ld.apertureMap[value1][value2].getMaxScale();
-	            float scale2 = ld.apertureMap[value3][value4].getMaxScale();
-	            float scale3 = ld.apertureMap[value1][value4].getMaxScale();
-	            float scale4 = ld.apertureMap[value3][value2].getMaxScale();
-
-	        	float maxScale = BILERP(xpercentage, ypercentage, scale1, scale2, scale3, scale4) * samplingErrorCorrection;
+	        	float maxScale = BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2].getMaxScale(), ld.apertureMap[value3][value4].getMaxScale(),
+                                        ld.apertureMap[value1][value4].getMaxScale(), ld.apertureMap[value3][value2].getMaxScale()) * samplingErrorCorrection;
 
 	            lens *= maxScale;
 
@@ -1871,29 +1845,17 @@ camera_create_ray {
 	                                    BILERP(xpercentage, ypercentage, centroid1.y, centroid3.y, centroid2.y, centroid4.y)};
 
 	            lens += translation;
-
-	            output->dir.x = lens.x - output->origin.x;
-	            output->dir.y = lens.y - output->origin.y;
-	            output->dir.z = - ld.lenses[0].thickness;
-
+	            output->dir = {lens.x - output->origin.x, lens.y - output->origin.y, - ld.lenses[0].thickness};
 
 	            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
-	                output->origin.x = input->sx * (params[p_sensorWidth].FLT * 0.5);
-	                output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
-	                output->origin.z = ld.originShift;
-
+                    // reset origin and update direction with new lens coords
+	                output->origin = kolb_origin_original;
 	                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
-
 	                lens *= maxScale;
 	                lens += translation;
-
-	                output->dir.x = lens.x - output->origin.x;
-	                output->dir.y = lens.y - output->origin.y;
-	                output->dir.z = - ld.lenses[0].thickness;
-
+	                output->dir = {lens.x - output->origin.x, lens.y - output->origin.y, - ld.lenses[0].thickness};
 	                ++tries;
 	            }
-		        
 	        }
 
 	        if(tries > maxtries){
