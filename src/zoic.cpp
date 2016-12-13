@@ -867,17 +867,14 @@ inline bool raySphereIntersection(AtVector *hit_point, AtVector ray_direction, A
     float d2 = AiV3Dot(L, L) - SQR(tca);
  
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
-    // some arbitrary value that I use to check for errors
-    if (tracingRealRays == true && d2 > radius2){
-        return false;
-    }
+    if (tracingRealRays == true && d2 > radius2){return false;}
  
     float thc = std::sqrt(ABS(radius2 - d2));
  
-    if(!reverse){
-        *hit_point = ray_origin + ray_direction * (tca + thc * SGN(sphere_radius));
-    } else {
+    if(reverse){
         *hit_point = ray_origin + ray_direction * (tca - thc * SGN(sphere_radius));
+    } else {
+        *hit_point = ray_origin + ray_direction * (tca + thc * SGN(sphere_radius));
     }
 
     return true;
@@ -936,45 +933,38 @@ AtVector linePlaneIntersection(AtVector rayOrigin, AtVector rayDirection) {
  
  
 float calculateImageDistance(float objectDistance, Lensdata *ld){
-     AtVector ray_origin_focus = {0.0, 0.0, objectDistance};
- 
-     AtVector ray_direction_focus;
-     ray_direction_focus.x = 0.0;
-     ray_direction_focus.y = (ld->lenses[ld->lensCount - 1].aperture / 2.0) * 0.3;
-     ray_direction_focus.z = (- objectDistance * 1.1);
- 
-     float summedThickness = 0.0;
-     float imageDistance;
+    AtVector ray_origin = {0.0f, 0.0f, objectDistance};
+    AtVector ray_direction = {0.0f, (ld->lenses[ld->lensCount - 1].aperture / 2.0f) * 0.05f, - objectDistance};
 
-     AtVector hit_point_normal;
-     AtVector hit_point;
+    float summedThickness = 0.0;
+    float imageDistance;
+
+    AtVector hit_point_normal;
+    AtVector hit_point;
+
+    for(int k = 0; k < ld->lensCount; k++){
+        summedThickness += ld->lenses[k].thickness;
+    }
  
-     for(int k = 0; k < ld->lensCount; k++){
-         summedThickness += ld->lenses[k].thickness;
-     }
- 
-     for(int i = 0; i < ld->lensCount; i++){
-         if (i != 0){summedThickness -= ld->lenses[ld->lensCount - i].thickness;}
-        
-         AtVector sphere_center;
-         sphere_center.x = 0.0;
-         sphere_center.y = 0.0;
-         sphere_center.z = summedThickness - ld->lenses[ld->lensCount - 1 - i].curvature;
-        
-        raySphereIntersection(&hit_point, ray_direction_focus, ray_origin_focus, sphere_center, ld->lenses[ld->lensCount - 1 - i].curvature, true, false);
+    for(int i = 0; i < ld->lensCount; i++){
+        if (i != 0){summedThickness -= ld->lenses[ld->lensCount - i].thickness;}
+
+        AtVector sphere_center = {0.0f, 0.0f, summedThickness - ld->lenses[ld->lensCount - 1 - i].curvature};
+
+        raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lenses[ld->lensCount - 1 - i].curvature, true, false);
         intersectionNormal(hit_point, sphere_center, - ld->lenses[ld->lensCount - 1 - i].curvature, &hit_point_normal);
-        
+
          if(i==0){
-             calculateTransmissionVector(&ray_direction_focus, 1.0, ld->lenses[ld->lensCount - i - 1].ior, ray_direction_focus, hit_point_normal, false);
+            calculateTransmissionVector(&ray_direction, 1.0, ld->lenses[ld->lensCount - i - 1].ior, ray_direction, hit_point_normal, false);
          } else {
-             calculateTransmissionVector(&ray_direction_focus, ld->lenses[ld->lensCount - i].ior, ld->lenses[ld->lensCount - i - 1].ior, ray_direction_focus, hit_point_normal, false);
+            calculateTransmissionVector(&ray_direction, ld->lenses[ld->lensCount - i].ior, ld->lenses[ld->lensCount - i - 1].ior, ray_direction, hit_point_normal, false);
          }
-        
+
          if(i == ld->lensCount - 1){
-             imageDistance = linePlaneIntersection(hit_point, ray_direction_focus).z;
+            imageDistance = linePlaneIntersection(hit_point, ray_direction).z;
          }
- 
-         ray_origin_focus = hit_point;
+
+         ray_origin = hit_point;
      }
  
      AiMsgInfo( "%-40s %12.8f", "[ZOIC] Object distance [cm]", objectDistance);
@@ -1022,13 +1012,11 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
  
         // if not last lens element
         if(i != ld->lensCount - 1){
-            // ray direction gets modified
             if(!calculateTransmissionVector(ray_direction, ld->lenses[i].ior, ld->lenses[i+1].ior, *ray_direction, hit_point_normal, true)){
                 return false;
             }
         } else { // last lens element
             // assuming the material outside the lens is air [ior 1.0]
-            // ray direction gets modified
             if(!calculateTransmissionVector(ray_direction, ld->lenses[i].ior, 1.0, *ray_direction, hit_point_normal, true)){
                 return false;
             }
@@ -1043,7 +1031,8 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
                     myfile << " ";
                     myfile << std::fixed << std::setprecision(10) <<  hit_point.y + ray_direction->y * -10000.0;
                     myfile << " ";
-                }})
+                }
+            })
         }
     }
  
@@ -1190,19 +1179,11 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
     float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
     float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
 
-    if (ABS(pointHypotenuse) <= virtualApertureTrueRadius){
+    if (ABS(pointHypotenuse) < virtualApertureTrueRadius){
         return true;
     } else {
         return false;
     }
-
-    /*
-    // inner highlight,if point is within domain between lens radius and new inner radius (defined by the width)
-    // adding weight to opposite edges to get nice rim on the highlights
-    else if (ABS(pointHypotenuse) < virtualApertureTrueRadius && ABS(pointHypotenuse) > (virtualApertureTrueRadius - _highlightWidth)){
-        output->weight *= _highlightStrength * (1.0 - (virtualApertureTrueRadius - ABS(pointHypotenuse))) * std::sqrt(SQR(input->sx) + SQR(input->sy));
-    }
-    */
 }
 
 
@@ -1211,18 +1192,12 @@ inline void printProgressBar(float progress, int barWidth){
     int pos = barWidth * progress;
 
     for (int i = 0; i < barWidth; ++i) {
-        if (i < pos){
-            std::cout << "=";
-        } else if (i == pos){
-            std::cout << ">";
-        } else {
-            std::cout << " ";
-        }
+        if (i < pos){std::cout << "=";}
+        else if (i == pos){std::cout << ">";}
+        else {std::cout << " ";}
     }
 
-    if (progress > 1.0){
-        progress = 1.0;
-    }
+    if (progress > 1.0){progress = 1.0;}
 
     std::cout << std::fixed << std::setprecision(2) << "] % " << progress * 100.0 << "\r";
     std::cout.flush();
@@ -1255,13 +1230,11 @@ bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_d
  
         // if not last lens element
         if(i != ld->lensCount - 1){
-            // ray direction gets modified
             if(!calculateTransmissionVector(&ray_direction, ld->lenses[i].ior, ld->lenses[i+1].ior, ray_direction, hit_point_normal, true)){
                 return false;
             }
         } else { // last lens element
             // assuming the material outside the lens is air [ior 1.0]
-            // ray direction gets modified
             if(!calculateTransmissionVector(&ray_direction, ld->lenses[i].ior, 1.0, ray_direction, hit_point_normal, true)){
                 return false;
             }
