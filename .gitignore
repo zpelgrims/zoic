@@ -19,7 +19,6 @@ tests/maya/*
 Sconstruct
 excons/
 
-build/*
 s_kallweit/*
 
 tests/images/testScene_distance.exr
