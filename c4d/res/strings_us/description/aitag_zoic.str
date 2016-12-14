@@ -23,9 +23,6 @@ STRINGTABLE aitag_zoic
    C4DAIP_ZOIC_USEDOF                           "Use DOF";
    C4DAIP_ZOIC_OPTICALVIGNETTINGDISTANCE        "Optical Vignetting Distance";
    C4DAIP_ZOIC_OPTICALVIGNETTINGRADIUS          "Optical Vignetting Radius";
-   C4DAIP_ZOIC_HIGHLIGHTWIDTH                   "Highlight Width";
-   C4DAIP_ZOIC_HIGHLIGHTSTRENGTH                "Highlight Strength";
-
 
    C4DAI_ZOIC_EXTRA_GRP                         "Extra";
    C4DAIP_ZOIC_EXPOSURECONTROL                  "Exposure Control";

@@ -91,8 +91,6 @@ class aiZoicTemplate(templates.AttributeTemplate):
         self.addControl("aiUseDof", label="Enable thin-lens depth of field")
         self.addControl("aiOpticalVignettingDistance", label="Optical Vignetting Distance")
         self.addControl("aiOpticalVignettingRadius", label="Optical Vignetting Radius")
-        self.addControl("aiHighlightWidth", label="Highlight Width")
-        self.addControl("aiHighlightStrength", label="Highlight Strength")
         self.endLayout()
 
         self.addSeparator()

@@ -75,8 +75,6 @@ enum zoicParams{
 	p_useDof,
 	p_opticalVignettingDistance,
 	p_opticalVignettingRadius,
-	p_highlightWidth,
-	p_highlightStrength,
 	p_exposureControl
 };
 
@@ -1466,8 +1464,6 @@ node_parameters {
     AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 0.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
-    AiParameterFLT("highlightWidth", 0.2);
-    AiParameterFLT("highlightStrength", 0.0);
     AiParameterFLT("exposureControl", 0.0);
 }
  
