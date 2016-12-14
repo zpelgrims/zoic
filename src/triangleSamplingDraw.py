@@ -53,7 +53,7 @@ posx = -12
 posy = -12
 
 while i < 49:
-	d_bg.ellipse([((-1.5 + posx) * AAS * SCALE + TRANSLATEX), ((-1.5 + posy) * AAS * SCALE + TRANSLATEY), ((1.5 + posx) * AAS * SCALE + TRANSLATEX), ((1.5 + posy) * AAS * SCALE + TRANSLATEY)], DARKGREY, DARKGREY)
+	d_bg.ellipse([((-1.0 + posx) * AAS * SCALE + TRANSLATEX), ((-1.0 + posy) * AAS * SCALE + TRANSLATEY), ((1.0 + posx) * AAS * SCALE + TRANSLATEX), ((1.0 + posy) * AAS * SCALE + TRANSLATEY)], DARKGREY, DARKGREY)
 	posy = posy + 4
 	i += 1
 

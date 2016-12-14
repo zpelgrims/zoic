@@ -1253,7 +1253,7 @@ void testAperturesTruth(Lensdata *ld){
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 50000;
+    int apertureSamples = 150000;
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
@@ -1289,9 +1289,9 @@ void testAperturesLUT(Lensdata *ld){
     AtVector direction;
 
     int filmSamples = 3;
-    int apertureSamples = 5000;
+    int apertureSamples = 15000;
 
-    float samplingErrorCorrection = 1.4;
+    float samplingErrorCorrection = 1.15;
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
@@ -1456,8 +1456,8 @@ node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 10.0);
-    AiParameterFLT("fStop", 1.4);
-    AiParameterFLT("focalDistance", 120.0);
+    AiParameterFLT("fStop", 3.2);
+    AiParameterFLT("focalDistance", 30.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
     AiParameterENUM("lensModel", RAYTRACED, LensModelNames);
@@ -1613,8 +1613,8 @@ node_update {
 		            exitPupilLUT(&ld, 64, 64, 25000);
 
 		            DRAW_ONLY({
-			            testAperturesTruth(&ld);
-			            testAperturesLUT(&ld);
+			            //testAperturesTruth(&ld);
+			            //testAperturesLUT(&ld);
 		           	}) 
 		        }
 		             
@@ -1754,12 +1754,16 @@ camera_create_ray {
 	        output->origin.y = input->sy * (params[p_sensorWidth].FLT * 0.5);
 	        output->origin.z = ld.originShift;
 
+            //TMP
+            //output->origin.x = 0.0;
+            //output->origin.y = 0.0;
+
             AtPoint kolb_origin_original = output->origin;
 	        
 	        DRAW_ONLY({
 	            // looks cleaner in 2d when rays are aligned on axis
 	            output->origin.x = 0.0;
-	            output->origin.y = 0.0;
+	            //output->origin.y = 0.0;
 	        })
 
             // sample disk with proper sample distribution
@@ -1769,7 +1773,7 @@ camera_create_ray {
 	        if (!params[p_kolbSamplingLUT].BOOL){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
 	    		output->origin = kolb_origin_original;
 	            output->dir = {(lens.x * ld.lenses[0].aperture) - output->origin.x, (lens.y * ld.lenses[0].aperture) - output->origin.y, -ld.lenses[0].thickness};
-
+                DRAW_ONLY(output->dir.x = 0.0;)
 	            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
 	                output->origin = kolb_origin_original;
 	                !(params[p_useImage].BOOL) ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
@@ -1820,6 +1824,7 @@ camera_create_ray {
 	            lens += translation;
 	            output->dir = {lens.x - output->origin.x, lens.y - output->origin.y, - ld.lenses[0].thickness};
 
+                
 	            while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
                     // reset origin and update direction with new lens coords
 	                output->origin = kolb_origin_original;

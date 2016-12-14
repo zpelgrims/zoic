@@ -7,10 +7,10 @@ print "####### INITIALIZING PYTHON IMAGE DRAWING #######"
 SIZE = (4500, 750)
 AAS = 4
 LINEWIDTH = 10
-TRANSLATEX = 3800 * AAS
+TRANSLATEX = 2800 * AAS
 TRANSLATEY = (SIZE[1] * AAS) / 2
 PADDING = 10 * AAS
-SCALE = 35
+SCALE = 85
 # font = ImageFont.truetype('C:\Windows\Fonts\Consola.ttf', 16 * AAS)
 font = ImageFont.truetype('/Users/zpelgrims/Library/Fonts/Inconsolata.otf', 16 * AAS)
 WHITE = (255, 255, 255)
