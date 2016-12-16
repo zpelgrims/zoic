@@ -1425,16 +1425,8 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
                     }
                 }
             }
-
-
-            // check if any changes were made at all
-            if (apertureBounds.min.x == 0.0 && apertureBounds.min.y == 0.0 && 
-                apertureBounds.max.x == 0.0 && apertureBounds.max.y == 0.0){
-                    // do something
-            }
             
             ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, apertureBounds));
-
 
             if (progressPrintCounter == (filmSamplesX * filmSamplesY) / 100){
                 printProgressBar(progress, barWidth);
@@ -1453,9 +1445,9 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSa
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
-    AiParameterFLT("focalLength", 10.0);
+    AiParameterFLT("focalLength", 5.0);
     AiParameterFLT("fStop", 3.2);
-    AiParameterFLT("focalDistance", 30.0);
+    AiParameterFLT("focalDistance", 50.0);
     AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
     AiParameterENUM("lensModel", RAYTRACED, LensModelNames);
