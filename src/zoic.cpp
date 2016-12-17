@@ -208,9 +208,9 @@ public:
         unsigned int iw, ih, nc;
         if (!AiTextureGetResolution(path, &iw, &ih) || !AiTextureGetNumChannels(path, &nc)){ return false; }
 
-        x = int(iw);
-        y = int(ih);
-        nchannels = int(nc);
+        x = static_cast<int>(iw);
+        y = static_cast<int>(ih);
+        nchannels = static_cast<int>(nc);
         
         nbytes = x * y * nchannels * sizeof(float);
         AiAddMemUsage(nbytes, "zoic");
@@ -496,7 +496,7 @@ public:
         float *pUpperBound = std::upper_bound(cdfRow, cdfRow + y, randomNumberRow);
 
         int r = 0;
-        pUpperBound >= (cdfRow + y) ? r = y - 1 : r = int(pUpperBound - cdfRow);
+        pUpperBound >= (cdfRow + y) ? r = y - 1 : r = static_cast<int>(pUpperBound - cdfRow);
         
         // find actual pixel row
         int actualPixelRow = rowIndices[r];
@@ -523,7 +523,7 @@ public:
         float *pUpperBoundColumn = std::upper_bound(cdfColumn + startPixel, cdfColumn + startPixel + x, randomNumberColumn);
 
         int c = 0;
-        pUpperBoundColumn >= cdfColumn + startPixel + x ? c = startPixel + x - 1 : c = int(pUpperBoundColumn - cdfColumn);
+        pUpperBoundColumn >= cdfColumn + startPixel + x ? c = startPixel + x - 1 : c = static_cast<int>(pUpperBoundColumn - cdfColumn);
 
         // find actual pixel column
         int actualPixelColumn = columnIndices[c];
@@ -541,12 +541,12 @@ public:
         })
 
         // to get the right image orientation, flip the x and y coordinates and then multiply the y values by -1 to flip the pixels vertically
-        float flippedRow = float(recalulatedPixelColumn);
+        float flippedRow = static_cast<float>(recalulatedPixelColumn);
         float flippedColumn = recalulatedPixelRow * -1.0f;
 
         // send values back
-        *dx = (float)flippedRow / (float)x * 2;
-        *dy = (float)flippedColumn / (float)y * 2;
+        *dx = static_cast<float>(flippedRow) / static_cast<float>(x) * 2.0;
+        *dy = static_cast<float>(flippedColumn) / static_cast<float>(y) * 2.0;
     }
 };
 
@@ -984,23 +984,23 @@ float calculateImageDistance(float objectDistance, Lensdata *ld){
         raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lenses[ld->lensCount - 1 - i].curvature, true, false);
         intersectionNormal(hit_point, sphere_center, - ld->lenses[ld->lensCount - 1 - i].curvature, &hit_point_normal);
 
-         if(i==0){
-            calculateTransmissionVector(&ray_direction, 1.0, ld->lenses[ld->lensCount - i - 1].ior, ray_direction, hit_point_normal, false);
-         } else {
-            calculateTransmissionVector(&ray_direction, ld->lenses[ld->lensCount - i].ior, ld->lenses[ld->lensCount - i - 1].ior, ray_direction, hit_point_normal, false);
-         }
+        if(i==0){
+           calculateTransmissionVector(&ray_direction, 1.0, ld->lenses[ld->lensCount - i - 1].ior, ray_direction, hit_point_normal, false);
+        } else {
+           calculateTransmissionVector(&ray_direction, ld->lenses[ld->lensCount - i].ior, ld->lenses[ld->lensCount - i - 1].ior, ray_direction, hit_point_normal, false);
+        }
 
-         if(i == ld->lensCount - 1){
-            imageDistance = linePlaneIntersection(hit_point, ray_direction).z;
-         }
+        if(i == ld->lensCount - 1){
+           imageDistance = linePlaneIntersection(hit_point, ray_direction).z;
+        }
 
-         ray_origin = hit_point;
-     }
+        ray_origin = hit_point;
+    }
  
-     AiMsgInfo( "%-40s %12.8f", "[ZOIC] Object distance [cm]", objectDistance);
-     AiMsgInfo( "%-40s %12.8f", "[ZOIC] Image distance [cm]", imageDistance);
+    AiMsgInfo( "%-40s %12.8f", "[ZOIC] Object distance [cm]", objectDistance);
+    AiMsgInfo( "%-40s %12.8f", "[ZOIC] Image distance [cm]", imageDistance);
     
-     return imageDistance;
+    return imageDistance;
 }
  
  
@@ -1017,9 +1017,8 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
         float hitPoint2 = SQR(hit_point.x) + SQR(hit_point.y);
  
         // check if ray hits lens boundary or aperture
-        if ((hitPoint2 > SQR(ld->lenses[i].aperture * 0.5)) ||
-            ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
-                return false;
+        if ((hitPoint2 > SQR(ld->lenses[i].aperture * 0.5)) || ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
+            return false;
         }
         
         intersectionNormal(hit_point, sphere_center, ld->lenses[i].curvature, &hit_point_normal);
@@ -1200,11 +1199,7 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
     float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
     float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
 
-    if (!ABS(pointHypotenuse) < virtualApertureTrueRadius){
-        return false;
-    }
-
-    return true;
+    return ABS(pointHypotenuse) < virtualApertureTrueRadius;
 }
 
 
