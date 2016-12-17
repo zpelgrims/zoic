@@ -1513,7 +1513,7 @@ node_initialize {
      DRAW_ONLY(AiMsgInfo("[ZOIC] ---- IMAGE DRAWING ENABLED @ COMPILE TIME ----");)
 }
  
-
+ 
 node_update {
     AiCameraUpdate(node, false);
     cameraData *camera = (cameraData*) AiCameraGetLocalData(node);
@@ -1524,8 +1524,7 @@ node_update {
         MACBOOK_ONLY(myfile.open("/Volumes/ZENO_2016/projects/zoic/src/draw.zoic");)
         WORK_ONLY(myfile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.zoic", std::ofstream::out | std::ofstream::trunc);)
     })
-
-    camera->image.invalidate();
+ 
     // make probability functions of the bokeh image
     if (params[p_useImage].BOOL == true){
         if (!camera->image.read(params[p_bokehPath].STR)){
@@ -1533,6 +1532,8 @@ node_update {
             AiRenderAbort();
         }
     }
+ 
+    camera->image.invalidate();
  
 
     switch(params[p_lensModel].INT)
@@ -1572,9 +1573,9 @@ node_update {
                 ldCheckUpdate.stored_kolbSamplingLUT = params[p_kolbSamplingLUT].BOOL;
 
                 DRAW_ONLY({
-                    myfile << "LENSMODEL{KOLB}";
-                    myfile << "\n";
-                })
+                     myfile << "LENSMODEL{KOLB}";
+                     myfile << "\n";
+                 })
          
                 // reset variables
                 ld.lenses.clear();
@@ -1592,11 +1593,11 @@ node_update {
                 // check if file is supplied
                 // string is const char* so have to do it the oldskool way
                 if ((params[p_lensDataPath].STR != NULL) && (params[p_lensDataPath].STR[0] == '\0')){
-                    AiMsgError("[ZOIC] Lens Data Path is empty");
-                    AiRenderAbort();
+                   AiMsgError("[ZOIC] Lens Data Path is empty");
+                   AiRenderAbort();
                 } else {
-                    AiMsgInfo("[ZOIC] Lens Data Path = [%s]", params[p_lensDataPath].STR);
-                    readTabularLensData(params[p_lensDataPath].STR, &ld);
+                   AiMsgInfo("[ZOIC] Lens Data Path = [%s]", params[p_lensDataPath].STR);
+                   readTabularLensData(params[p_lensDataPath].STR, &ld);
                 }
          
                 // look for invalid numbers that would mess it all up bro
