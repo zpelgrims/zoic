@@ -146,8 +146,7 @@ struct arrayCompare{
 
 class imageData{
 private:
-    int x, y;
-    int nchannels;
+    int x, y, nchannels;
     float *pixelData;
     float *cdfRow;
     float *cdfColumn;
@@ -199,22 +198,15 @@ public:
     }
     
     bool read(const char *bokeh_kernel_filename){
-        
         invalidate();
-        
         AtInt64 nbytes = 0;
         
 #ifdef NO_OIIO
-
-        AiMsgInfo("Reading image using Arnold API: %s", bokeh_kernel_filename);
-
+        AiMsgInfo("[ZOIC] Reading image using Arnold API: %s", bokeh_kernel_filename);
         AtString path(bokeh_kernel_filename);
 
         unsigned int iw, ih, nc;
-        if (!AiTextureGetResolution(path, &iw, &ih) ||
-            !AiTextureGetNumChannels(path, &nc)){
-            return false;
-        }
+        if (!AiTextureGetResolution(path, &iw, &ih) || !AiTextureGetNumChannels(path, &nc)){ return false; }
 
         x = int(iw);
         y = int(ih);
@@ -231,7 +223,7 @@ public:
 
 #else
 
-        AiMsgInfo("Reading image using OpenImageIO: %s", bokeh_kernel_filename);
+        AiMsgInfo("[ZOIC] Reading image using OpenImageIO: %s", bokeh_kernel_filename);
 
         //Search for an ImageIO plugin that is capable of reading the file ("foo.jpg"), first by
         //trying to deduce the correct plugin from the file extension, but if that fails, by opening
@@ -239,9 +231,7 @@ public:
         //the right plugin, it creates a subclass instance of ImageInput that reads the right kind of
         //file format, and tries to fully open the file.
         OpenImageIO::ImageInput *in = OpenImageIO::ImageInput::open (bokeh_kernel_filename);
-        if (! in){
-            return false;
-        }
+        if (!in){return false;}
 
         const OpenImageIO::ImageSpec &spec = in->spec();
         
@@ -259,10 +249,10 @@ public:
 
 #endif
 
-        AiMsgInfo("Image Width: %d", x);
-        AiMsgInfo("Image Height: %d", y);
-        AiMsgInfo("Image Channels: %d", nchannels);
-        AiMsgInfo("Total amount of pixels to process: %d", x * y);
+        AiMsgInfo("[ZOIC] Bokeh Image Width: %d", x);
+        AiMsgInfo("[ZOIC] Bokeh Image Height: %d", y);
+        AiMsgInfo("[ZOIC] Bokeh Image Channels: %d", nchannels);
+        AiMsgInfo("[ZOIC] Total amount of bokeh pixels to process: %d", x * y);
 
         DEBUG_ONLY({
             // print out raw pixel data
@@ -291,9 +281,7 @@ public:
     
     // Importance sampling
     void bokehProbability(){
-        if (!isValid()){
-            return;
-        }
+        if (!isValid()){return;}
         
         // initialize arrays
         AtInt64 nbytes = x * y * sizeof(float);
@@ -408,7 +396,6 @@ public:
         cdfRow = (float*) AiMalloc(nbytes);
 
         float prevVal = 0.0f;
-
         for (int i = 0; i < y; ++i){
             cdfRow[i] = prevVal + summedRowValues[rowIndices[i]];
             prevVal = cdfRow[i];
@@ -432,8 +419,7 @@ public:
                 // avoid division by 0
                 if ((normalizedPixelValues[i] != 0) && (summedRowValues[r] != 0)){
                     normalizedValuesPerRow[i] = normalizedPixelValues[i] / summedRowValues[r];
-                }
-                else{
+                } else {
                     normalizedValuesPerRow[i] = 0;
                 }
 
@@ -460,10 +446,10 @@ public:
         }
 
         DEBUG_ONLY({
-            // print values
             for(int i = 0; i < npixels; ++i){
                 std::cout << "PDF column [" << columnIndices[i] << "]: " << normalizedValuesPerRow[columnIndices[i]] << std::endl;
             }
+
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
@@ -488,7 +474,6 @@ public:
             
         // Release and untrack memory
         AiAddMemUsage(-totalTempBytes, "zoic");
-        
         AiFree(pixelValues);
         AiFree(normalizedPixelValues);
         AiFree(summedRowValues);
@@ -497,7 +482,6 @@ public:
     
     // Sample image
     void bokehSample(float randomNumberRow, float randomNumberColumn, float *dx, float *dy){
-        
         if (!isValid()){
             AiMsgWarning("Invalid bokeh image data.");
             *dx = 0.0f;
@@ -510,18 +494,10 @@ public:
 
         // find upper bound of random number in the array
         float *pUpperBound = std::upper_bound(cdfRow, cdfRow + y, randomNumberRow);
-        int r = 0;
-        
-        if (pUpperBound >= cdfRow + y){
-            //AiMsgWarning("[zoic] %f larger than last biggest cdfRow[%d] = %f", randomNumberRow, y-1, cdfRow[y-1]);
-            r = y - 1;
-        
-        } else{
-            DEBUG_ONLY(std::cout << "UPPER BOUND: " << *pUpperBound << std::endl);
-            r = int(pUpperBound - cdfRow);
-        }
-        
 
+        int r = 0;
+        pUpperBound >= (cdfRow + y) ? r = y - 1 : r = int(pUpperBound - cdfRow);
+        
         // find actual pixel row
         int actualPixelRow = rowIndices[r];
 
@@ -540,22 +516,14 @@ public:
         })
 
         int startPixel = actualPixelRow * x;
-
         DEBUG_ONLY(std::cout << "START PIXEL: " << startPixel << std::endl);
 
 
         // find upper bound of random number in the array
         float *pUpperBoundColumn = std::upper_bound(cdfColumn + startPixel, cdfColumn + startPixel + x, randomNumberColumn);
+
         int c = 0;
-
-        if (pUpperBoundColumn >= cdfColumn + startPixel + x){
-            //AiMsgWarning("[zoic] %f larger than last biggest cdfColumn[%d][%d] = %f", randomNumberColumn, r, x-1, cdfColumn[startPixel+x-1]);
-            c = startPixel + x - 1;
-
-        } else{
-            DEBUG_ONLY(std::cout << "UPPER BOUND: " << *pUpperBoundColumn << std::endl);
-            c = int(pUpperBoundColumn - cdfColumn);
-        }
+        pUpperBoundColumn >= cdfColumn + startPixel + x ? c = startPixel + x - 1 : c = int(pUpperBoundColumn - cdfColumn);
 
         // find actual pixel column
         int actualPixelColumn = columnIndices[c];
@@ -1232,11 +1200,11 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
     float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
     float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
 
-    if (ABS(pointHypotenuse) < virtualApertureTrueRadius){
-        return true;
-    } else {
+    if (!ABS(pointHypotenuse) < virtualApertureTrueRadius){
         return false;
     }
+
+    return true;
 }
 
 
@@ -1509,7 +1477,6 @@ node_parameters {
 node_initialize {
      cameraData *camera = new cameraData();
      AiCameraInitialize(node, (void*)camera);
- 
      DRAW_ONLY(AiMsgInfo("[ZOIC] ---- IMAGE DRAWING ENABLED @ COMPILE TIME ----");)
 }
  
@@ -1724,12 +1691,8 @@ camera_create_ray {
             // DOF CALCULATIONS
             if (params[p_useDof].BOOL == true) {
 
-                AtPoint2 lens = {0.0f, 0.0f};
-                if(!params[p_useImage].BOOL){
-                    concentricDiskSample(input->lensx, input->lensy, &lens);
-                } else {
-                    camera->image.bokehSample(input->lensx, input->lensy, &lens.x, &lens.y);
-                }
+                AtPoint2 lens = {0.0, 0.0};
+                !params[p_useImage].BOOL ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens.x, &lens.y);
 
                 lens *= camera->apertureRadius;
                 output->origin = {lens.x, lens.y, 0.0};
@@ -1741,14 +1704,9 @@ camera_create_ray {
 
                 if (params[p_opticalVignettingDistance].FLT > 0.0f){
                     while(!empericalOpticalVignetting(output->origin, output->dir, camera->apertureRadius, params[p_opticalVignettingRadius].FLT, params[p_opticalVignettingDistance].FLT) && tries <= maxtries){
-                        
-                        if (!params[p_useImage].BOOL){
-                            concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
-                        } else {
-                            camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens.x, &lens.y);
-                        }
-
+                        !params[p_useImage].BOOL ? concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens) : camera->image.bokehSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens.x, &lens.y);
                         lens *= camera->apertureRadius;
+
                         output->dir = AiV3Normalize(p - originOriginal);
                         output->origin = {lens.x, lens.y, 0.0};
                         float intersection = ABS(params[p_focalDistance].FLT / output->dir.z);
@@ -1805,11 +1763,7 @@ camera_create_ray {
 
             // sample disk with proper sample distribution
             AtPoint2 lens = {0.0, 0.0};
-            if(!params[p_useImage].BOOL){
-                concentricDiskSample(input->lensx, input->lensy, &lens);
-            } else {
-                camera->image.bokehSample(input->lensx, input->lensy, &lens.x, &lens.y);
-            }
+            !params[p_useImage].BOOL ? concentricDiskSample(input->lensx, input->lensy, &lens) : camera->image.bokehSample(input->lensx, input->lensy, &lens.x, &lens.y);
             
             if (!params[p_kolbSamplingLUT].BOOL){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
                 output->origin = kolb_origin_original;
@@ -1817,11 +1771,7 @@ camera_create_ray {
                 DRAW_ONLY(output->dir.x = 0.0;)
                 while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
                     output->origin = kolb_origin_original;
-                    if(!params[p_useImage].BOOL){
-                        concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
-                    } else {
-                        camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens.x, &lens.y);
-                    }
+                    !params[p_useImage].BOOL ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens.x, &lens.y);
                     output->dir = {(lens.x * ld.lenses[0].aperture) - output->origin.x, (lens.y * ld.lenses[0].aperture) - output->origin.y, - ld.lenses[0].thickness};
                     ++tries;
                 }
@@ -1871,15 +1821,8 @@ camera_create_ray {
 
                 
                 while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
-                    // reset origin and update direction with new lens coords
                     output->origin = kolb_origin_original;
-
-                    if(!params[p_useImage].BOOL){
-                        concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens);
-                    } else {
-                        camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens.x, &lens.y);
-                    }
-
+                    !params[p_useImage].BOOL ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens.x, &lens.y);
                     lens *= maxScale;
                     lens += translation;
                     output->dir = {lens.x - output->origin.x, lens.y - output->origin.y, - ld.lenses[0].thickness};
