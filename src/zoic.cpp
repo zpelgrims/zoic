@@ -9,8 +9,6 @@
 // Calculate proper ray derivatives for optimal texture i/o
 // Add support for C4D (IDs need to be generated)
 // Test Houdini support
-// Make visualisation for all parameters for website
- 
 
 #include <ai.h>
 #include <iostream>
@@ -23,7 +21,6 @@
 #include <map>
 #include <iterator>
 #include <algorithm>
-
 
 #ifdef _MACBOOK
 #  define MACBOOK_ONLY(block) block
@@ -48,49 +45,6 @@
 #else
 #  define DRAW_ONLY(block)
 #endif
-
-
-#ifdef NO_OIIO
-// AiTextureLoad function introduced in arnold 4.2.9.0 was modified in 4.2.10.0
-// Figure out the right one to call at compile time
-#  if AI_VERSION_ARCH_NUM > 4
-#   define AITEXTURELOAD_PROTO2
-#  else
-#    if AI_VERSION_ARCH_NUM == 4
-#      if AI_VERSION_MAJOR_NUM > 2
-#        define AITEXTURELOAD_PROTO2
-#      else
-#        if AI_VERSION_MAJOR_NUM == 2
-#          if AI_VERSION_MINOR_NUM >= 10
-#            define AITEXTURELOAD_PROTO2
-#          endif
-#          if AI_VERSION_MINOR_NUM == 9
-#            define AITEXTURELOAD_PROTO1
-#          endif
-#        endif
-#      endif
-#    endif
-#  endif
-#  ifdef AITEXTURELOAD_PROTO2
-inline bool LoadTexture(const AtString path, void *pixelData){
-    return AiTextureLoad(path, true, 0, pixelData);
-}
-#  else
-#    ifdef AITEXTURELOAD_PROTO1
-inline bool LoadTexture(const AtString path, void *pixelData){
-    return AiTextureLoad(path, true,  pixelData);
-}
-#    else
-inline bool LoadTexture(const AtString path, void *pixelData){
-    AiMsgError("Current arnold version doesn't have texture loading API");
-    return false;
-}
-#    endif
-#  endif
-#else
-#  include <OpenImageIO/imageio.h>
-#endif
-
  
 // global vars for lens drawing, remove these at some point
 std::ofstream myfile;
@@ -98,8 +52,7 @@ std::ofstream testAperturesFile;
 bool draw = false;
 int counter = 0;
 
- 
-// Arnold methods
+
 AI_CAMERA_NODE_EXPORT_METHODS(zoicMethods)
 
 
@@ -134,6 +87,11 @@ static const char* LensModelNames[] =
     "RAYTRACED",
     NULL
 };
+
+
+inline bool LoadTexture(const AtString path, void *pixelData){
+    return AiTextureLoad(path, true, 0, pixelData);
+}
 
 
 struct arrayCompare{
@@ -201,7 +159,6 @@ public:
         invalidate();
         AtInt64 nbytes = 0;
         
-#ifdef NO_OIIO
         AiMsgInfo("[ZOIC] Reading image using Arnold API: %s", bokeh_kernel_filename);
         AtString path(bokeh_kernel_filename);
 
@@ -220,34 +177,6 @@ public:
             invalidate();
             return false;
         }
-
-#else
-
-        AiMsgInfo("[ZOIC] Reading image using OpenImageIO: %s", bokeh_kernel_filename);
-
-        //Search for an ImageIO plugin that is capable of reading the file ("foo.jpg"), first by
-        //trying to deduce the correct plugin from the file extension, but if that fails, by opening
-        //every ImageIO plugin it can find until one will open the file without error. When it finds
-        //the right plugin, it creates a subclass instance of ImageInput that reads the right kind of
-        //file format, and tries to fully open the file.
-        OpenImageIO::ImageInput *in = OpenImageIO::ImageInput::open (bokeh_kernel_filename);
-        if (!in){return false;}
-
-        const OpenImageIO::ImageSpec &spec = in->spec();
-        
-        x = spec.width;
-        y = spec.height;
-        nchannels = spec.nchannels;
-
-        nbytes = x * y * nchannels * sizeof(float);
-        AiAddMemUsage(nbytes, "zoic");
-        pixelData = (float*) AiMalloc(nbytes);
-
-        in->read_image(OpenImageIO::TypeDesc::FLOAT, pixelData);
-        in->close();
-        delete in;
-
-#endif
 
         AiMsgInfo("[ZOIC] Bokeh Image Width: %d", x);
         AiMsgInfo("[ZOIC] Bokeh Image Height: %d", y);
@@ -303,9 +232,7 @@ public:
         // for every pixel, stuff going wrong here
         for (int i=0, j=0; i < npixels; ++i, j+=nchannels){
             // store pixel value in array
-            // calculate luminance [Y = 0.3 R + 0.59 G + 0.11 B]
             pixelValues[i] = pixelData[j] * 0.3f + pixelData[j+o1] * 0.59f + pixelData[j+o2] * 0.11f;
-            
             totalValue += pixelValues[i];
             
             DEBUG_ONLY(std::cout << "Pixel Luminance: " << i << " -> " << pixelValues[i] << std::endl);
@@ -379,7 +306,6 @@ public:
 
         std::sort(rowIndices, rowIndices + y, arrayCompare(summedRowValues));
 
-
         DEBUG_ONLY({
             // print values
             for(int i = 0; i < y; ++i){
@@ -388,7 +314,6 @@ public:
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
         })
-
 
         // For every row, add the sum of all previous row (cumulative distribution function)
         nbytes = y * sizeof(float);
@@ -511,7 +436,6 @@ public:
             std::cout << "RECALCULATED PIXEL ROW: " << recalulatedPixelRow << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
             std::cout << "----------------------------------------------" << std::endl;
-            // print random number between 0 and 1
             std::cout << "RANDOM NUMBER COLUMN: " << randomNumberColumn << std::endl;
         })
 
@@ -1459,9 +1383,9 @@ node_parameters {
     AiParameterFLT("focalDistance", 50.0);
     AiParameterBOOL("useImage", true);
     AiParameterStr("bokehPath", "");
-    AiParameterENUM("lensModel", THINLENS, LensModelNames);
+    AiParameterENUM("lensModel", RAYTRACED, LensModelNames);
     AiParameterStr("lensDataPath", "");
-    AiParameterBOOL("kolbSamplingLUT", true);
+    AiParameterBOOL("kolbSamplingLUT", false);
     AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 0.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
@@ -1487,9 +1411,9 @@ node_update {
         WORK_ONLY(myfile.open("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/draw.zoic", std::ofstream::out | std::ofstream::trunc);)
     })
 
-    camera->image.invalidate();
     // make probability functions of the bokeh image
     if (params[p_useImage].BOOL == true){
+        camera->image.invalidate();
         if (!camera->image.read(params[p_bokehPath].STR)){
             AiMsgError("[ZOIC] Couldn't open bokeh image!");
             AiRenderAbort();
@@ -1763,7 +1687,9 @@ camera_create_ray {
             if (!params[p_kolbSamplingLUT].BOOL){ // NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
                 output->origin = kolb_origin_original;
                 output->dir = {(lens.x * ld.lenses[0].aperture) - output->origin.x, (lens.y * ld.lenses[0].aperture) - output->origin.y, -ld.lenses[0].thickness};
+
                 DRAW_ONLY(output->dir.x = 0.0;)
+
                 while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
                     output->origin = kolb_origin_original;
                     !params[p_useImage].BOOL ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens.x, &lens.y);
@@ -1831,7 +1757,6 @@ camera_create_ray {
             } else {
                 ++ld.succesRays;
             }
-
 
             // looks cleaner in 2d when rays are aligned on axis
             DRAW_ONLY(output->dir.x = 0.0;)
