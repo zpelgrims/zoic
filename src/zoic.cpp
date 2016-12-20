@@ -1138,6 +1138,7 @@ void writeToFile(Lensdata *ld){
 }
 
 
+// creates a secondary, virtual aperture resembling the exit pupil on a real lens
 bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertureRadius, float opticalVignettingRadius, float opticalVignettingDistance){
     // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
     AtPoint opticalVignetPoint;
@@ -1205,6 +1206,7 @@ bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_d
 }
 
 
+// test ground truth aperture shape, only executed if drawing constant is enabled
 void testAperturesTruth(Lensdata *ld){
     WORK_ONLY(testAperturesFile.open ("C:/ilionData/Users/zeno.pelgrims/Documents/zoic_compile/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);)
     MACBOOK_ONLY(testAperturesFile.open ("/Volumes/ZENO_2016/projects/zoic/src/testApertures.zoic", std::ofstream::out | std::ofstream::trunc);)
@@ -1243,6 +1245,8 @@ void testAperturesTruth(Lensdata *ld){
 }
 
 
+// test lut, only executed if drawing constant is enabled
+// see camera_create_ray for code documentation on this
 void testAperturesLUT(Lensdata *ld){
     AtVector origin, direction;
 
@@ -1257,7 +1261,6 @@ void testAperturesLUT(Lensdata *ld){
             testAperturesFile << "SS: ";
 
             for (int k = 0; k < apertureSamples; k++){
-
                 origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
                 origin.z = ld->originShift;
@@ -1275,24 +1278,18 @@ void testAperturesLUT(Lensdata *ld){
                 AtPoint2 lens = {0.0, 0.0};
                 concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
 
-                // go back 1 element in sorted map
                 --low;
                 float value3 = low->first;
                 --low2;
                 float value4 = low2->first;
 
-                // percentage of x inbetween two stored LUT entries
                 float xpercentage = (origin.x - value1) / (value3 - value1);
                 float ypercentage = (origin.y - value2) / (value4 - value2);
 
-                // scale
-                float maxScale = BILERP(xpercentage, ypercentage, 
+                lens *= BILERP(xpercentage, ypercentage, 
                                         ld->apertureMap[value1][value2].getMaxScale(), ld->apertureMap[value3][value4].getMaxScale(),
                                         ld->apertureMap[value1][value4].getMaxScale(), ld->apertureMap[value3][value2].getMaxScale()) * samplingErrorCorrection;
 
-                lens *= {maxScale, maxScale};
-
-                // translation
                 lens += {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2].getCentroid().x, ld->apertureMap[value3][value4].getCentroid().x, 
                                                           ld->apertureMap[value1][value4].getCentroid().x, ld->apertureMap[value3][value2].getCentroid().x),
                          BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2].getCentroid().y, ld->apertureMap[value3][value4].getCentroid().y,
