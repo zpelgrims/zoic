@@ -1,8 +1,8 @@
+### READ THE DOCUMENTATION [HERE](http://zenopelgrims.com/zoic/) 
+<br>
 <div align="center">
   <img src="http://zenopelgrims.com/wp-content/uploads/2016/01/raytraced_50mm_1.4f.png"><br><br>
 </div>
-
-### [READ THE DOCUMENTATION HERE](http://zenopelgrims.com/zoic/) 
 
 Extended Arnold camera shader with options for:
 	
@@ -10,6 +10,7 @@ Extended Arnold camera shader with options for:
 	Emperical Optical Vignetting
 	Image based bokeh shapes
 
+<br>
 ZOIC 2.0 provides two different lens models, a new raytraced model which reads in lens description files often found in optics literature and lens patents, and the classical thin-lens approximation with options for emperical optical vignetting. Both models serve their own purposes, although in general the new raytraced model should be preferred at all times where photorealism is required. The thin lens approximation will always be slightly faster.
 
 This realistic lens model reads in lens descriptions found in lens patents and books on optics. This data is used to trace the camera rays through that virtual lens. The model is based on a paper by Kolb et al [1995] and comes with some advantages over the thin-lens model, which by the way, is quite often a criminal approximation to how real lenses work:
@@ -29,6 +30,7 @@ Essentially, this should bring you one step closer to creating pretty, believabl
 </div>
 
 An example of how the rays are traced through the lens elements.
+<br>
 
 
 ## INSTALLATION
