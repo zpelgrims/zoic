@@ -2,15 +2,13 @@
   <img src="http://zenopelgrims.com/wp-content/uploads/2016/01/raytraced_50mm_1.4f.png"><br><br>
 </div>
 
-# ZOIC
-
 Extended Arnold camera shader with options for:
 	
 	Raytraced lens model
 	Emperical Optical Vignetting
 	Image based bokeh shapes
 
-ZOIC 2.0 provides two different lens models, a new raytraced model which reads in lens description files often found in optics literature and lens patents, and the classical thin-lens approximation with options for optical vignetting. These are two completely different ways of calculating the camera rays and therefore have separate documentation. Both models serve their own purposes, although in general the new raytraced model should be preferred at all times where photorealism is required.
+ZOIC 2.0 provides two different lens models, a new raytraced model which reads in lens description files often found in optics literature and lens patents, and the classical thin-lens approximation with options for emperical optical vignetting. Both models serve their own purposes, although in general the new raytraced model should be preferred at all times where photorealism is required. The thin lens approximation will always be slightly faster.
 
 This realistic lens model reads in lens descriptions found in lens patents and books on optics. This data is used to trace the camera rays through that virtual lens. The model is based on a paper by Kolb et al [1995] and comes with some advantages over the thin-lens model, which by the way, is quite often a criminal approximation to how real lenses work:
 
@@ -24,7 +22,14 @@ This realistic lens model reads in lens descriptions found in lens patents and b
 Essentially, this should bring you one step closer to creating pretty, believable photographic images.
 
 
-## Install
+<div align="center">
+  <img src="http://zenopelgrims.com/wp-content/uploads/2016/01/lensDrawing_focalLength_100-1.png"><br><br>
+</div>
+
+An example of how the rays are traced through the lens elements.
+
+
+## INSTALLATION
 
 Set the following environment variables, replacing "$PATH_TO_ZOIC" with the actual path on your machine. 
 
@@ -52,8 +57,8 @@ It’s also possible to copy the files into your MtoA install, but I personally 
 
 ## Thanks to
 
-Marc-Antoine Desjardins for the help with the image sampling. I owe this guy quite a few beers by now.
-Benedikt Bitterli for the information on optical vignetting.
-Tom Minor for the major help with C++ (it was needed!)
-Brian Scherbinski for the windows compile.
-Gaetan Guidet for the C++ cleanup and improvements.
+	Marc-Antoine Desjardins for the help with the image sampling. I owe this guy quite a few beers by now.
+	Benedikt Bitterli for the information on optical vignetting.
+	Tom Minor for the major help with C++ (it was needed!)
+	Brian Scherbinski for the windows compile.
+	Gaetan Guidet for the C++ cleanup and improvements.
