@@ -2,6 +2,8 @@
   <img src="http://zenopelgrims.com/wp-content/uploads/2016/01/raytraced_50mm_1.4f.png"><br><br>
 </div>
 
+### [READ THE DOCUMENTATION HERE](http://zenopelgrims.com/zoic/) 
+
 Extended Arnold camera shader with options for:
 	
 	Raytraced lens model
@@ -21,9 +23,9 @@ This realistic lens model reads in lens descriptions found in lens patents and b
 
 Essentially, this should bring you one step closer to creating pretty, believable photographic images.
 
-
+<br>
 <div align="center">
-  <img src="http://zenopelgrims.com/wp-content/uploads/2016/01/lensDrawing_focalLength_100-1.png"><br><br>
+  <img src="http://zenopelgrims.com/wp-content/uploads/2016/01/lensDrawing_focalLength_100-1.png"><br>
 </div>
 
 An example of how the rays are traced through the lens elements.
@@ -55,10 +57,10 @@ It’s also possible to copy the files into your MtoA install, but I personally 
 - Files in the 'maya/ae' folder go to [$MTOA_LOCATION]/scripts/mtoa/ui/ae 
 
 
-## Thanks to
+## SPECIAL THANKS
 
-	Marc-Antoine Desjardins for the help with the image sampling. I owe this guy quite a few beers by now.
-	Benedikt Bitterli for the information on optical vignetting.
-	Tom Minor for the major help with C++ (it was needed!)
-	Brian Scherbinski for the windows compile.
-	Gaetan Guidet for the C++ cleanup and improvements.
+	Marc-Antoine Desjardins for the help on the image sampling
+	Benedikt Bitterli for the information on emperical optical vignetting
+	Tom Minor for getting me started with C++
+	Brian Scherbinski for the initial Windows compile
+	Gaetan Guidet for the C++ cleanup and improvements
