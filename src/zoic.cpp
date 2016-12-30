@@ -11,6 +11,7 @@
 // Calculate proper ray derivatives for optimal texture i/o
 // Add support for C4D (IDs need to be generated)
 // Test Houdini support
+// LUT function should make use of radial symmetry
 
 #include <ai.h>
 #include <iostream>
@@ -514,7 +515,12 @@ public:
         AtPoint2 centroid = getCentroid();
         float scaleX = AiV2Dist(centroid, {max.x, centroid.y});
         float scaleY = AiV2Dist(centroid, {centroid.x, max.y});
-        if (scaleX >= scaleY){return scaleX;} else {return scaleY;}
+
+        if (scaleX >= scaleY){
+            return scaleX;
+        } else {
+            return scaleY;
+        }
     }
 };
 
@@ -538,8 +544,9 @@ struct Lensdata{
     float focalLengthRatio;
     float filmDiagonal;
     float originShift;
-    float focalDistance; 
+    float focalDistance;
     std::map<float, std::map<float, boundingBox2d>> apertureMap;
+    std::map<float, boundingBox2d> apertureMap_02;
 } ld;
 
 
@@ -1151,7 +1158,8 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
 
 
 inline void printProgressBar(float progress, int barWidth){
-    std::cout << "\x1b[1;32m[";
+    //std::cout << "\x1b[1;32m[";
+    std::cout << "working" << std::endl;
     int pos = barWidth * progress;
 
     for (int i = 0; i < barWidth; ++i) {
@@ -1214,7 +1222,7 @@ void testAperturesTruth(Lensdata *ld){
     AtVector origin, direction;
 
     int filmSamples = 3;
-    int apertureSamples = 150000;
+    int apertureSamples = 20000;
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
@@ -1245,55 +1253,135 @@ void testAperturesTruth(Lensdata *ld){
 }
 
 
+void exitPupilLUT(Lensdata *ld, int filmSamplesX, int boundsSamples){
+
+    float filmWidth = 6.0;
+    float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
+
+    AiMsgInfo( "%-40s %12d", "[ZOIC] Calculating LUT of size", filmSamplesX);
+
+    for(int i = 0; i < filmSamplesX; i++){
+        AtVector sampleOrigin = {static_cast<float>(filmSpacingX * static_cast<float>(i)), 0.0, ld->originShift};
+
+        // calculate bounds of aperture, to eventually find centroid and max scale
+        boundingBox2d apertureBounds;
+        apertureBounds.min = {0.0, 0.0};
+        apertureBounds.max = {0.0, 0.0};
+
+        AtVector boundsDirection;
+        float lensU = 0.0, lensV = 0.0;
+
+        for(int b = 0; b < boundsSamples; b++){
+            // random number in domain [-1, 1]
+            lensU = ((xor128() / 4294967296.0f) * 2.0f) - 1.0f;
+            lensV = ((xor128() / 4294967296.0f) * 2.0f) - 1.0f;
+
+            // maybe sample it uniformly instead of randomly? Would probably be more predicatable that way
+
+            // calculate direction vectors over whole first lens element
+            boundsDirection.x = (lensU * ld->lenses[0].aperture) - sampleOrigin.x;
+            boundsDirection.y = (lensV * ld->lenses[0].aperture) - sampleOrigin.y;
+            boundsDirection.z = - ld->lenses[0].thickness;
+
+            if(traceThroughLensElementsForApertureSize(sampleOrigin, boundsDirection, ld)){
+                // not sure if I need this check..
+                if((apertureBounds.min.x + apertureBounds.min.y) == 0.0){
+                    apertureBounds.min = {lensU * ld->lenses[0].aperture, lensV * ld->lenses[0].aperture};
+                    apertureBounds.max = {lensU * ld->lenses[0].aperture, lensV * ld->lenses[0].aperture};
+                }
+
+                // if any of the bounds exceed previous bounds, replace to grow bbox
+                if((lensU * ld->lenses[0].aperture) > apertureBounds.max.x){
+                    apertureBounds.max.x = lensU * ld->lenses[0].aperture;
+                }
+
+                if((lensV * ld->lenses[0].aperture) > apertureBounds.max.y){
+                    apertureBounds.max.y = lensV * ld->lenses[0].aperture;
+                }
+
+                if((lensU * ld->lenses[0].aperture) < apertureBounds.min.x){
+                    apertureBounds.min.x = lensU * ld->lenses[0].aperture;
+                }
+
+                if((lensV * ld->lenses[0].aperture) < apertureBounds.min.y){
+                    apertureBounds.min.y = lensV * ld->lenses[0].aperture;
+                }
+            }
+        }
+        
+        // store bounds of this particular point on aperture in a map for easy lookup
+        ld->apertureMap_02.insert({sampleOrigin.x, apertureBounds});
+    }
+}
+
+
+
 // test lut, only executed if drawing constant is enabled
 // see camera_create_ray for code documentation on this
 void testAperturesLUT(Lensdata *ld){
+
     AtVector origin, direction;
-
     int filmSamples = 3;
-    int apertureSamples = 15000;
-
-    float samplingErrorCorrection = 1.15;
+    int apertureSamples = 2000;
+    float samplingErrorCorrection = 1.1;
+    AtPoint2 lens = {0.0, 0.0};
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
+
+            origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+            origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
+            origin.z = ld->originShift;
             
             testAperturesFile << "SS: ";
 
             for (int k = 0; k < apertureSamples; k++){
-                origin.x = (static_cast<float>(i) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
-                origin.y = (static_cast<float>(j) / static_cast<float>(filmSamples)) * (3.6 * 0.5);
-                origin.z = ld->originShift;
 
-                // lowest bound x value
-                std::map<float, std::map<float, boundingBox2d>>::iterator low;
-                low = ld->apertureMap.lower_bound(origin.x);
-                float value1 = low->first;
-
-                // lowest bound y value
-                std::map<float, boundingBox2d>::iterator low2;
-                low2 = low->second.lower_bound(origin.y);
-                float value2 = low2->first;
-
-                AtPoint2 lens = {0.0, 0.0};
                 concentricDiskSample(xor128() / 4294967296.0f, xor128() / 4294967296.0f, &lens);
+                
+                // lowest bound x value
+                float distanceFromOrigin = ABS(std::sqrt(origin.x * origin.x + origin.y * origin.y));
 
-                --low;
-                float value3 = low->first;
-                --low2;
-                float value4 = low2->first;
+                std::map<float, boundingBox2d>::iterator low;
+                low = ld->apertureMap_02.lower_bound(distanceFromOrigin);
+                float lowerBound = low->first;
 
-                float xpercentage = (origin.x - value1) / (value3 - value1);
-                float ypercentage = (origin.y - value2) / (value4 - value2);
+                // find angle between point and x axis (atan2)
+                float theta = atan2(origin.y, origin.x);
 
-                lens *= BILERP(xpercentage, ypercentage, 
-                                        ld->apertureMap[value1][value2].getMaxScale(), ld->apertureMap[value3][value4].getMaxScale(),
-                                        ld->apertureMap[value1][value4].getMaxScale(), ld->apertureMap[value3][value2].getMaxScale()) * samplingErrorCorrection;
+                // precalc sin, cos
+                float sin = std::sin(theta);
+                float cos = std::cos(theta);
 
-                lens += {BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2].getCentroid().x, ld->apertureMap[value3][value4].getCentroid().x, 
-                                                          ld->apertureMap[value1][value4].getCentroid().x, ld->apertureMap[value3][value2].getCentroid().x),
-                         BILERP(xpercentage, ypercentage, ld->apertureMap[value1][value2].getCentroid().y, ld->apertureMap[value3][value4].getCentroid().y,
-                                                          ld->apertureMap[value1][value4].getCentroid().y, ld->apertureMap[value3][value2].getCentroid().y)};
+                // avoid 0 distance error at origin
+                if (distanceFromOrigin != 0.0){
+                    --low;
+                    float prev = low->first;
+                    float percentage = (distanceFromOrigin - lowerBound) / (prev - lowerBound);
+
+                    // scale point
+                    lens *= LERP(percentage, ld->apertureMap_02[lowerBound].getMaxScale(), ld->apertureMap_02[prev].getMaxScale()) * samplingErrorCorrection;
+
+                    // translate points
+                    lens.x += LERP(percentage, ld->apertureMap_02[lowerBound].getCentroid().x, ld->apertureMap_02[prev].getCentroid().x);
+
+                    // rotate point
+                    float lensx_new = lens.x * cos - lens.y * sin;
+                    float lensy_new = lens.x * sin + lens.y * cos;
+                    lens = {lensx_new, lensy_new};
+
+                } else {
+                    // scale point
+                    lens *= ld->apertureMap_02[lowerBound].getMaxScale() * samplingErrorCorrection;
+
+                    // translate point
+                    lens.x += ld->apertureMap_02[lowerBound].getCentroid().x;
+
+                    // rotate point
+                    float lensx_new = lens.x * cos - lens.y * sin;
+                    float lensy_new = lens.x * sin + lens.y * cos;
+                    lens = {lensx_new, lensy_new};
+                }
 
                 direction = {lens.x - origin.x, lens.y - origin.y, - ld->lenses[0].thickness};
 
@@ -1315,100 +1403,17 @@ void testAperturesLUT(Lensdata *ld){
 }
 
 
-void exitPupilLUT(Lensdata *ld, int filmSamplesX, int filmSamplesY, int boundsSamples){
-    // variables for progress bar feedback
-    float progress = 0.0;
-    int barWidth = 71;
-    int progressPrintCounter = 0;
-    
-    float filmWidth = 6.0;
-    float filmHeight = 6.0;
-
-    float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
-    float filmSpacingY = filmHeight / static_cast<float>(filmSamplesY);
-
-    AiMsgInfo( "%-40s %12d", "[ZOIC] Calculating LUT of size ^ 2", filmSamplesX);
-
-    for(int i = 0; i < filmSamplesX + 1; i++){
-        for(int j = 0; j < filmSamplesY + 1; j++){
-            AtVector sampleOrigin = {static_cast<float>((filmSpacingX * static_cast<float>(i) * 2.0) - filmWidth / 2.0), 
-                                     static_cast<float>((filmSpacingY * static_cast<float>(j) * 2.0) - filmHeight / 2.0), 
-                                     ld->originShift};
-
-
-            // calculate bounds of aperture, to eventually find centroid and max scale
-            boundingBox2d apertureBounds;
-            apertureBounds.min = {0.0, 0.0};
-            apertureBounds.max = {0.0, 0.0};
-
-            AtVector boundsDirection;
-            float lensU = 0.0, lensV = 0.0;
-
-            for(int b = 0; b < boundsSamples; b++){
-                // random number in domain [-1, 1]
-                lensU = ((xor128() / 4294967296.0f) * 2.0f) - 1.0f;
-                lensV = ((xor128() / 4294967296.0f) * 2.0f) - 1.0f;
-
-                // calculate direction vectors over whole first lens element
-                boundsDirection.x = (lensU * ld->lenses[0].aperture) - sampleOrigin.x;
-                boundsDirection.y = (lensV * ld->lenses[0].aperture) - sampleOrigin.y;
-                boundsDirection.z = - ld->lenses[0].thickness;
-
-                if(traceThroughLensElementsForApertureSize(sampleOrigin, boundsDirection, ld)){
-                    // not sure if I need this check..
-                    if((apertureBounds.min.x + apertureBounds.min.y) == 0.0){
-                        apertureBounds.min = {lensU * ld->lenses[0].aperture, lensV * ld->lenses[0].aperture};
-                        apertureBounds.max = {lensU * ld->lenses[0].aperture, lensV * ld->lenses[0].aperture};
-                    }
-
-                    // if any of the bounds exceed previous bounds, replace to grow bbox
-                    if((lensU * ld->lenses[0].aperture) > apertureBounds.max.x){
-                        apertureBounds.max.x = lensU * ld->lenses[0].aperture;
-                    }
-
-                    if((lensV * ld->lenses[0].aperture) > apertureBounds.max.y){
-                        apertureBounds.max.y = lensV * ld->lenses[0].aperture;
-                    }
-
-                    if((lensU * ld->lenses[0].aperture) < apertureBounds.min.x){
-                        apertureBounds.min.x = lensU * ld->lenses[0].aperture;
-                    }
-
-                    if((lensV * ld->lenses[0].aperture) < apertureBounds.min.y){
-                        apertureBounds.min.y = lensV * ld->lenses[0].aperture;
-                    }
-                }
-            }
-            
-            // store bounds of this particular point on aperture in a map for easy lookup
-            ld->apertureMap[sampleOrigin.x].insert(std::make_pair(sampleOrigin.y, apertureBounds));
-
-            // nevermind this, just for progress bar printing
-            if (progressPrintCounter == (filmSamplesX * filmSamplesY) / 100){
-                printProgressBar(progress, barWidth);
-                progress = static_cast<float>((i * filmSamplesX) + j) / static_cast<float>(filmSamplesX * filmSamplesY);
-                progressPrintCounter = 0; 
-            } else {
-                ++progressPrintCounter;
-            }
-        }
-    }
-
-    std::cout << "\e[0m" << std::endl;
-}
-
-
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
     AiParameterFLT("focalLength", 5.0); // in cm
     AiParameterFLT("fStop", 1.4);
-    AiParameterFLT("focalDistance", 50.0);
-    AiParameterBOOL("useImage", true);
+    AiParameterFLT("focalDistance", 100.0);
+    AiParameterBOOL("useImage", false);
     AiParameterStr("bokehPath", "");
     AiParameterENUM("lensModel", RAYTRACED, LensModelNames);
     AiParameterStr("lensDataPath", "");
-    AiParameterBOOL("kolbSamplingLUT", false);
+    AiParameterBOOL("kolbSamplingLUT", true);
     AiParameterBOOL("useDof", true);
     AiParameterFLT("opticalVignettingDistance", 0.0); // distance of the opticalVignetting virtual aperture
     AiParameterFLT("opticalVignettingRadius", 1.0); // 1.0 - .. range float, to multiply with the actual aperture radius
@@ -1554,11 +1559,11 @@ node_update {
 
                 // precompute aperture lookup table
                 if (params[p_kolbSamplingLUT].BOOL){
-                    exitPupilLUT(&ld, 64, 64, 25000);
+                    exitPupilLUT(&ld, 64, 25000);
 
                     DRAW_ONLY({
-                        //testAperturesTruth(&ld);
-                        //testAperturesLUT(&ld);
+                        testAperturesTruth(&ld);
+                        testAperturesLUT(&ld);
                     }) 
                 }
                      
@@ -1569,13 +1574,12 @@ node_update {
                 })
 
             } else {
-                AiMsgWarning("[ZOIC] Skipping raytraed node update, parameters didn't change.");
+                AiMsgWarning("[ZOIC] Skipping raytraced node update, parameters didn't change.");
             }
         }
 
         break;
     }
- 
 }
  
 
@@ -1619,7 +1623,7 @@ camera_create_ray {
     })
 
     int tries = 0;
-    int maxtries = 15;
+    int maxtries = 10;
 
     switch(params[p_lensModel].INT)
     {
@@ -1731,60 +1735,62 @@ camera_create_ray {
                     DRAW_ONLY(output->dir.x = 0.0;)
                     ++tries;
                 }
-            } 
-
-            else { // USING LOOKUP TABLE
+            } else { // USING LOOKUP TABLE
                 
-                float samplingErrorCorrection = 1.5;
+                float samplingErrorCorrection = 1.1;
+                float distanceFromOrigin = ABS(std::sqrt(output->origin.x * output->origin.x + output->origin.y * output->origin.y));
 
-                // lowest bound x value
-                std::map<float, std::map<float, boundingBox2d>>::iterator low;
-                low = ld.apertureMap.lower_bound(output->origin.x);
-                float value1 = low->first;
+                std::map<float, boundingBox2d>::iterator low;
+                low = ld.apertureMap_02.lower_bound(distanceFromOrigin);
+                float lowerBound = low->first;
 
-                // lowest bound y value
-                std::map<float, boundingBox2d>::iterator low2;
-                low2 = low->second.lower_bound(output->origin.y);
-                float value2 = low2->first;
+                // find angle between point and x axis (atan2)
+                float theta = atan2(output->origin.y, output->origin.x);
 
-                // go back 1 element in sorted map
+                // precalc sin, cos
+                float sin = std::sin(theta);
+                float cos = std::cos(theta);
+
                 --low;
-                float value3 = low->first;
-                --low2;
-                float value4 = low2->first;
+                float prev = low->first;
 
-                // percentage of x inbetween two stored LUT entries
-                float xpercentage = (output->origin.x - value1) / (value3 - value1);
-                float ypercentage = (output->origin.y - value2) / (value4 - value2);
+                float percentage = (distanceFromOrigin - lowerBound) / (prev - lowerBound);
 
-                // scale
-                float maxScale = BILERP(xpercentage, ypercentage, ld.apertureMap[value1][value2].getMaxScale(), ld.apertureMap[value3][value4].getMaxScale(),
-                                        ld.apertureMap[value1][value4].getMaxScale(), ld.apertureMap[value3][value2].getMaxScale()) * samplingErrorCorrection;
+                // scale point
+                float maxScale = LERP(percentage, ld.apertureMap_02[lowerBound].getMaxScale(), ld.apertureMap_02[prev].getMaxScale()) * samplingErrorCorrection;
+
+                // translate points
+                float translation = LERP(percentage, ld.apertureMap_02[lowerBound].getCentroid().x, ld.apertureMap_02[prev].getCentroid().x);
 
                 lens *= maxScale;
+                lens.x += translation;
 
-                // translation
-                AtPoint2 centroid1 = ld.apertureMap[value1][value2].getCentroid();
-                AtPoint2 centroid2 = ld.apertureMap[value1][value4].getCentroid();
-                AtPoint2 centroid3 = ld.apertureMap[value3][value4].getCentroid();
-                AtPoint2 centroid4 = ld.apertureMap[value3][value2].getCentroid();
+                // rotate point
+                float lensx_new = lens.x * cos - lens.y * sin;
+                float lensy_new = lens.x * sin + lens.y * cos;
+                lens = {lensx_new, lensy_new};
 
-                AtPoint2 translation = {BILERP(xpercentage, ypercentage, centroid1.x, centroid3.x, centroid2.x, centroid4.x),
-                                        BILERP(xpercentage, ypercentage, centroid1.y, centroid3.y, centroid2.y, centroid4.y)};
-
-                lens += translation;
                 output->dir = {lens.x - output->origin.x, lens.y - output->origin.y, - ld.lenses[0].thickness};
                 DRAW_ONLY(output->dir.x = 0.0;)
-                
+
                 while(!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
                     output->origin = kolb_origin_original;
+
                     !params[p_useImage].BOOL ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens.x, &lens.y);
+                    
                     lens *= maxScale;
                     lens += translation;
+
+                    // rotate point
+                    float lensx_new = lens.x * cos - lens.y * sin;
+                    float lensy_new = lens.x * sin + lens.y * cos;
+                    lens = {lensx_new, lensy_new};
+
                     output->dir = {lens.x - output->origin.x, lens.y - output->origin.y, - ld.lenses[0].thickness};
                     DRAW_ONLY(output->dir.x = 0.0;)
+
                     ++tries;
-                }
+                }                
             }
 
             // abort loop if really no light gets to this point on the sensor
