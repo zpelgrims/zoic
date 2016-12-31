@@ -8,10 +8,10 @@
 
 // I tried to document this code as much as it made sense to help other people write camera shaders. If anything is unclear, send me an email and I´ll be happy to help.
 
+// TODO
 // Calculate proper ray derivatives for optimal texture i/o
 // Add support for C4D (IDs need to be generated)
 // Test Houdini support
-// LUT function should make use of radial symmetry
 
 #include <ai.h>
 #include <iostream>
@@ -583,7 +583,7 @@ inline void concentricDiskSample(float ox, float oy, AtPoint2 *lens) {
     float a = 2.0 * ox - 1.0;
     float b = 2.0 * oy - 1.0;
 
-    if (SQR(a) > SQR(b)){
+    if ((a * a) > (b * b)){
         r = a;
         phi = (0.78539816339f) * (b / a);
     } else {
@@ -851,8 +851,8 @@ inline bool raySphereIntersection(AtVector *hit_point, AtVector ray_direction, A
     AtVector L = sphere_center - ray_origin;
  
     float tca = AiV3Dot(L, ray_direction);
-    float radius2 = SQR(sphere_radius);
-    float d2 = AiV3Dot(L, L) - SQR(tca);
+    float radius2 = sphere_radius * sphere_radius;
+    float d2 = AiV3Dot(L, L) - (tca * tca);
  
     // if the distance from the ray to the spherecenter is larger than its radius, don't worry about it
     if (tracingRealRays && (d2 > radius2)){return false;}
@@ -885,7 +885,7 @@ inline bool calculateTransmissionVector(AtVector *ray_direction, float ior1, flo
     ior2 == 1.0 ? eta = ior1 : eta = ior1 / ior2;
  
     float c1 = - AiV3Dot(incidentVector, normalVector);
-    float cs2 = SQR(eta) * (1.0 - SQR(c1));
+    float cs2 = (eta * eta) * (1.0 - (c1 * c1));
  
     // total internal reflection, can only occur when ior1 > ior2
     if((tracingRealRays) && (ior1 > ior2) && (cs2 > 1.0)){
@@ -974,10 +974,12 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
             return false;
         }
 
-        float hitPoint2 = SQR(hit_point.x) + SQR(hit_point.y);
+        float hitPoint2 = hit_point.x * hit_point.x + hit_point.y * hit_point.y;
  
         // check if ray hits lens boundary or aperture
-        if ((hitPoint2 > SQR(ld->lenses[i].aperture * 0.5)) || ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
+        if ((hitPoint2 > (ld->lenses[i].aperture * 0.5) * (ld->lenses[i].aperture * 0.5)) 
+            || ((i == ld->apertureElement) 
+            && (hitPoint2 > (ld->userApertureRadius * ld->userApertureRadius)))){
             return false;
         }
         
@@ -1150,29 +1152,12 @@ bool empericalOpticalVignetting(AtPoint origin, AtVector direction, float apertu
     // because the first intersection point of the aperture is already known, I can just linearly scale it by the distance to the second aperture
     AtPoint opticalVignetPoint;
     opticalVignetPoint = (direction * opticalVignettingDistance) - origin;
-    float pointHypotenuse = std::sqrt(SQR(opticalVignetPoint.x) + SQR(opticalVignetPoint.y));
+    float pointHypotenuse = std::sqrt((opticalVignetPoint.x * opticalVignetPoint.x) + (opticalVignetPoint.y * opticalVignetPoint.y));
     float virtualApertureTrueRadius = apertureRadius * opticalVignettingRadius;
 
     return ABS(pointHypotenuse) < virtualApertureTrueRadius;
 }
 
-
-inline void printProgressBar(float progress, int barWidth){
-    //std::cout << "\x1b[1;32m[";
-    std::cout << "working" << std::endl;
-    int pos = barWidth * progress;
-
-    for (int i = 0; i < barWidth; ++i) {
-        if (i < pos){std::cout << "=";}
-        else if (i == pos){std::cout << ">";}
-        else {std::cout << " ";}
-    }
-
-    if (progress > 1.0){progress = 1.0;}
-
-    std::cout << std::fixed << std::setprecision(2) << "] % " << progress * 100.0 << "\r";
-    std::cout.flush();
-}
 
 
 bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_direction, Lensdata *ld){
@@ -1185,11 +1170,12 @@ bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_d
             return false;
         }
 
-        float hitPoint2 = SQR(hit_point.x) + SQR(hit_point.y);
+        float hitPoint2 = (hit_point.x * hit_point.x) + (hit_point.y * hit_point.y);
  
         // check if ray hits lens boundary or aperture
-        if ((hitPoint2 > (ld->lenses[i].aperture * 0.5) * (ld->lenses[i].aperture * 0.5)) ||
-            ((i == ld->apertureElement) && (hitPoint2 > SQR(ld->userApertureRadius)))){
+        if ((hitPoint2 > (ld->lenses[i].aperture * 0.5) * (ld->lenses[i].aperture * 0.5)) 
+            || ((i == ld->apertureElement) 
+            && (hitPoint2 > (ld->userApertureRadius * ld->userApertureRadius)))){
                 return false;
         }
         
@@ -1222,7 +1208,7 @@ void testAperturesTruth(Lensdata *ld){
     AtVector origin, direction;
 
     int filmSamples = 3;
-    int apertureSamples = 20000;
+    int apertureSamples = 10000;
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
         for (int j = -filmSamples; j < filmSamples + 1; j++){
@@ -1255,7 +1241,7 @@ void testAperturesTruth(Lensdata *ld){
 
 void exitPupilLUT(Lensdata *ld, int filmSamplesX, int boundsSamples){
 
-    float filmWidth = 6.0;
+    float filmWidth = 4.0;
     float filmSpacingX = filmWidth / static_cast<float>(filmSamplesX);
 
     AiMsgInfo( "%-40s %12d", "[ZOIC] Calculating LUT of size", filmSamplesX);
@@ -1322,8 +1308,8 @@ void testAperturesLUT(Lensdata *ld){
 
     AtVector origin, direction;
     int filmSamples = 3;
-    int apertureSamples = 2000;
-    float samplingErrorCorrection = 1.1;
+    int apertureSamples = 5000;
+    float samplingErrorCorrection = 1.05;
     AtPoint2 lens = {0.0, 0.0};
 
     for (int i = - filmSamples; i < filmSamples + 1; i++){
@@ -1366,9 +1352,9 @@ void testAperturesLUT(Lensdata *ld){
                     lens.x += LERP(percentage, ld->apertureMap_02[lowerBound].getCentroid().x, ld->apertureMap_02[prev].getCentroid().x);
 
                     // rotate point
-                    float lensx_new = lens.x * cos - lens.y * sin;
-                    float lensy_new = lens.x * sin + lens.y * cos;
-                    lens = {lensx_new, lensy_new};
+                    float lensx_rotated = lens.x * cos - lens.y * sin;
+                    float lensy_rotated = lens.x * sin + lens.y * cos;
+                    lens = {lensx_rotated, lensy_rotated};
 
                 } else {
                     // scale point
@@ -1378,9 +1364,9 @@ void testAperturesLUT(Lensdata *ld){
                     lens.x += ld->apertureMap_02[lowerBound].getCentroid().x;
 
                     // rotate point
-                    float lensx_new = lens.x * cos - lens.y * sin;
-                    float lensy_new = lens.x * sin + lens.y * cos;
-                    lens = {lensx_new, lensy_new};
+                    float lensx_rotated = lens.x * cos - lens.y * sin;
+                    float lensy_rotated = lens.x * sin + lens.y * cos;
+                    lens = {lensx_rotated, lensy_rotated};
                 }
 
                 direction = {lens.x - origin.x, lens.y - origin.y, - ld->lenses[0].thickness};
@@ -1406,7 +1392,7 @@ void testAperturesLUT(Lensdata *ld){
 node_parameters {
     AiParameterFLT("sensorWidth", 3.6); // 35mm film
     AiParameterFLT("sensorHeight", 2.4); // 35 mm film
-    AiParameterFLT("focalLength", 5.0); // in cm
+    AiParameterFLT("focalLength", 6.5); // in cm
     AiParameterFLT("fStop", 1.4);
     AiParameterFLT("focalDistance", 100.0);
     AiParameterBOOL("useImage", false);
@@ -1500,7 +1486,7 @@ node_update {
                 ld.apertureMap.clear();
          
                 // not sure if this is the right way to do it.. probably more to it than this!
-                ld.filmDiagonal = std::sqrt(SQR(params[p_sensorWidth].FLT) + SQR(params[p_sensorHeight].FLT));
+                ld.filmDiagonal = std::sqrt((params[p_sensorWidth].FLT * params[p_sensorWidth].FLT) + (params[p_sensorHeight].FLT * params[p_sensorHeight].FLT));
                 
                 ld.focalDistance = params[p_focalDistance].FLT;
          
@@ -1737,7 +1723,7 @@ camera_create_ray {
                 }
             } else { // USING LOOKUP TABLE
                 
-                float samplingErrorCorrection = 1.1;
+                float samplingErrorCorrection = 1.05;
                 float distanceFromOrigin = ABS(std::sqrt(output->origin.x * output->origin.x + output->origin.y * output->origin.y));
 
                 std::map<float, boundingBox2d>::iterator low;
@@ -1756,19 +1742,16 @@ camera_create_ray {
 
                 float percentage = (distanceFromOrigin - lowerBound) / (prev - lowerBound);
 
-                // scale point
                 float maxScale = LERP(percentage, ld.apertureMap_02[lowerBound].getMaxScale(), ld.apertureMap_02[prev].getMaxScale()) * samplingErrorCorrection;
-
-                // translate points
                 float translation = LERP(percentage, ld.apertureMap_02[lowerBound].getCentroid().x, ld.apertureMap_02[prev].getCentroid().x);
 
                 lens *= maxScale;
                 lens.x += translation;
 
                 // rotate point
-                float lensx_new = lens.x * cos - lens.y * sin;
-                float lensy_new = lens.x * sin + lens.y * cos;
-                lens = {lensx_new, lensy_new};
+                float lensx_rotated = lens.x * cos - lens.y * sin;
+                float lensy_rotated = lens.x * sin + lens.y * cos;
+                lens = {lensx_rotated, lensy_rotated};
 
                 output->dir = {lens.x - output->origin.x, lens.y - output->origin.y, - ld.lenses[0].thickness};
                 DRAW_ONLY(output->dir.x = 0.0;)
@@ -1782,9 +1765,9 @@ camera_create_ray {
                     lens += translation;
 
                     // rotate point
-                    float lensx_new = lens.x * cos - lens.y * sin;
-                    float lensy_new = lens.x * sin + lens.y * cos;
-                    lens = {lensx_new, lensy_new};
+                    lensx_rotated = lens.x * cos - lens.y * sin;
+                    lensy_rotated = lens.x * sin + lens.y * cos;
+                    lens = {lensx_rotated, lensy_rotated};
 
                     output->dir = {lens.x - output->origin.x, lens.y - output->origin.y, - ld.lenses[0].thickness};
                     DRAW_ONLY(output->dir.x = 0.0;)
@@ -1813,7 +1796,7 @@ camera_create_ray {
 
  
     // control to go light stops up and down
-    float e2 = SQR(params[p_exposureControl].FLT);
+    float e2 = (params[p_exposureControl].FLT * params[p_exposureControl].FLT);
     if (params[p_exposureControl].FLT > 0.0f){
         output->weight *= 1.0f + e2;
     } else if (params[p_exposureControl].FLT < 0.0f){
