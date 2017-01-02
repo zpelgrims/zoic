@@ -6,14 +6,13 @@
 
 // (C) Zeno Pelgrims, www.zenopelgrims.com/zoic
 
-// I tried to document this code as much as it made sense to help other people write camera shaders. If anything is unclear, send me an email and I´ll be happy to help.
+// I tried to document this code as much as it made sense to help other people write camera shaders.
+// If anything is unclear, send me an email and I´ll be happy to help.
 
 // TODO
 // Calculate proper ray derivatives for optimal texture i/o
 // Add support for C4D (IDs need to be generated)
 // Test Houdini support
-
-// cant have segfault when no file is supplied
 
 #include <ai.h>
 #include <iostream>
@@ -550,8 +549,7 @@ struct Lensdata{
     float filmDiagonal;
     float originShift;
     float focalDistance;
-    std::map<float, std::map<float, boundingBox2d>> apertureMap;
-    std::map<float, boundingBox2d> apertureMap_02;
+    std::map<float, boundingBox2d> apertureMap;
 } ld;
 
 
@@ -571,7 +569,7 @@ struct LensdataCheckUpdate{
  
 
 // xorshift fast random number generator
-uint32_t xor128(void) {
+uint32_t xor128(void){
     static uint32_t x = 123456789, y = 362436069, z = 521288629, w = 88675123;
     uint32_t t = x ^ (x << 11);
     x = y; y = z; z = w;
@@ -579,12 +577,12 @@ uint32_t xor128(void) {
 }
 
 
-inline float linearInterpolate(float perc, float a, float b)
-{
+inline float linearInterpolate(float perc, float a, float b){
     return a + perc * (b - a);
 }
 
 
+// sin approximation, not completely accurate but faster than std::sin
 inline float fastSin(float x){
     x = fmod(x + AI_PI, AI_PI * 2) - AI_PI; // restrict x so that -AI_PI < x < AI_PI
     const float B = 4.0f/AI_PI;
@@ -595,10 +593,10 @@ inline float fastSin(float x){
 }
 
 
-
 inline float fastCos(float x){
+    // conversion from sin to cos
     x += AI_PI * 0.5;
-    
+
     x = fmod(x + AI_PI, AI_PI * 2) - AI_PI; // restrict x so that -AI_PI < x < AI_PI
     const float B = 4.0f/AI_PI;
     const float C = -4.0f/(AI_PI*AI_PI);
@@ -959,8 +957,7 @@ AtVector linePlaneIntersection(AtVector rayOrigin, AtVector rayDirection) {
  
 
 // calculate distance at which the lens forms fully focused images
-// done by tracing a ray from the focus point backwards through the lens elements and finding
-// the intersection point with y = 0
+// done by tracing a ray from the focus point backwards through the lens elements and finding the intersection point with y = 0
 float calculateImageDistance(float objectDistance, Lensdata *ld){
     AtVector ray_origin = {0.0f, 0.0f, objectDistance};
     AtVector ray_direction = {0.0f, (ld->lenses[ld->lensCount - 1].aperture / 2.0f) * 0.05f, - objectDistance};
@@ -1000,7 +997,7 @@ float calculateImageDistance(float objectDistance, Lensdata *ld){
 }
  
 
-// main tracing function which will be called millions of times
+// main tracing function which will be called many, many times
 inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_direction, Lensdata *ld, bool draw){
     AtVector hit_point, hit_point_normal, sphere_center;
  
@@ -1015,8 +1012,7 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
  
         // check if ray hits lens boundary or aperture
         if ((hitPoint2 > (ld->lenses[i].aperture * 0.5) * (ld->lenses[i].aperture * 0.5)) 
-            || ((i == ld->apertureElement) 
-            && (hitPoint2 > (ld->userApertureRadius * ld->userApertureRadius)))){
+            || ((i == ld->apertureElement) && (hitPoint2 > (ld->userApertureRadius * ld->userApertureRadius)))){
             return false;
         }
         
@@ -1211,8 +1207,7 @@ bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_d
  
         // check if ray hits lens boundary or aperture
         if ((hitPoint2 > (ld->lenses[i].aperture * 0.5) * (ld->lenses[i].aperture * 0.5)) 
-            || ((i == ld->apertureElement) 
-            && (hitPoint2 > (ld->userApertureRadius * ld->userApertureRadius)))){
+            || ((i == ld->apertureElement) && (hitPoint2 > (ld->userApertureRadius * ld->userApertureRadius)))){
                 return false;
         }
         
@@ -1333,7 +1328,7 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int boundsSamples){
         }
         
         // store bounds of this particular point on aperture in a map for easy lookup
-        ld->apertureMap_02.insert({sampleOrigin.x, apertureBounds});
+        ld->apertureMap.insert({sampleOrigin.x, apertureBounds});
     }
 }
 
@@ -1366,7 +1361,7 @@ void testAperturesLUT(Lensdata *ld){
                 float distanceFromOrigin = std::abs(std::sqrt(origin.x * origin.x + origin.y * origin.y));
 
                 std::map<float, boundingBox2d>::iterator low;
-                low = ld->apertureMap_02.lower_bound(distanceFromOrigin);
+                low = ld->apertureMap.lower_bound(distanceFromOrigin);
                 float lowerBound = low->first;
 
                 // find angle between point and x axis (atan2)
@@ -1383,10 +1378,10 @@ void testAperturesLUT(Lensdata *ld){
                     float percentage = (distanceFromOrigin - lowerBound) / (prev - lowerBound);
 
                     // scale point
-                    lens *= linearInterpolate(percentage, ld->apertureMap_02[lowerBound].getMaxScale(), ld->apertureMap_02[prev].getMaxScale()) * samplingErrorCorrection;
+                    lens *= linearInterpolate(percentage, ld->apertureMap[lowerBound].getMaxScale(), ld->apertureMap[prev].getMaxScale()) * samplingErrorCorrection;
 
                     // translate points
-                    lens.x += linearInterpolate(percentage, ld->apertureMap_02[lowerBound].getCentroid().x, ld->apertureMap_02[prev].getCentroid().x);
+                    lens.x += linearInterpolate(percentage, ld->apertureMap[lowerBound].getCentroid().x, ld->apertureMap[prev].getCentroid().x);
 
                     // rotate point
                     float lensx_rotated = lens.x * cos - lens.y * sin;
@@ -1395,10 +1390,10 @@ void testAperturesLUT(Lensdata *ld){
 
                 } else {
                     // scale point
-                    lens *= ld->apertureMap_02[lowerBound].getMaxScale() * samplingErrorCorrection;
+                    lens *= ld->apertureMap[lowerBound].getMaxScale() * samplingErrorCorrection;
 
                     // translate point
-                    lens.x += ld->apertureMap_02[lowerBound].getCentroid().x;
+                    lens.x += ld->apertureMap[lowerBound].getCentroid().x;
 
                     // rotate point
                     float lensx_rotated = lens.x * cos - lens.y * sin;
@@ -1649,7 +1644,7 @@ camera_create_ray {
     })
 
     int tries = 0;
-    int maxtries = 10;
+    const int maxtries = 20;
 
     switch(params[p_lensModel].INT)
     {
@@ -1761,13 +1756,13 @@ camera_create_ray {
                     DRAW_ONLY(output->dir.x = 0.0;)
                     ++tries;
                 }
-            } else { // USING LOOKUP TABLE
+            } else { // USING LOOKUP TABLE FOR APERTURE SIZE
                 
                 float samplingErrorCorrection = 1.05;
                 float distanceFromOrigin = std::abs(std::sqrt(output->origin.x * output->origin.x + output->origin.y * output->origin.y));
 
                 std::map<float, boundingBox2d>::iterator low;
-                low = ld.apertureMap_02.lower_bound(distanceFromOrigin);
+                low = ld.apertureMap.lower_bound(distanceFromOrigin);
                 float lowerBound = low->first;
 
                 // find angle between point and x axis (atan2)
@@ -1782,8 +1777,8 @@ camera_create_ray {
 
                 float percentage = (distanceFromOrigin - lowerBound) / (prev - lowerBound);
 
-                float maxScale = linearInterpolate(percentage, ld.apertureMap_02[lowerBound].getMaxScale(), ld.apertureMap_02[prev].getMaxScale()) * samplingErrorCorrection;
-                float translation = linearInterpolate(percentage, ld.apertureMap_02[lowerBound].getCentroid().x, ld.apertureMap_02[prev].getCentroid().x);
+                float maxScale = linearInterpolate(percentage, ld.apertureMap[lowerBound].getMaxScale(), ld.apertureMap[prev].getMaxScale()) * samplingErrorCorrection;
+                float translation = linearInterpolate(percentage, ld.apertureMap[lowerBound].getCentroid().x, ld.apertureMap[prev].getCentroid().x);
 
                 lens *= maxScale;
                 lens.x += translation;
