@@ -87,6 +87,7 @@
 
 
     [attr lensModel]
+        maya.name           STRING  "aiLensModel"
         desc                STRING  "Lens Model"
         default             STRING  "RAYTRACED"
 
