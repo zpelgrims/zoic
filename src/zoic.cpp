@@ -1415,7 +1415,8 @@ void testAperturesLUT(Lensdata *ld){
     // execute python drawing
     WORK_ONLY(std::string filename = "C:/ilionData/Users/zeno.pelgrims/Documents/zoic/zoic/src/triangleSamplingDraw.py";)
     MACBOOK_ONLY(std::string filename = "/Volumes/ZENO_2016/projects/zoic/src/triangleSamplingDraw.py";)
-    std::string command = "python "; command += filename; system(command.c_str());
+    WORK_ONLY(std::string command = "python "; command += filename; system(command.c_str());)
+    MACBOOK_ONLY(std::string command = "python "; command += filename; system(command.c_str());)
 
     AiMsgInfo( "%-40s", "[ZOIC] Tested LUT");
 }
