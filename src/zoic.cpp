@@ -670,14 +670,12 @@ void readTabularLensData(std::string lensDataFileName, Lensdata *ld){
     if (totalColumns < 4){
         AiMsgError("[ZOIC] Failed to read lens data file.");
         AiMsgError("[ZOIC] Less than 4 columns of data are found. Please double check.");
-        exit(EXIT_FAILURE);
-        AiRenderAbort();
+		AiRenderAbort();
     }
     else if (totalColumns > 5){
         AiMsgError("[ZOIC] Failed to read lens data file.");
         AiMsgError("[ZOIC] More than 5 columns of data are found. Please double check.");
-        exit(EXIT_FAILURE);
-        AiRenderAbort();
+		AiRenderAbort();
     }
 
 
@@ -852,8 +850,7 @@ void cleanupLensData(Lensdata *ld){
             // can´t handle > 1 apertures!
             if (apertureCount > 1){
                 AiMsgError("[ZOIC] Multiple apertures found. Provide lens description with 1 aperture.");
-                exit(EXIT_FAILURE);
-                AiRenderAbort();
+				AiRenderAbort();
             }
 
             // ray sphere intersection even for aperture, so I make it as flat as possible with a very large radius of curvature
@@ -1490,8 +1487,7 @@ node_update{
         camera->image.invalidate();
         if (!camera->image.read(params[p_bokehPath].STR)){
             AiMsgError("[ZOIC] Couldn't open bokeh image!");
-            exit(EXIT_FAILURE);
-            AiRenderAbort();
+			AiRenderAbort();
         }
     }
 
@@ -1554,73 +1550,71 @@ node_update{
                 // string is const char* so have to do it the oldskool way
                 if ((params[p_lensDataPath].STR != NULL) && (params[p_lensDataPath].STR[0] == '\0')){
                     AiMsgError("[ZOIC] Lens Data Path is invalid");
-                    exit(EXIT_FAILURE);
-                    AiRenderAbort();
+					AiRenderAbort();
 
-                }
-                else {
+                } else {
                     AiMsgInfo("[ZOIC] Lens Data Path = [%s]", params[p_lensDataPath].STR);
                     readTabularLensData(params[p_lensDataPath].STR, &ld);
-                }
 
-                // look for invalid numbers that would mess it all up bro
-                cleanupLensData(&ld);
+                    // look for invalid numbers that would mess it all up bro
+                    cleanupLensData(&ld);
 
-                // calculate focal length by tracing a parallel ray through the lens system
-                float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, false);
+                    // calculate focal length by tracing a parallel ray through the lens system
+                    float kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, false);
 
-                // find by how much all lens elements should be scaled
-                ld.focalLengthRatio = params[p_focalLength].FLT / kolbFocalLength;
-                AiMsgInfo("%-40s %12.8f", "[ZOIC] Focal length ratio", ld.focalLengthRatio);
+                    // find by how much all lens elements should be scaled
+                    ld.focalLengthRatio = params[p_focalLength].FLT / kolbFocalLength;
+                    AiMsgInfo("%-40s %12.8f", "[ZOIC] Focal length ratio", ld.focalLengthRatio);
 
-                // scale lens elements
-                adjustFocalLength(&ld);
+                    // scale lens elements
+                    adjustFocalLength(&ld);
 
-                // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
-                kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, true);
+                    // calculate focal length by tracing a parallel ray through the lens system (2nd time for new focallength)
+                    kolbFocalLength = traceThroughLensElementsForFocalLength(&ld, true);
 
-                // user specified aperture radius from fstop
-                ld.userApertureRadius = kolbFocalLength / (2.0 * params[p_fStop].FLT);
-                AiMsgInfo("%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
+                    // user specified aperture radius from fstop
+                    ld.userApertureRadius = kolbFocalLength / (2.0 * params[p_fStop].FLT);
+                    AiMsgInfo("%-40s %12.8f", "[ZOIC] User aperture radius [cm]", ld.userApertureRadius);
 
-                // clamp aperture if fstop is wider than max aperture given by lens description
-                if (ld.userApertureRadius > ld.lenses[ld.apertureElement].aperture){
-                    AiMsgWarning("[ZOIC] Given FSTOP wider than maximum aperture radius provided by lens data.");
-                    AiMsgWarning("[ZOIC] Clamping aperture radius from [%.9f] to [%.9f]", ld.userApertureRadius, ld.lenses[ld.apertureElement].aperture);
-                    ld.userApertureRadius = ld.lenses[ld.apertureElement].aperture;
-                }
-
-                // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
-                ld.originShift = calculateImageDistance(params[p_focalDistance].FLT, &ld);
-
-                // calculate distance between film plane and aperture
-                ld.apertureDistance = 0.0;
-                for (int i = 0; i < ld.lensCount; i++){
-                    ld.apertureDistance += ld.lenses[i].thickness;
-                    if (i == ld.apertureElement){
-                        AiMsgInfo("%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
-                        break;
+                    // clamp aperture if fstop is wider than max aperture given by lens description
+                    if (ld.userApertureRadius > ld.lenses[ld.apertureElement].aperture){
+                        AiMsgWarning("[ZOIC] Given FSTOP wider than maximum aperture radius provided by lens data.");
+                        AiMsgWarning("[ZOIC] Clamping aperture radius from [%.9f] to [%.9f]", ld.userApertureRadius, ld.lenses[ld.apertureElement].aperture);
+                        ld.userApertureRadius = ld.lenses[ld.apertureElement].aperture;
                     }
-                }
 
-                // precompute lens centers
-                computeLensCenters(&ld);
+                    // calculate how much origin should be shifted so that the image distance at a certain object distance falls on the film plane
+                    ld.originShift = calculateImageDistance(params[p_focalDistance].FLT, &ld);
 
-                // precompute aperture lookup table
-                if (params[p_kolbSamplingLUT].BOOL){
-                    exitPupilLUT(&ld, 32, 100000);
+                    // calculate distance between film plane and aperture
+                    ld.apertureDistance = 0.0;
+                    for (int i = 0; i < ld.lensCount; i++){
+                        ld.apertureDistance += ld.lenses[i].thickness;
+                        if (i == ld.apertureElement){
+                            AiMsgInfo("%-40s %12.8f", "[ZOIC] Aperture distance [cm]", ld.apertureDistance);
+                            break;
+                        }
+                    }
+
+                    // precompute lens centers
+                    computeLensCenters(&ld);
+
+                    // precompute aperture lookup table
+                    if (params[p_kolbSamplingLUT].BOOL){
+                        exitPupilLUT(&ld, 32, 100000);
+
+                        DRAW_ONLY({
+                            testAperturesTruth(&ld);
+                            testAperturesLUT(&ld);
+                        })
+                    }
 
                     DRAW_ONLY({
-                        testAperturesTruth(&ld);
-                        testAperturesLUT(&ld);
+                        // write to file for lens drawing
+                        writeToFile(&ld);
+                        myfile << "RAYS{";
                     })
                 }
-
-                DRAW_ONLY({
-                    // write to file for lens drawing
-                    writeToFile(&ld);
-                    myfile << "RAYS{";
-                })
 
             }
             else {
