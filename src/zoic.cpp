@@ -1537,8 +1537,8 @@ node_update{
                     myfile << "\n";
                 })
 
-                    // reset variables
-                    ld.lenses.clear();
+                // reset variables
+                ld.lenses.clear();
                 ld.vignettedRays = 0;
                 ld.succesRays = 0;
                 ld.totalInternalReflection = 0;
@@ -1608,7 +1608,7 @@ node_update{
 
                 // precompute aperture lookup table
                 if (params[p_kolbSamplingLUT].BOOL){
-                    exitPupilLUT(&ld, 64, 25000);
+                    exitPupilLUT(&ld, 32, 100000);
 
                     DRAW_ONLY({
                         testAperturesTruth(&ld);
@@ -1673,7 +1673,7 @@ camera_create_ray{
     })
 
     int tries = 0;
-    const int maxtries = 20;
+    const int maxtries = 25;
 
     switch (params[p_lensModel].INT)
     {
