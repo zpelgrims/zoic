@@ -11,8 +11,6 @@
 
 // TODO
 // Calculate proper ray derivatives for optimal texture i/o
-// Add support for C4D (IDs need to be generated)
-// Test Houdini support
 
 #include <ai.h>
 #include <iostream>
