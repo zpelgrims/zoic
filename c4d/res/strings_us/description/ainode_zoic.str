@@ -1,0 +1,7 @@
+STRINGTABLE ainode_zoic
+{
+   ainode_zoic         "Arnold zoic node";
+
+   C4DAI_ZOIC_MAIN_GRP                                "Main";
+}
+
