@@ -7,8 +7,6 @@ from excons.tools import arnold
 
 version = "2.0.0"
 
-excons.SetArgument("use-c++11", 1)
-
 env = excons.MakeBaseEnv()
 
 if sys.platform != "win32":

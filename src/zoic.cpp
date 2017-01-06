@@ -506,7 +506,8 @@ public:
 
     // get center of bounding box
     AtPoint2 getCentroid(){
-        return{ (min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f };
+        AtPoint2 rv = { (min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f };
+        return rv;
     }
 
     // return either Xscale or Yscale depending on which one is largest
@@ -557,17 +558,26 @@ struct Lensdata{
 // data structure to check old variable values for raytraced lens model
 // I don´t want to compute the LUT every IPR update, so I need to check if the parameters changed
 struct LensdataCheckUpdate{
-    float stored_sensorWidth = 0.0f;
-    float stored_sensorHeight = 0.0f;
-    float stored_focalLength = 0.0f;
-    float stored_fStop = 0.0f;
-    float stored_focalDistance = 0.0f;
-    bool stored_useImage = false;
-    std::string stored_bokehPath = "";
-    std::string stored_lensDataPath = "";
-    bool stored_kolbSamplingLUT = false;
+    float stored_sensorWidth;
+    float stored_sensorHeight;
+    float stored_focalLength;
+    float stored_fStop;
+    float stored_focalDistance;
+    bool stored_useImage;
+    std::string stored_bokehPath;
+    std::string stored_lensDataPath;
+    bool stored_kolbSamplingLUT;
+    
+    LensdataCheckUpdate()
+        : stored_sensorWidth(0.0f)
+        , stored_sensorHeight(0.0f)
+        , stored_focalLength(0.0f)
+        , stored_fStop(0.0f)
+        , stored_focalDistance(0.0f)
+        , stored_useImage(false)
+        , stored_kolbSamplingLUT(false){
+    }
 } ldCheckUpdate;
-
 
 // xorshift fast random number generator
 uint32_t xor128(void){
@@ -625,7 +635,8 @@ inline void concentricDiskSample(float ox, float oy, AtPoint2 *lens) {
         phi = (AI_PIOVER2)-(0.78539816339f) * (a / b);
     }
 
-    *lens = { r * fastCos(phi), r * fastSin(phi) };
+    lens->x = r * fastCos(phi);
+    lens->y = r * fastSin(phi);
 }
 
 
@@ -957,7 +968,8 @@ AtVector2 lineLineIntersection(AtVector line1_origin, AtVector line1_direction, 
     float B2 = line2_origin.z - line2_direction.z;
     float C2 = A2 * line2_origin.z + B2 * line2_origin.y;
     float delta = A1 * B2 - A2 * B1;
-    return{ (B2 * C1 - B1 * C2) / delta, (A1 * C2 - A2 * C1) / delta };
+    AtVector2 rv = { (B2 * C1 - B1 * C2) / delta, (A1 * C2 - A2 * C1) / delta };
+    return rv;
 }
 
 
@@ -1018,7 +1030,9 @@ inline bool traceThroughLensElements(AtVector *ray_origin, AtVector *ray_directi
     AtVector hit_point, hit_point_normal, sphere_center;
 
     for (int i = 0; i < ld->lensCount; i++){
-        sphere_center = { 0.0f, 0.0f, ld->lenses[i].center };
+        sphere_center.x = 0.0f;
+        sphere_center.y = 0.0f;
+        sphere_center.z = ld->lenses[i].center;
 
         if (!raySphereIntersection(&hit_point, *ray_direction, *ray_origin, sphere_center, ld->lenses[i].curvature, false, true)){
             return false;
@@ -1218,7 +1232,9 @@ bool traceThroughLensElementsForApertureSize(AtVector ray_origin, AtVector ray_d
     AtVector hit_point, hit_point_normal, sphere_center;
 
     for (int i = 0; i < ld->lensCount; i++){
-        sphere_center = { 0.0, 0.0, ld->lenses[i].center };
+        sphere_center.x = 0.0;
+        sphere_center.y = 0.0;
+        sphere_center.z = ld->lenses[i].center;
 
         if (!raySphereIntersection(&hit_point, ray_direction, ray_origin, sphere_center, ld->lenses[i].curvature, false, true)){
             return false;
@@ -1305,8 +1321,8 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int boundsSamples){
 
         // calculate bounds of aperture, to eventually find centroid and max scale
         boundingBox2d apertureBounds;
-        apertureBounds.min = { 0.0, 0.0 };
-        apertureBounds.max = { 0.0, 0.0 };
+        apertureBounds.min = AI_P2_ZERO;
+        apertureBounds.max = AI_P2_ZERO;
 
         AtVector boundsDirection;
         float lensU = 0.0, lensV = 0.0;
@@ -1326,8 +1342,10 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int boundsSamples){
             if (traceThroughLensElementsForApertureSize(sampleOrigin, boundsDirection, ld)){
                 // not sure if I need this check..
                 if ((apertureBounds.min.x + apertureBounds.min.y) == 0.0){
-                    apertureBounds.min = { lensU * ld->lenses[0].aperture, lensV * ld->lenses[0].aperture };
-                    apertureBounds.max = { lensU * ld->lenses[0].aperture, lensV * ld->lenses[0].aperture };
+                    apertureBounds.min.x = lensU * ld->lenses[0].aperture;
+                    apertureBounds.min.y = lensV * ld->lenses[0].aperture;
+                    apertureBounds.max.x = lensU * ld->lenses[0].aperture;
+                    apertureBounds.max.y = lensV * ld->lenses[0].aperture;
                 }
 
                 // if any of the bounds exceed previous bounds, replace to grow bbox
@@ -1350,7 +1368,7 @@ void exitPupilLUT(Lensdata *ld, int filmSamplesX, int boundsSamples){
         }
 
         // store bounds of this particular point on aperture in a map for easy lookup
-        ld->apertureMap.insert({ sampleOrigin.x, apertureBounds });
+        ld->apertureMap.insert(std::pair<float, boundingBox2d>(sampleOrigin.x, apertureBounds));
     }
 }
 
@@ -1408,7 +1426,8 @@ void testAperturesLUT(Lensdata *ld){
                     // rotate point
                     float lensx_rotated = lens.x * cos - lens.y * sin;
                     float lensy_rotated = lens.x * sin + lens.y * cos;
-                    lens = { lensx_rotated, lensy_rotated };
+                    lens.x = lensx_rotated;
+                    lens.y = lensy_rotated;
 
                 }
                 else {
@@ -1421,10 +1440,13 @@ void testAperturesLUT(Lensdata *ld){
                     // rotate point
                     float lensx_rotated = lens.x * cos - lens.y * sin;
                     float lensy_rotated = lens.x * sin + lens.y * cos;
-                    lens = { lensx_rotated, lensy_rotated };
+                    lens.x = lensx_rotated;
+                    lens.y = lensy_rotated;
                 }
 
-                direction = { lens.x - origin.x, lens.y - origin.y, -ld->lenses[0].thickness };
+                direction.x = lens.x - origin.x;
+                direction.y = lens.y - origin.y;
+                direction.z = -ld->lenses[0].thickness;
 
                 testAperturesFile << lens.x << " " << lens.y << " ";
             }
@@ -1487,7 +1509,7 @@ node_update{
         camera->image.invalidate();
         if (!camera->image.read(params[p_bokehPath].STR)){
             AiMsgError("[ZOIC] Couldn't open bokeh image!");
-			AiRenderAbort();
+            AiRenderAbort();
         }
     }
 
@@ -1693,7 +1715,9 @@ camera_create_ray{
               lens *= camera->apertureRadius;
 
               // new origin is these points on the lens
-              output->origin = { lens.x, lens.y, 0.0 };
+              output->origin.x = lens.x;
+              output->origin.y = lens.y;
+              output->origin.z = 0.0;
 
               // Compute point on plane of focus, intersection on z axis
               float intersection = std::abs(params[p_focalDistance].FLT / output->dir.z);
@@ -1709,7 +1733,9 @@ camera_create_ray{
                         // all thin lens calculations need to be repeated with new lens values
                         lens *= camera->apertureRadius;
                         output->dir = AiV3Normalize(p - originOriginal);
-                        output->origin = { lens.x, lens.y, 0.0 };
+                        output->origin.x = lens.x;
+                        output->origin.y = lens.y;
+                        output->origin.z = 0.0;
                         float intersection = std::abs(params[p_focalDistance].FLT / output->dir.z);
                         AtPoint focusPoint = output->dir * intersection;
                         output->dir = AiV3Normalize(focusPoint - output->origin);
@@ -1770,13 +1796,17 @@ camera_create_ray{
 
         // if not using the LUT - NAIVE OVER WHOLE FIRST LENS ELEMENT, VERY SLOW FOR SMALL APERTURES
         if (!params[p_kolbSamplingLUT].BOOL){
-            output->dir = { (lens.x * ld.lenses[0].aperture) - output->origin.x, (lens.y * ld.lenses[0].aperture) - output->origin.y, -ld.lenses[0].thickness };
+            output->dir.x = (lens.x * ld.lenses[0].aperture) - output->origin.x;
+            output->dir.y = (lens.y * ld.lenses[0].aperture) - output->origin.y;
+            output->dir.z = -ld.lenses[0].thickness;
             DRAW_ONLY(output->dir.x = 0.0;)
 
             while (!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
                 output->origin = kolb_origin_original;
                 !params[p_useImage].BOOL ? concentricDiskSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens) : camera->image.bokehSample(xor128() / 4294967296.0, xor128() / 4294967296.0, &lens.x, &lens.y);
-                output->dir = { (lens.x * ld.lenses[0].aperture) - output->origin.x, (lens.y * ld.lenses[0].aperture) - output->origin.y, -ld.lenses[0].thickness };
+                output->dir.x = (lens.x * ld.lenses[0].aperture) - output->origin.x;
+                output->dir.y = (lens.y * ld.lenses[0].aperture) - output->origin.y;
+                output->dir.z = -ld.lenses[0].thickness;
                 DRAW_ONLY(output->dir.x = 0.0;)
                     ++tries;
             }
@@ -1811,9 +1841,12 @@ camera_create_ray{
             // rotate point
             float lensx_rotated = lens.x * cos - lens.y * sin;
             float lensy_rotated = lens.x * sin + lens.y * cos;
-            lens = { lensx_rotated, lensy_rotated };
+            lens.x = lensx_rotated;
+            lens.y = lensy_rotated;
 
-            output->dir = { lens.x - output->origin.x, lens.y - output->origin.y, -ld.lenses[0].thickness };
+            output->dir.x = lens.x - output->origin.x;
+            output->dir.y = lens.y - output->origin.y;
+            output->dir.z = -ld.lenses[0].thickness;
             DRAW_ONLY(output->dir.x = 0.0;)
 
             while (!traceThroughLensElements(&output->origin, &output->dir, &ld, draw) && tries <= maxtries){
@@ -1827,9 +1860,12 @@ camera_create_ray{
                 // rotate point
                 lensx_rotated = lens.x * cos - lens.y * sin;
                 lensy_rotated = lens.x * sin + lens.y * cos;
-                lens = { lensx_rotated, lensy_rotated };
+                lens.x = lensx_rotated;
+                lens.y = lensy_rotated;
 
-                output->dir = { lens.x - output->origin.x, lens.y - output->origin.y, -ld.lenses[0].thickness };
+                output->dir.x = lens.x - output->origin.x;
+                output->dir.y = lens.y - output->origin.y;
+                output->dir.z = -ld.lenses[0].thickness;
                 DRAW_ONLY(output->dir.x = 0.0;)
 
                     ++tries;
