@@ -5,3 +5,9 @@
 src/zoic.dylib
 tests/*
 build/*
+
+/.build
+/release
+/debug
+*.dblite
+excons.cache
