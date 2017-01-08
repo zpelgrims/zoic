@@ -1,5 +1,5 @@
 install(FILES ae/aiZoicTemplate.py
-        DESTINATION scripts)
+DESTINATION templates)
 
 install(FILES scripts/makeZoicCamera.mel
         DESTINATION scripts)
