@@ -1547,8 +1547,8 @@ void testAperturesLUT(Lensdata *ld, std::ofstream &testAperturesFile){
 node_parameters{
     AiParameterFlt("sensorWidth", 3.6); // 35mm film
     AiParameterFlt("sensorHeight", 2.4); // 35 mm film
-    AiParameterFlt("focalLength", 10.0); // in cm
-    AiParameterFlt("fStop", 2.8);
+    AiParameterFlt("focalLength", 2.0); // in cm
+    AiParameterFlt("fStop", 4.0);
     AiParameterFlt("focalDistance", 100.0);
     AiParameterBool("useImage", false);
     AiParameterStr("bokehPath", "");
